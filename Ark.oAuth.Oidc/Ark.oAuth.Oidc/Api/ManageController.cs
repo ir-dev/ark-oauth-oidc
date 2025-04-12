@@ -30,5 +30,26 @@ namespace Ark.oAuth.Oidc
                 data = await da.GetTenants()
             };
         }
+        [Route("v1/client/list")]
+        public async Task<dynamic> ClientList([FromServices] DataAccess da)
+        {
+            return new
+            {
+                error = false,
+                msg = "clients list loaded.",
+                data = await da.GetClients()
+            };
+        }
+        [HttpPost]
+        [Route("v1/client/upsert")]
+        public async Task<dynamic> ClientUpdate([FromServices] DataAccess da, [FromBody] ArkClient tenant)
+        {
+            return new
+            {
+                error = false,
+                msg = "clients list loaded.",
+                data = await da.GetClients()
+            };
+        }
     }
 }

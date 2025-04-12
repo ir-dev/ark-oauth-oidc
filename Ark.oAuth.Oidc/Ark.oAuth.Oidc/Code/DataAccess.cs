@@ -9,21 +9,25 @@ namespace Ark.oAuth.Oidc
         {
             _ctx = ctx;
         }
-        public async Task<ArkTenant> GetTenant(string tenant_id)
+        public async Task<ArkTenant?> GetTenant(string tenant_id)
         {
-            return _ctx.tenants.FirstOrDefault(t => t.tenant_id.ToLower().Trim() == (tenant_id ?? "").ToLower().Trim());
+            return await _ctx.tenants.FirstOrDefaultAsync(t => t.tenant_id.ToLower().Trim() == (tenant_id ?? "").ToLower().Trim());
         }
         public async Task<List<ArkTenant>> GetTenants()
         {
-            return _ctx.tenants.ToList();
+            return await _ctx.tenants.ToListAsync();
         }
-        public async Task<ArkClient> GetClient(string client_id)
+        public async Task<ArkClient?> GetClient(string client_id)
         {
-            return _ctx.clients.FirstOrDefault(t => t.client_id.ToLower().Trim() == (client_id ?? "").ToLower().Trim());
+            return await _ctx.clients.FirstOrDefaultAsync(t => t.client_id.ToLower().Trim() == (client_id ?? "").ToLower().Trim());
         }
-        public async Task<PkceCodeFlow> GetPkceCode(string code)
+        public async Task<List<ArkClient>> GetClients()
         {
-            return _ctx.pkce_code_flow.FirstOrDefault(t => t.code == code);
+            return await _ctx.clients.ToListAsync();
+        }
+        public async Task<PkceCodeFlow?> GetPkceCode(string code)
+        {
+            return await _ctx.pkce_code_flow.FirstOrDefaultAsync(t => t.code == code);
         }
         public async Task UpsertPkceCode(string token, ArkTenant tenant, string code, string code_challenge, string code_challenge_method, string state, string scopes, string claims, DateTime expires_at, string redirect_uri, string response_type)
         {
