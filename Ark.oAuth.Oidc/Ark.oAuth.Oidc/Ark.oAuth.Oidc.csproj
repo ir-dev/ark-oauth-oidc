@@ -25,6 +25,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <None Remove="Views\Server\xhn0yicx.1dj~" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <EmbeddedResource Include="wwwroot\img\profile.png" />
 	</ItemGroup>
 
