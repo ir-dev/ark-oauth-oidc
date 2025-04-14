@@ -9,13 +9,13 @@ namespace Ark.oAuth.Oidc
         public virtual DbSet<ArkClient> clients { get; set; }
         public virtual DbSet<ArkUser> users { get; set; }
         public virtual DbSet<PkceCodeFlow> pkce_code_flow { get; set; }
-        public virtual DbSet<ArkClaim> oidc_claims { get; set; }
+        public virtual DbSet<ArkClaim> claims { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<ArkClaim>()
                 .HasIndex(prop => prop.key);
             modelBuilder.Entity<ArkUser>()
-                .HasIndex(prop => prop.user_id);
+                .HasIndex(prop => prop.email);
             modelBuilder.Entity<ArkServiceAccount>()
                 .HasIndex(prop => prop.account_id);
         }

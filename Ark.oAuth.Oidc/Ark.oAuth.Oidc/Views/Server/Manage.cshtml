@@ -309,7 +309,7 @@
         <div id="tbl_client"></div>
     </div>
     <div style="font-family: sans-serif;display: block;gap: 20px;padding: 20px;">
-        <h2 style="display:block;">Claims Mapping</h2>
+        <h2 style="display:block;">User / Claims Mapping <button id="user-add">Add</button></h2>
         <div style="display:flex;gap: 20px;">
             <div id="tabulator-table" style="width: 74%;"></div>
             <div id="external-menu">
@@ -324,9 +324,10 @@
     <script src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
     <script>
             // External tag management
-            let externalTags = [
-                "sub", "iss", "aud", "exp", "iat", "name", "family_name", "given_name", "email", "email_verified", "gender", "phone_number", "address"
-            ];
+            // let externalTags = [
+            //     "sub", "iss", "aud", "exp", "iat", "name", "family_name", "given_name", "email", "email_verified", "gender", "phone_number", "address"
+            // ];
+            let externalTags = [];
 
             function renderTags() {
               const container = document.getElementById("tag-list");
@@ -356,74 +357,99 @@
               if (e.key === "Enter") {
                 const value = e.target.value.trim();
                 if (value && !externalTags.includes(value)) {
-                  externalTags.push(value);
+                  fetch('/@ViewBag.base_path/api/oauth/v1/claim/upsert', {
+                            method: "POST",
+                            body: JSON.stringify({
+                                key: value,
+                                display: value
+                            }),
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json'
+                            }
+                        })
+                        .then(t => t.json())
+                        .then(t => {
+                            externalTags.unshift(value);
+                            renderTags();
+                            ark_alert.alert('s', `saved tenant succesfully`, 3000);
+                        });
                   e.target.value = "";
-                  renderTags();
                 }
               }
             });
 
             // Table
-            const tableData = [
-              { email: "ark1@immanuel.co", name: "John Doe", clients: [],  dropzone: null },
-              { email: "ark2@immanuel.co", name: "Jane Smith", clients: [], dropzone: undefined },
-              { email: "ark3@immanuel.co", name: "Alice Johnson", clients: [] },
-              { email: "ark4@immanuel.co", name: "John Doe", clients: [], dropzone: [
-                  "sub", "iss", "aud", "exp", "iat", "name", "family_name", "given_name", "email", "email_verified", "gender", "phone_number", "address"
-              ] },
-              { email: "ark5@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
-              { email: "ark6@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
-              { email: "ark7@immanuel.co", name: "John Doe", clients: [], dropzone: [] },
-              { email: "ark8@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
-              { email: "ark9@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
-            ];
-
-            const table = new Tabulator("#tabulator-table", {
-              height: "300px",
-              data: tableData,
-              layout: "fitColumns",
-              columns: [
-                { title: "Name", field: "name" },
-                { title: "Email", field: "email" },
-                {title:"Client", field:"clients", editor:"list", 
-                    editorParams: {
-                        values: ["client_1", "client_2"],
-                        clearable:true,
-                        multiselect:true
-                    }
-                },
-                {
-                  title: "Drop Here",
-                  field: "dropzone",
-                  formatter: (cell) => {
-                    const itms = cell.getValue();
-                    var contain = ark_util.textToDom(`<div class="drop-cell" style="display:flex; flex-wrap: wrap;" ondrop="handleDrop(event, ${cell.getRow().getPosition()})" ondragover="event.preventDefault()"></div>`);
-                    (itms || []).forEach((t, ix) => {
-                        var dd = ark_util.textToDom(`<span class="tag">${t}<button>×</button></span>`);
-                        dd.querySelector('button').addEventListener('click', evt => {
-                            itms.splice(ix, 1);
-                            dd.remove();
+            // const tableData = [
+            //   { email: "ark1@immanuel.co", name: "John Doe", clients: [],  dropzone: null },
+            //   { email: "ark2@immanuel.co", name: "Jane Smith", clients: [], dropzone: undefined },
+            //   { email: "ark3@immanuel.co", name: "Alice Johnson", clients: [] },
+            //   { email: "ark4@immanuel.co", name: "John Doe", clients: [], dropzone: [
+            //       "sub", "iss", "aud", "exp", "iat", "name", "family_name", "given_name", "email", "email_verified", "gender", "phone_number", "address"
+            //   ] },
+            //   { email: "ark5@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
+            //   { email: "ark6@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
+            //   { email: "ark7@immanuel.co", name: "John Doe", clients: [], dropzone: [] },
+            //   { email: "ark8@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
+            //   { email: "ark9@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
+            // ];
+            let tableData= [], table;
+            var load_user = (clnts) => {
+                var laod_tbl = () => {
+                table = new Tabulator("#tabulator-table", {
+                  height: "300px",
+                  data: tableData,
+                  layout: "fitColumns",
+                  columns: [
+                    { title: "Name", field: "name" },
+                    { title: "Email", field: "email" },
+                    {title:"Client", field:"clients", editor:"list",
+                        editorParams: {
+                            //values: ["client_1", "client_2"],
+                            value: clnts,
+                            clearable:true,
+                            multiselect:true
+                        }
+                    },
+                    {
+                      title: "Drop Claims Here",
+                      field: "claims",
+                      formatter: (cell) => {
+                        const itms = cell.getValue();
+                        var contain = ark_util.textToDom(`<div class="drop-cell" style="display:flex; flex-wrap: wrap;" ondrop="handleDrop(event, ${cell.getRow().getPosition()})" ondragover="event.preventDefault()"></div>`);
+                        (itms || []).forEach((t, ix) => {
+                            var dd = ark_util.textToDom(`<span class="tag">${t}<button>×</button></span>`);
+                            dd.querySelector('button').addEventListener('click', evt => {
+                                itms.splice(ix, 1);
+                                dd.remove();
+                            });
+                            contain.appendChild(dd);
                         });
-                        contain.appendChild(dd);
-                    });
-                    return contain;
-                  }
-                },
-                {
-                    formatter: () => `<button>Save</button>`,
-                    field: "save",
-                    width:60,
-                    hozAlign:"center",
-                    cellClick:function(e, cell) {
-                        //alert("Printing row data for: " + cell.getRow().getData().name)
-                        var tg = cell.getRow().getData();
-                        tg.active = tg.active == 'true' ? true: false;
-                        console.log('save clicked,', tg);
+                        return contain;
+                      }
+                    },
+                    {
+                        formatter: () => `<button>Save</button>`,
+                        field: "save",
+                        width:60,
+                        hozAlign:"center",
+                        cellClick:function(e, cell) {
+                            //alert("Printing row data for: " + cell.getRow().getData().name)
+                            var tg = cell.getRow().getData();
+                            tg.active = tg.active == 'true' ? true: false;
+                            console.log('save clicked,', tg);
+                        }
                     }
-                }
-              ],
+                  ],
+                });
+            }
+             fetch('/@ViewBag.base_path/api/oauth/v1/user/list')
+            .then(t => t.json())
+            .then(t => {
+                tableData = t.data;
+                laod_tbl();
             });
-
+        }
             // Drop handling
         window.handleDrop = function (e, rowIndex) {
           e.preventDefault();
@@ -462,7 +488,13 @@
         }
 
         // Initial render
-        renderTags();
+        //renderTags();
+        fetch('/@ViewBag.base_path/api/oauth/v1/claim/list')
+        .then(t => t.json())
+        .then(t => {
+            externalTags = t.data.map(t1 => t1.key);
+            renderTags();
+        });
     </script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.8.3/modernizr.min.js" type="text/javascript"></script>
@@ -520,7 +552,7 @@
         fetch('/@ViewBag.base_path/api/oauth/v1/tenant/list')
         .then(t => t.json())
         .then(t => {
-            tbl_tenant = master_table({ 
+            tbl_tenant = master_table({
                 data: t.data,
                 selector: '#tbl_tenant',
                 onsave: (tg) => {
@@ -549,8 +581,8 @@
         fetch('/@ViewBag.base_path/api/oauth/v1/client/list')
         .then(t => t.json())
         .then(t => {
-            tbl_client = master_table({ 
-                data: t.data, 
+            tbl_client = master_table({
+                data: t.data,
                 selector: '#tbl_client',
                 onsave: (tg) => {
                     fetch('/@ViewBag.base_path/api/oauth/v1/client/upsert', {
@@ -571,9 +603,9 @@
                     tbl_client.table.deleteColumn('tenants_');
                     tbl_client.table.deleteColumn('tenants');
                     tbl_client.table.addColumn({
-                    title:"Tenants", 
-                    field:"tenants",  
-                    editor:"list", 
+                    title:"Tenants",
+                    field:"tenants",
+                    editor:"list",
                     editorParams:{
                         values: ten_lst.reduce((accm, itm) => {
                             accm[itm.name] = itm.name;
@@ -582,9 +614,10 @@
                         clearable:true,
                         multiselect: false,
                         placeholderEmpty:"No Results Found"
-                    } 
+                    }
                 }, true, 'save');
             }, 2000);
+            load_user(t.data)
         });
         document.getElementById("client-add").addEventListener("click", evt => {
             tbl_client.table.addRow({});

@@ -128,6 +128,25 @@ namespace Ark.oAuth.Oidc
                                 redirect_url = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/callback",
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
                             });
+                            foreach (var item in (new List<string>()
+                            {
+                                "sub",
+                                "iss",
+                                "aud",
+                                "exp",
+                                "iat",
+                                "name",
+                                "family_name",
+                                "given_name",
+                                "email",
+                                "email_verified",
+                                "gender",
+                                "phone_number",
+                                "address"
+                            }))
+                            {
+                                dbContext.claims.Add(new ArkClaim() { key = item, display = item });
+                            }
                             dbContext.SaveChanges();
                         }
                     }

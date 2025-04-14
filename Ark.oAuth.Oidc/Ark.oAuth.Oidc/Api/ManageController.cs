@@ -33,7 +33,7 @@ namespace Ark.oAuth.Oidc
             return new
             {
                 error = false,
-                msg = "tenatns updated successfully.",
+                msg = "tenants updated successfully.",
                 data = tenant
             };
         }
@@ -70,6 +70,50 @@ namespace Ark.oAuth.Oidc
                     data = client
                 };
             }
+        }
+        [Route("v1/claim/list")]
+        public async Task<dynamic> ClaimsList([FromServices] DataAccess da)
+        {
+            return new
+            {
+                error = false,
+                msg = "claims list loaded.",
+                data = await da.GetClaims()
+            };
+        }
+        [HttpPost]
+        [Route("v1/claim/upsert")]
+        public async Task<dynamic> ClaimUpdate([FromServices] DataAccess da, [FromBody] ArkClaim claim)
+        {
+            try
+            {
+                await da.UpsertClaim(claim);
+                return new
+                {
+                    error = false,
+                    msg = "claims updated.",
+                    data = claim
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = claim
+                };
+            }
+        }
+        [Route("v1/user/list")]
+        public async Task<dynamic> UserList([FromServices] DataAccess da)
+        {
+            return new
+            {
+                error = false,
+                msg = "users list loaded.",
+                data = await da.GetUsers()
+            };
         }
     }
 }
