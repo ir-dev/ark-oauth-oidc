@@ -28,6 +28,14 @@ namespace Ark.oAuth
         public string display { get; set; }
         public string domain { get; set; }
         public string redirect_url { get; set; }
+        public string? redirect_relative { get; set; }
+        public string? tenants_ { get; set; }
+        [NotMapped]
+        public List<string> tenants
+        {
+            get => System.Text.Json.JsonSerializer.Deserialize<List<string>>(string.IsNullOrEmpty(tenants_) ? "[]" : tenants_);
+            set => tenants_ = System.Text.Json.JsonSerializer.Serialize(value ?? new List<string>());
+        }
         public int expire_mins { get; set; } = 480; // durations
         public string at { get; set; }
     }

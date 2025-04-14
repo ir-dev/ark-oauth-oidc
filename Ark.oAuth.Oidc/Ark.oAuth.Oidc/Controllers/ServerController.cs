@@ -100,13 +100,13 @@ namespace Ark.oAuth.Oidc.Controllers
                 response_types_supported = new List<string>() { "code" },
                 client_config_section = new
                 {
-                    ark_oauth_client = new
+                    ark_oauth_client = new 
                     {
                         Issuer = tt.issuer,
                         Audience = tt.audience,
                         RsaPublic = tt.rsa_public,
                         RedirectUri = cc.redirect_url,
-                        RedirectRelative = "/auth/oauth/ark_server/v1/server/manage",
+                        RedirectRelative = cc.redirect_relative,// "/auth/oauth/ark_server/v1/server/manage",
                         AuthServerUrl = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/oauth")}",
                         ClientId = client_id,
                         TenantId = tt.tenant_id,

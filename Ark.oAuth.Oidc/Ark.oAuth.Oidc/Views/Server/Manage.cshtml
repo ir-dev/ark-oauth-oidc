@@ -311,7 +311,7 @@
     <div style="font-family: sans-serif;display: block;gap: 20px;padding: 20px;">
         <h2 style="display:block;">Claims Mapping</h2>
         <div style="display:flex;gap: 20px;">
-            <div id="tabulator-table" style="width: 600px;"></div>
+            <div id="tabulator-table" style="width: 74%;"></div>
             <div id="external-menu">
                 <h4>Claims</h4>
                 <input type="text" id="new-tag-input" placeholder="Add new tag..." />
@@ -365,17 +365,17 @@
 
             // Table
             const tableData = [
-              { id: 1, name: "John Doe", dropzone: null },
-              { id: 2, name: "Jane Smith", dropzone: undefined },
-              { id: 3, name: "Alice Johnson" },
-              { id: 4, name: "John Doe", dropzone: [
+              { email: "ark1@immanuel.co", name: "John Doe", clients: [],  dropzone: null },
+              { email: "ark2@immanuel.co", name: "Jane Smith", clients: [], dropzone: undefined },
+              { email: "ark3@immanuel.co", name: "Alice Johnson", clients: [] },
+              { email: "ark4@immanuel.co", name: "John Doe", clients: [], dropzone: [
                   "sub", "iss", "aud", "exp", "iat", "name", "family_name", "given_name", "email", "email_verified", "gender", "phone_number", "address"
               ] },
-              { id: 5, name: "Jane Smith", dropzone: [] },
-              { id: 6, name: "Alice Johnson", dropzone: [] },
-              { id: 7, name: "John Doe", dropzone: [] },
-              { id: 8, name: "Jane Smith", dropzone: [] },
-              { id: 9, name: "Alice Johnson", dropzone: [] },
+              { email: "ark5@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
+              { email: "ark6@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
+              { email: "ark7@immanuel.co", name: "John Doe", clients: [], dropzone: [] },
+              { email: "ark8@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
+              { email: "ark9@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
             ];
 
             const table = new Tabulator("#tabulator-table", {
@@ -384,12 +384,20 @@
               layout: "fitColumns",
               columns: [
                 { title: "Name", field: "name" },
+                { title: "Email", field: "email" },
+                {title:"Client", field:"clients", editor:"list", 
+                    editorParams: {
+                        values: ["client_1", "client_2"],
+                        clearable:true,
+                        multiselect:true
+                    }
+                },
                 {
                   title: "Drop Here",
                   field: "dropzone",
                   formatter: (cell) => {
                     const itms = cell.getValue();
-                    var contain = ark_util.textToDom(`<div class="drop-cell" style="display:flex; flex-wrap: wrap;" ondrop="handleDrop(event, ${cell.getRow().getIndex()})" ondragover="event.preventDefault()"></div>`);
+                    var contain = ark_util.textToDom(`<div class="drop-cell" style="display:flex; flex-wrap: wrap;" ondrop="handleDrop(event, ${cell.getRow().getPosition()})" ondragover="event.preventDefault()"></div>`);
                     (itms || []).forEach((t, ix) => {
                         var dd = ark_util.textToDom(`<span class="tag">${t}<button>×</button></span>`);
                         dd.querySelector('button').addEventListener('click', evt => {
@@ -400,6 +408,18 @@
                     });
                     return contain;
                   }
+                },
+                {
+                    formatter: () => `<button>Save</button>`,
+                    field: "save",
+                    width:60,
+                    hozAlign:"center",
+                    cellClick:function(e, cell) {
+                        //alert("Printing row data for: " + cell.getRow().getData().name)
+                        var tg = cell.getRow().getData();
+                        tg.active = tg.active == 'true' ? true: false;
+                        console.log('save clicked,', tg);
+                    }
                 }
               ],
             });
@@ -409,8 +429,11 @@
           e.preventDefault();
           const data = e.dataTransfer.getData("text/plain");
           const row = table.getRowFromPosition(rowIndex, true);
+          var dtt = row.getData();
+          dtt.dropzone = dtt.dropzone || [];
           const cell = row.getCell("dropzone");
-          const itms = cell.getValue()  || [];
+          //const itms = cell.getValue();
+          var itms = dtt.dropzone;
           var contain = cell.getElement().querySelector('.drop-cell');
           if (itms.indexOf(data) < 0) {
               ((idx) => {
@@ -419,6 +442,8 @@
                     itms.splice(idx, 1);
                     dd.remove();
                 });
+                itms.push(data);
+                table.updateData([dtt]);
                 contain.appendChild(dd);
               })(itms.length);
           }
@@ -477,6 +502,8 @@
                             if (opt.onsave) opt.onsave(tg);
                         }
                     });
+
+                    definitions.splice()
                     return definitions;
                 }
             });
@@ -540,23 +567,24 @@
                         });
                 }
             });
-            setTimeout(() => tbl_client.table.addColumn({
-                title:"Tenant", 
-                field:"tenant",  
-                editor:"list", 
-                editorParams:{
-                    values: ten_lst.reduce((accm, itm) => {
-                        accm[itm.name] = itm.name;
-                        return accm;
-                    }, {}),
-                    clearable:true,
-                    multiselect:true,
-                    placeholderEmpty:"No Results Found",
-                    // itemFormatter:function(label, value, item, element){
-                    //     return "<strong>" + item.name + " </strong>";
-                    // },
-                } 
-            }, true, 'save'), 2000);
+            setTimeout(() => {
+                    tbl_client.table.deleteColumn('tenants_');
+                    tbl_client.table.deleteColumn('tenants');
+                    tbl_client.table.addColumn({
+                    title:"Tenants", 
+                    field:"tenants",  
+                    editor:"list", 
+                    editorParams:{
+                        values: ten_lst.reduce((accm, itm) => {
+                            accm[itm.name] = itm.name;
+                            return accm;
+                        }, {}),
+                        clearable:true,
+                        multiselect: false,
+                        placeholderEmpty:"No Results Found"
+                    } 
+                }, true, 'save');
+            }, 2000);
         });
         document.getElementById("client-add").addEventListener("click", evt => {
             tbl_client.table.addRow({});

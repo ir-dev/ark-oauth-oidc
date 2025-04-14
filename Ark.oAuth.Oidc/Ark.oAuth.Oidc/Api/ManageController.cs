@@ -49,14 +49,27 @@ namespace Ark.oAuth.Oidc
         }
         [HttpPost]
         [Route("v1/client/upsert")]
-        public async Task<dynamic> ClientUpdate([FromServices] DataAccess da, [FromBody] ArkClient tenant)
+        public async Task<dynamic> ClientUpdate([FromServices] DataAccess da, [FromBody] ArkClient client)
         {
-            return new
+            try
             {
-                error = false,
-                msg = "clients list loaded.",
-                data = await da.GetClients()
-            };
+                await da.UpsertClient(client);
+                return new
+                {
+                    error = false,
+                    msg = "clients updated.",
+                    data = client
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = client
+                };
+            }
         }
     }
 }

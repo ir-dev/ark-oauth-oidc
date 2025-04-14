@@ -42,6 +42,23 @@ namespace Ark.oAuth.Oidc
         {
             return await _ctx.clients.ToListAsync();
         }
+        public async Task<ArkClient> UpsertClient(ArkClient client)
+        {
+            var tt = await _ctx.clients.FirstOrDefaultAsync(t => t.client_id == client.client_id);
+            if (tt == null)
+            {
+                client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+                _ctx.clients.Add(client);
+            }
+            else
+            {
+                _ctx.ChangeTracker.Clear();
+                client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+                _ctx.clients.Update(client);
+            }
+            await _ctx.SaveChangesAsync();
+            return client;
+        }
         public async Task<PkceCodeFlow?> GetPkceCode(string code)
         {
             return await _ctx.pkce_code_flow.FirstOrDefaultAsync(t => t.code == code);

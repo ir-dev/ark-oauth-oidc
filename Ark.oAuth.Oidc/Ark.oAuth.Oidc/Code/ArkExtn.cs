@@ -123,6 +123,8 @@ namespace Ark.oAuth.Oidc
                                 domain = $"{htp.HttpContext.Request.Host}",
                                 expire_mins = 480,
                                 name = ser.TenantId,
+                                redirect_relative = "/auth/oauth/ark_server/v1/server/manage",
+                                tenants = new List<string>() { ser.TenantId },
                                 redirect_url = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/callback",
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
                             });
