@@ -19,6 +19,13 @@ namespace Ark.oAuth.Oidc
             modelBuilder.Entity<ArkServiceAccount>()
                 .HasIndex(prop => prop.account_id);
         }
+        protected virtual void InitalizeContext()
+        {
+            // https://blog.oneunicorn.com/2012/03/12/secrets-of-detectchanges-part-3-switching-off-automatic-detectchanges/
+            ChangeTracker.AutoDetectChangesEnabled = false;
+            ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+            Database.SetCommandTimeout(360);
+        }
         protected override void OnConfiguring(DbContextOptionsBuilder options)
         {
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");

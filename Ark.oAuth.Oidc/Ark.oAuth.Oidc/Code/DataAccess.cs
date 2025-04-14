@@ -21,6 +21,23 @@ namespace Ark.oAuth.Oidc
         {
             return await _ctx.clients.FirstOrDefaultAsync(t => t.client_id.ToLower().Trim() == (client_id ?? "").ToLower().Trim());
         }
+        public async Task<ArkTenant> UpsertTenant(ArkTenant tenant)
+        {
+            var tt = await _ctx.tenants.FirstOrDefaultAsync(t => t.tenant_id == tenant.tenant_id);
+            if (tt == null)
+            {
+                tenant.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+                _ctx.tenants.Add(tenant);
+            }
+            else
+            {
+                _ctx.ChangeTracker.Clear();
+                tenant.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+                _ctx.tenants.Update(tenant);
+            }
+            await _ctx.SaveChangesAsync();
+            return tenant;
+        }
         public async Task<List<ArkClient>> GetClients()
         {
             return await _ctx.clients.ToListAsync();

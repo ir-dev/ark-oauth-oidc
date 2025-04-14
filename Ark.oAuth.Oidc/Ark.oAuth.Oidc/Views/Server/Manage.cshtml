@@ -305,7 +305,7 @@
         <div id="tbl_tenant"></div>
     </div>
     <div style="padding: 20px;">
-        <h2>Client List <button id="tenant-add">Add</button></h2>
+        <h2>Client List <button id="client-add">Add</button></h2>
         <div id="tbl_client"></div>
     </div>
     <div style="font-family: sans-serif;display: block;gap: 20px;padding: 20px;">
@@ -445,7 +445,7 @@
     <link href="https://unpkg.com/tabulator-tables/dist/css/tabulator.min.css" rel="stylesheet">
     <script type="text/javascript" src="https://unpkg.com/tabulator-tables/dist/js/tabulator.min.js"></script>
     <script>
-                const master_table = (opt) => {
+        const master_table = (opt) => {
                             //custom formatter definition
             var printIcon = function(cell, formatterParams, onRendered){ //plain text value
                 return "<i class='fa fa-print'></i>";
@@ -455,19 +455,28 @@
                 autoColumns: true, //create columns from data field names
                 autoColumnsDefinitions: function(definitions) {
                     definitions.forEach((column) => {
-                        column.editor = "input";
+                        if (column.field == 'active') {
+                            column.editor = "list";
+                            column.editorParams = {
+                                values:[ "true", "false" ]
+                            };
+                        } else {
+                            column.editor = "input";
+                        }
                     });
-                        definitions.push({
-                            formatter: () => `<button>Save</button>`,
-                            width:60,
-                            hozAlign:"center",
-                            cellClick:function(e, cell) {
-                                //alert("Printing row data for: " + cell.getRow().getData().name)
-                                var tg = cell.getRow().getData();
-                                tg.active = tg.active == 'true' ? true: false;
-                                if (opt.onsave) opt.onsave(tg);
-                            }
-                        });
+
+                    definitions.push({
+                        formatter: () => `<button>Save</button>`,
+                        field: "save",
+                        width:60,
+                        hozAlign:"center",
+                        cellClick:function(e, cell) {
+                            //alert("Printing row data for: " + cell.getRow().getData().name)
+                            var tg = cell.getRow().getData();
+                            tg.active = tg.active == 'true' ? true: false;
+                            if (opt.onsave) opt.onsave(tg);
+                        }
+                    });
                     return definitions;
                 }
             });
@@ -480,7 +489,7 @@
         }
     </script>
     <script>
-        var tbl_tenant;
+        var tbl_tenant, ten_lst;
         fetch('/@ViewBag.base_path/api/oauth/v1/tenant/list')
         .then(t => t.json())
         .then(t => {
@@ -502,6 +511,7 @@
                         });
                 }
             });
+            ten_lst = t.data;
         });
         document.getElementById("tenant-add").addEventListener("click", evt => {
             tbl_tenant.table.addRow({});
@@ -530,8 +540,25 @@
                         });
                 }
             });
+            setTimeout(() => tbl_client.table.addColumn({
+                title:"Tenant", 
+                field:"tenant",  
+                editor:"list", 
+                editorParams:{
+                    values: ten_lst.reduce((accm, itm) => {
+                        accm[itm.name] = itm.name;
+                        return accm;
+                    }, {}),
+                    clearable:true,
+                    multiselect:true,
+                    placeholderEmpty:"No Results Found",
+                    // itemFormatter:function(label, value, item, element){
+                    //     return "<strong>" + item.name + " </strong>";
+                    // },
+                } 
+            }, true, 'save'), 2000);
         });
-        document.getElementById("tenant-add").addEventListener("click", evt => {
+        document.getElementById("client-add").addEventListener("click", evt => {
             tbl_client.table.addRow({});
         });
     </script>

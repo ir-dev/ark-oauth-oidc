@@ -23,11 +23,18 @@ namespace Ark.oAuth.Oidc
         [Route("v1/tenant/upsert")]
         public async Task<dynamic> TenantUpdate([FromServices] DataAccess da, [FromBody] ArkTenant tenant)
         {
+            if (string.IsNullOrEmpty(tenant.rsa_private))
+            {
+                dynamic dd = await ArkUtil.GetKeys();
+                tenant.rsa_private = dd.private_key;
+                tenant.rsa_public = dd.public_key;
+            }
+            await da.UpsertTenant(tenant);
             return new
             {
                 error = false,
-                msg = "tenatns list loaded.",
-                data = await da.GetTenants()
+                msg = "tenatns updated successfully.",
+                data = tenant
             };
         }
         [Route("v1/client/list")]
