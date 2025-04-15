@@ -115,5 +115,29 @@ namespace Ark.oAuth.Oidc
                 data = await da.GetUsers()
             };
         }
+        [HttpPost]
+        [Route("v1/user/upsert")]
+        public async Task<dynamic> UserUpdate([FromServices] DataAccess da, [FromBody] ArkUser user)
+        {
+            try
+            {
+                await da.UpsertUser(user);
+                return new
+                {
+                    error = false,
+                    msg = "user updated.",
+                    data = user
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = user
+                };
+            }
+        }
     }
 }

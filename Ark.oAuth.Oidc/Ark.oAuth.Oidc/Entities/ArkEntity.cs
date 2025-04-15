@@ -29,6 +29,7 @@ namespace Ark.oAuth
         public string domain { get; set; }
         public string redirect_url { get; set; }
         public string? redirect_relative { get; set; }
+        public bool active { get; set; } = true;
         public string? tenants_ { get; set; }
         [NotMapped]
         public List<string> tenants
@@ -39,24 +40,30 @@ namespace Ark.oAuth
         public int expire_mins { get; set; } = 480; // durations
         public string at { get; set; }
     }
+    [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     public class ArkUser
     {
         [Key]
-        public string email { get; set; }
-        public string name { get; set; }
-        public string? tenants_ { get; set; }
+        public string email { get; set; } // used for login
+        public string? hash_pw { get; set; }
+        public string? ref_uid { get; set; } // referecee uid, used in url sent to email
+        public bool? reset_mode { get; set; } = false; // password reset mode is in enabled sate, if false, all is well
+        public string name { get; set; } // full name
+        public string type { get; set; } = "user"; // type of account - defaul: null, 'user', 'service'
+        public bool active { get; set; } = true;
+        public string? clients_ { get; set; }
         [NotMapped]
-        public List<string> tenants
+        public List<string> clients
         {
-            get => System.Text.Json.JsonSerializer.Deserialize<List<string>>(string.IsNullOrEmpty(tenants_) ? "[]" : tenants_);
-            set => tenants_ = System.Text.Json.JsonSerializer.Serialize(value ?? new List<string>());
+            get => System.Text.Json.JsonSerializer.Deserialize<List<string>>(string.IsNullOrEmpty(clients_) ? "[]" : clients_);
+            set => clients_ = System.Text.Json.JsonSerializer.Serialize(value ?? new List<string>());
         }
         public string? claims_ { get; set; }
         [NotMapped]
-        public List<ArkClaim> claims
+        public List<string> claims
         {
-            get => System.Text.Json.JsonSerializer.Deserialize<List<ArkClaim>>(string.IsNullOrEmpty(claims_) ? "[]" : claims_);
-            set => tenants_ = System.Text.Json.JsonSerializer.Serialize(value ?? new List<ArkClaim>());
+            get => System.Text.Json.JsonSerializer.Deserialize<List<string>>(string.IsNullOrEmpty(claims_) ? "[]" : claims_);
+            set => claims_ = System.Text.Json.JsonSerializer.Serialize(value ?? new List<string>());
         }
         public string at { get; set; }
     }

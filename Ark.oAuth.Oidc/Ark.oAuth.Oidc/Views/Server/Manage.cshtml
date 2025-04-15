@@ -401,12 +401,12 @@
                   data: tableData,
                   layout: "fitColumns",
                   columns: [
-                    { title: "Name", field: "name" },
-                    { title: "Email", field: "email" },
+                    { title: "Name", field: "name", editor:"input", },
+                    { title: "Email", field: "email", editor:"input" },
                     {title:"Client", field:"clients", editor:"list",
                         editorParams: {
                             //values: ["client_1", "client_2"],
-                            value: clnts,
+                            values: clnts.map(tt => tt.client_id),
                             clearable:true,
                             multiselect:true
                         }
@@ -438,6 +438,18 @@
                             var tg = cell.getRow().getData();
                             tg.active = tg.active == 'true' ? true: false;
                             console.log('save clicked,', tg);
+                            fetch('/@ViewBag.base_path/api/oauth/v1/user/upsert', {
+                            method: "POST",
+                            body: JSON.stringify(tg),
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json'
+                                }
+                            })
+                            .then(t => t.json())
+                            .then(t => {
+                                ark_alert.alert('s', `saved user succesfully`, 3000);
+                            });
                         }
                     }
                   ],
@@ -456,10 +468,10 @@
           const data = e.dataTransfer.getData("text/plain");
           const row = table.getRowFromPosition(rowIndex, true);
           var dtt = row.getData();
-          dtt.dropzone = dtt.dropzone || [];
-          const cell = row.getCell("dropzone");
+          dtt.claims = dtt.claims || [];
+          const cell = row.getCell("claims");
           //const itms = cell.getValue();
-          var itms = dtt.dropzone;
+          var itms = dtt.claims;
           var contain = cell.getElement().querySelector('.drop-cell');
           if (itms.indexOf(data) < 0) {
               ((idx) => {
@@ -478,7 +490,7 @@
 
         function removeTagFromCell(rowIndex, tagText) {
             const row = table.getRowFromPosition(rowIndex, true);
-            const cell = row.getCell("dropzone");
+            const cell = row.getCell("claims");
             const html = cell.getValue()  || [];
 
             const tagRegex = new RegExp(`<span class="tag"[^>]*>${tagText}<button[^>]*>×<\\/button><\\/span>`, 'g');
@@ -486,7 +498,9 @@
 
             cell.setValue(updated);
         }
-
+        document.getElementById("user-add").addEventListener("click", evt => {
+            table.addRow({});
+        });
         // Initial render
         //renderTags();
         fetch('/@ViewBag.base_path/api/oauth/v1/claim/list')

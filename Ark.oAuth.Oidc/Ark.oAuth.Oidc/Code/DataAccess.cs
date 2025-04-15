@@ -82,6 +82,25 @@ namespace Ark.oAuth.Oidc
         {
             return await _ctx.users.ToListAsync();
         }
+        public async Task<ArkUser> UpsertUser(ArkUser user)
+        {
+            var tt = await _ctx.users.FirstOrDefaultAsync(t => t.email == user.email);
+            if (tt == null)
+            {
+                // new user - ste reset mode - true
+                user.reset_mode = true;
+                user.ref_uid = Guid.NewGuid().ToString();
+
+                _ctx.users.Add(user);
+            }
+            else
+            {
+                _ctx.ChangeTracker.Clear();
+                _ctx.users.Update(user);
+            }
+            await _ctx.SaveChangesAsync();
+            return user;
+        }
         public async Task<PkceCodeFlow?> GetPkceCode(string code)
         {
             return await _ctx.pkce_code_flow.FirstOrDefaultAsync(t => t.code == code);
