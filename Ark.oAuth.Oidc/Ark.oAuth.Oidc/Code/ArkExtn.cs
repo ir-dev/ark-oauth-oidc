@@ -130,7 +130,7 @@ namespace Ark.oAuth.Oidc
                                 redirect_url = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/callback",
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
                             });
-                            foreach (var item in (new List<string>()
+                            var lls = new List<string>()
                             {
                                 "sub",
                                 "iss",
@@ -145,10 +145,24 @@ namespace Ark.oAuth.Oidc
                                 "gender",
                                 "phone_number",
                                 "address"
-                            }))
+                            };
+                            foreach (var item in lls)
                             {
                                 dbContext.claims.Add(new ArkClaim() { key = item, display = item });
                             }
+                            dbContext.users.Add(new ArkUser()
+                            {
+                                claims = lls,
+                                active = true,
+                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+                                clients = new List<string>() { ser.TenantId },
+                                email = "admin",
+                                emailed = false,
+                                hash_pw = util.HashPasswordPBKDF2("admin"),
+                                reset_mode = false,
+                                type = "user",
+                                name = "Admin User"
+                            });
                             dbContext.SaveChanges();
                         }
                     }

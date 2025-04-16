@@ -90,10 +90,13 @@ namespace Ark.oAuth.Oidc
             var tt = await _ctx.users.FirstOrDefaultAsync(t => t.email == user.email);
             if (tt == null)
             {
+                var cnt = await _ctx.clients.FirstOrDefaultAsync(t => user.clients.Contains(t.client_id));
+                if (cnt == null) throw new ApplicationException("client not assigned for the user.");
+                var tnt = await _ctx.tenants.FirstOrDefaultAsync(t => cnt.tenants.Contains(t.tenant_id));
                 // new user - ste reset mode - true
                 user.reset_mode = true;
                 user.ref_uid = Guid.NewGuid().ToString();
-                string email_content = System.IO.File.ReadAllText(System.IO.Path.Combine(Environment.CurrentDirectory, "wwwroot", "email", "user_activation_.html"));
+                string email_content = await _util.GetActivationEmail(tnt.tenant_id, user.ref_uid);
                 user.emailed = await _util.SendMail(user.email, email_content, "NTTDATA: Intelligent Scheduler - Activation Link");
                 user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Add(user);
@@ -144,6 +147,14 @@ namespace Ark.oAuth.Oidc
             }
             else throw new ApplicationException("reset request expired, pls contact support.");
             return true;
+        }
+        public async Task<ArkUser> ValidateUserCreds(string un, string pw, string client)
+        {
+            var usr = _ctx.users.FirstOrDefault(t => t.email == un);
+            if (usr == null) throw new ApplicationException("invalid creds");
+            if (!_util.VerifyPasswordPBKDF2(pw, usr.hash_pw)) throw new ApplicationException("invalid creds.");
+            if (!usr.clients.Contains(client)) throw new ApplicationException("invalid creds client.");
+            return usr;
         }
         public async Task<PkceCodeFlow?> GetPkceCode(string code)
         {
