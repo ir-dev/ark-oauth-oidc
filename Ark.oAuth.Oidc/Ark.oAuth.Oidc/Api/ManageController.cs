@@ -139,5 +139,29 @@ namespace Ark.oAuth.Oidc
                 };
             }
         }
+        [HttpPost]
+        [Route("v1/user/pw/reset/init")]
+        public async Task<dynamic> UserPasswordResetInit([FromServices] DataAccess da, [FromBody] ArkUser user)
+        {
+            try
+            {
+                await da.UserResetPw(user);
+                return new
+                {
+                    error = false,
+                    msg = "user reset password request initiated.",
+                    data = user
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = user
+                };
+            }
+        }
     }
 }

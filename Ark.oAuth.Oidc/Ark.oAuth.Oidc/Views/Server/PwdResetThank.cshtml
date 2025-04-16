@@ -1,0 +1,108 @@
+﻿@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Password Reset Successful</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f5f7fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .thank-you-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .success-icon {
+            color: #4CAF50;
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 28px;
+        }
+
+        p {
+            color: #7f8c8d;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .login-button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+            .login-button:hover {
+                background-color: #2980b9;
+            }
+
+        .additional-info {
+            margin-top: 30px;
+            font-size: 14px;
+            color: #95a5a6;
+        }
+
+        @@media (max-width: 480px) {
+            .thank-you-container
+
+        {
+            padding: 30px 20px;
+        }
+
+        h1 {
+            font-size: 24px;
+        }
+
+        }
+    </style>
+</head>
+<body>
+    <div class="thank-you-container">
+        <div class="success-icon">✓</div>
+        <h1>Password Reset Successful!</h1>
+        <p>Your password has been successfully updated. You can now log in to your account using your new password.</p>
+        <a href="javascript:void(0);" class="login-button">Close The Browser</a>
+        <div class="additional-info">
+            <p>If you didn't request this password reset, please contact our support team immediately.</p>
+        </div>
+    </div>
+    <script>
+        document.querySelector(".login-button").addEventListener('click', evt => {
+            window.close();
+        });
+    </script>
+</body>
+</html>

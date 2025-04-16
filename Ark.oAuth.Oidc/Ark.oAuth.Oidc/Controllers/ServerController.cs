@@ -29,6 +29,46 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/oauth/v1/.well-known/{tenant_id}/openid-configuration";
             return View();
         }
+        [Route("{tenant_id}/v1/password/reset/{uid}")]
+        public async Task<dynamic> PasswordReset([FromRoute] string tenant_id, [FromRoute] string uid)
+        {
+            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            ViewBag.IsError = false;
+            ViewBag.config = ser.EmailConfig;
+            tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
+            var tnt = await _da.GetTenant(tenant_id);
+            return View();
+        }
+        [HttpPost]
+        [Route("{tenant_id}/v1/password/reset/{uid}")]
+        public async Task<dynamic> PasswordReset([FromRoute] string tenant_id, [FromRoute] string uid, 
+            [FromForm] string action_type, [FromForm] string pw1, [FromForm] string pw2)
+        {
+            ViewBag.IsError = false;
+            ViewBag.msg = "";
+            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            ViewBag.config = ser.EmailConfig;
+            try
+            {
+                if (action_type == "Cancel") return View();
+                if (string.IsNullOrEmpty(pw1)) throw new ApplicationException("empty password.");
+                if (pw1 != pw2) throw new ApplicationException("password mismatch.");
+                await _da.UpdatePassword(uid, pw1);
+                tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
+                var tnt = await _da.GetTenant(tenant_id);
+                return RedirectToAction("PwdResetThank");
+            }
+            catch (Exception exp)
+            {
+                ViewBag.IsError = true;
+                ViewBag.msg = exp.Message;
+                return View();
+            }
+        }
+        public async Task<IActionResult> PwdResetThank()
+        {
+            return View();
+        }
         [Route("{tenant_id}/v1/connect/authorize")]
         public async Task<IActionResult> Index([FromRoute] string tenant_id, [FromQuery] string client_id)
         {

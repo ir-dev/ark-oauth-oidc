@@ -48,6 +48,7 @@ namespace Ark.oAuth
         public string? hash_pw { get; set; }
         public string? ref_uid { get; set; } // referecee uid, used in url sent to email
         public bool? reset_mode { get; set; } = false; // password reset mode is in enabled sate, if false, all is well
+        public bool? emailed { get; set; } = false; // set to true, once email is sent successful 
         public string name { get; set; } // full name
         public string type { get; set; } = "user"; // type of account - defaul: null, 'user', 'service'
         public bool active { get; set; } = true;

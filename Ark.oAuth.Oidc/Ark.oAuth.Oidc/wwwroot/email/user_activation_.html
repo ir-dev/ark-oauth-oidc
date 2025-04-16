@@ -64,11 +64,24 @@
             -webkit-text-size-adjust: none;
         }
 
-        .content {
-            padding: 20px;
-            max-width: 600px;
-            margin: 0 auto;
-            display: block;
+        .dual-logo-container {
+            padding: 20px 30px;
+            background-color: #ffffff;
+        }
+
+        .logo {
+            max-width: 150px;
+            height: auto;
+        }
+
+        .logo-left {
+            text-align: left;
+            width: 50%;
+        }
+
+        .logo-right {
+            text-align: right;
+            width: 50%;
         }
 
         .footer {
@@ -95,19 +108,40 @@
                 <td align="center" valign="top" width="600">
                 <![endif]-->
                 <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px;">
-                    <!-- Header -->
+                    <!-- Dual Logo Header -->
                     <tr>
-                        <td align="center" valign="top" style="padding: 20px 0 20px 0;">
-                            <h1 style="color: #333333; margin: 0;">Welcome to Our Service</h1>
+                        <td style="background-color:#666;" class="dual-logo-container">
+                            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                                <tr>
+                                    <td class="logo-left" valign="middle">
+                                        <a href="{{host_website_url}}" target="_blank">
+                                            <!-- Your company logo -->
+                                            <img src="{{host_logo}}" alt="Your Company" class="logo" style="display: block; max-width: 150px;" width="150" />
+                                        </a>
+                                    </td>
+                                    <td class="logo-right" valign="middle">
+                                        <a href="{{client_website_url}}" target="_blank">
+                                            <!-- Client company logo -->
+                                            <img src="{{client_logo}}" alt="Client Company" class="logo" style="display: block; max-width: 150px; margin-left: auto;" width="150" />
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <!-- Header Text -->
+                    <tr>
+                        <td align="center" valign="top" style="padding: 20px 20px 0 20px; background-color: #ffffff;">
+                            <h1 style="color: #333333; margin: 0; font-size: 24px;">Welcome to Intelligent Scheduler</h1>
                         </td>
                     </tr>
                     <!-- Content -->
                     <tr>
-                        <td bgcolor="#ffffff" style="padding: 30px 30px 30px 30px; border-radius: 4px 4px 0px 0px;">
+                        <td bgcolor="#ffffff" style="padding: 0 30px 30px 30px;">
                             <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                 <tr>
                                     <td style="padding: 0 0 20px 0; color: #333333; font-family: Arial, sans-serif; font-size: 16px; line-height: 24px;">
-                                        Thank you for signing up! To complete your registration, please click the button below:
+                                        Thank you for signing up! To complete your registration, please click the button below and setup your password:
                                     </td>
                                 </tr>
                                 <tr>
@@ -145,7 +179,7 @@
                             <table border="0" cellpadding="0" cellspacing="0" width="100%">
                                 <tr>
                                     <td align="center" style="color: #999999; font-family: Arial, sans-serif; font-size: 12px; line-height: 18px;">
-                                        &copy; 2023 Your Company Name. All rights reserved.
+                                        &copy; {{host_company_name}}. All rights reserved.
                                     </td>
                                 </tr>
                                 <tr>

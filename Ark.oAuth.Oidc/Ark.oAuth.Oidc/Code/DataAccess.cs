@@ -94,7 +94,7 @@ namespace Ark.oAuth.Oidc
                 user.reset_mode = true;
                 user.ref_uid = Guid.NewGuid().ToString();
                 string email_content = System.IO.File.ReadAllText(System.IO.Path.Combine(Environment.CurrentDirectory, "wwwroot", "email", "user_activation_.html"));
-                await _util.SendMail(user.email, email_content, "NTTDATA: Intelligent Scheduler - Activation Link");
+                user.emailed = await _util.SendMail(user.email, email_content, "NTTDATA: Intelligent Scheduler - Activation Link");
                 user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Add(user);
             }
@@ -106,6 +106,44 @@ namespace Ark.oAuth.Oidc
             }
             await _ctx.SaveChangesAsync();
             return user;
+        }
+        public async Task<ArkUser> UserResetPw(ArkUser user)
+        {
+            var uu = await _ctx.users.FirstOrDefaultAsync(t => t.email == user.email);
+            if (uu == null)
+            {
+                // Shouldn't be the case
+            }
+            else
+            {
+                var cnt = await _ctx.clients.FirstOrDefaultAsync(t => uu.clients.Contains(t.client_id));
+                var tnt = await _ctx.tenants.FirstOrDefaultAsync(t => cnt.tenants.Contains(t.tenant_id));
+                _ctx.ChangeTracker.Clear();
+                uu.reset_mode = true;
+                uu.ref_uid = Guid.NewGuid().ToString();
+                string email_content = await _util.GetActivationEmail(tnt.tenant_id, uu.ref_uid);
+                uu.emailed = await _util.SendMail(uu.email, email_content, "NTTDATA: Intelligent Scheduler - Activation Link");
+                uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+                _ctx.users.Update(uu);
+            }
+            await _ctx.SaveChangesAsync();
+            return user;
+        }
+        public async Task<bool> UpdatePassword(string uq_refid, string pw)
+        {
+            var uu = await _ctx.users.FirstOrDefaultAsync(t => t.ref_uid == uq_refid);
+            if (uu == null) throw new ApplicationException("invalid reference id, pls contact support.");
+            else if (uu.reset_mode.HasValue && uu.reset_mode.Value)
+            {
+                _ctx.ChangeTracker.Clear();
+                uu.reset_mode = false;
+                uu.hash_pw = _util.HashPasswordPBKDF2(pw);
+                uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+                _ctx.users.Update(uu);
+                await _ctx.SaveChangesAsync();
+            }
+            else throw new ApplicationException("reset request expired, pls contact support.");
+            return true;
         }
         public async Task<PkceCodeFlow?> GetPkceCode(string code)
         {

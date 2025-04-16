@@ -56,5 +56,13 @@
         public string subject { get; set; }
         public string smtp { get; set; }
         public int port { get; set; }
+        public string host_logo { get; set; }
+        public string client_logo { get; set; }
+        public string client_website_url { set; get; }
+        public string host_website_url { set; get; }
+        public string activation_link { set; get; }
+        public string privacy_policy_url { set; get; }
+        public string terms_url { set; get; }
+        public string host_company_name { set; get; }
     }
 }

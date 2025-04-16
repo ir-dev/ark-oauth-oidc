@@ -399,7 +399,8 @@
                 table = new Tabulator("#tabulator-table", {
                   height: "300px",
                   data: tableData,
-                  layout: "fitColumns",
+                  layout:"fitDataFill",
+                  responsiveLayout:"collapse",
                   columns: [
                     { title: "Name", field: "name", editor:"input", },
                     { title: "Email", field: "email", editor:"input" },
@@ -411,9 +412,15 @@
                             multiselect:true
                         }
                     },
+                    {title:"Active", field:"active", editor:"list",
+                        editorParams: {
+                            values: [ true, false ]
+                        }
+                    },
                     {
                       title: "Drop Claims Here",
                       field: "claims",
+                      width: 300,
                       formatter: (cell) => {
                         const itms = cell.getValue();
                         var contain = ark_util.textToDom(`<div class="drop-cell" style="display:flex; flex-wrap: wrap;" ondrop="handleDrop(event, ${cell.getRow().getPosition()})" ondragover="event.preventDefault()"></div>`);
@@ -436,7 +443,7 @@
                         cellClick:function(e, cell) {
                             //alert("Printing row data for: " + cell.getRow().getData().name)
                             var tg = cell.getRow().getData();
-                            tg.active = tg.active == 'true' ? true: false;
+                            //tg.active = tg.active == 'true' ? true: false;
                             console.log('save clicked,', tg);
                             fetch('/@ViewBag.base_path/api/oauth/v1/user/upsert', {
                             method: "POST",
@@ -449,6 +456,30 @@
                             .then(t => t.json())
                             .then(t => {
                                 ark_alert.alert('s', `saved user succesfully`, 3000);
+                            });
+                        }
+                    },
+                    {
+                        formatter: () => `<button>Reset Password</button>`,
+                        field: "reset_pw",
+                        width:160,
+                        hozAlign:"center",
+                        cellClick:function(e, cell) {
+                            //alert("Printing row data for: " + cell.getRow().getData().name)
+                            var tg = cell.getRow().getData();
+                            //tg.active = tg.active == 'true' ? true: false;
+                            console.log('reset pw clicked,', tg);
+                            fetch('/@ViewBag.base_path/api/oauth/v1/user/pw/reset/init', {
+                            method: "POST",
+                            body: JSON.stringify(tg),
+                            headers: {
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json'
+                                }
+                            })
+                            .then(t => t.json())
+                            .then(t => {
+                                ark_alert.alert('s', `password reset request succesfully`, 3000);
                             });
                         }
                     }
