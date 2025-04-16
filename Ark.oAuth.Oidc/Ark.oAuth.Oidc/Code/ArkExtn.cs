@@ -51,6 +51,7 @@ namespace Ark.oAuth.Oidc
                 filePath = this.ResetFileExtension(filePath, ".jpg");
                 filePath = this.ResetFileExtension(filePath, ".gif");
                 filePath = this.ResetFileExtension(filePath, ".ico");
+                filePath = this.ResetFileExtension(filePath, ".html");
 
                 // Now prepend the root path of this application, on disk
                 filePath = System.IO.Path.Combine(env.ContentRootPath, filePath);
@@ -102,7 +103,8 @@ namespace Ark.oAuth.Oidc
                             var conf = scope.ServiceProvider.GetRequiredService<IConfiguration>();
                             var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
                             var htp = scope.ServiceProvider.GetService<IHttpContextAccessor>();
-                            dynamic dd = ArkUtil.GetKeys().Result;
+                            var util = scope.ServiceProvider.GetRequiredService<ArkUtil>();
+                            dynamic dd = util.GetKeys().Result;
                             //1st time -> create client for server to manage users
                             dbContext.tenants.Add(new ArkTenant()
                             {
@@ -168,7 +170,7 @@ namespace Ark.oAuth.Oidc
             services.AddDbContext<ArkDataContext>();
             services.AddScoped<DataAccess>();
             services.AddScoped<TokenServer>();
-            //services.AddSingleton<ManageServer>();
+            services.AddSingleton<ArkUtil>();
         }
     }
     public static class ExtnUtil

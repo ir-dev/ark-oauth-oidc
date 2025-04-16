@@ -21,11 +21,11 @@ namespace Ark.oAuth.Oidc
         }
         [HttpPost]
         [Route("v1/tenant/upsert")]
-        public async Task<dynamic> TenantUpdate([FromServices] DataAccess da, [FromBody] ArkTenant tenant)
+        public async Task<dynamic> TenantUpdate([FromServices] DataAccess da, [FromServices] ArkUtil util, [FromBody] ArkTenant tenant)
         {
             if (string.IsNullOrEmpty(tenant.rsa_private))
             {
-                dynamic dd = await ArkUtil.GetKeys();
+                dynamic dd = await util.GetKeys();
                 tenant.rsa_private = dd.private_key;
                 tenant.rsa_public = dd.public_key;
             }

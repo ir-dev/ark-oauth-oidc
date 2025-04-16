@@ -45,5 +45,16 @@
         public string TenantId { get; set; }
         public string BasePath { get; set; }
         public string Provider { get; set; }
+        public ArkEmailConfig EmailConfig { get; set; }
+    }
+    public class ArkEmailConfig
+    {
+        public string email { get; set; }
+        public string pw { get; set; }
+        public string from { get; set; }
+        public string display { get; set; }
+        public string subject { get; set; }
+        public string smtp { get; set; }
+        public int port { get; set; }
     }
 }

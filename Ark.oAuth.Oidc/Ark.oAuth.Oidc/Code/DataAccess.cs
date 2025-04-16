@@ -1,13 +1,16 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using MySqlX.XDevAPI;
 
 namespace Ark.oAuth.Oidc
 {
     public class DataAccess
     {
         ArkDataContext _ctx;
-        public DataAccess(ArkDataContext ctx)
+        ArkUtil _util;
+        public DataAccess(ArkDataContext ctx, ArkUtil util)
         {
             _ctx = ctx;
+            _util = util;
         }
         public async Task<ArkTenant?> GetTenant(string tenant_id)
         {
@@ -90,12 +93,15 @@ namespace Ark.oAuth.Oidc
                 // new user - ste reset mode - true
                 user.reset_mode = true;
                 user.ref_uid = Guid.NewGuid().ToString();
-
+                string email_content = System.IO.File.ReadAllText(System.IO.Path.Combine(Environment.CurrentDirectory, "wwwroot", "email", "user_activation_.html"));
+                await _util.SendMail(user.email, email_content, "NTTDATA: Intelligent Scheduler - Activation Link");
+                user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Add(user);
             }
             else
             {
                 _ctx.ChangeTracker.Clear();
+                user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Update(user);
             }
             await _ctx.SaveChangesAsync();
