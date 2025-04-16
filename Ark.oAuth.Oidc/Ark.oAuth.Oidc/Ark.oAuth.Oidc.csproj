@@ -2,8 +2,8 @@
 
 	<PropertyGroup>
 		<TargetFramework>net7.0</TargetFramework>
-		<Version>1.0.0</Version>
-		<Description>base oAuth oidc implementation</Description>
+		<Version>1.0.1</Version>
+		<Description>oAuth2 oidc IdP implementation</Description>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<OutputType>Library</OutputType>
@@ -23,10 +23,6 @@
 	  <Content Remove="wwwroot\img\oauth-bg.jpg" />
 	  <Content Remove="wwwroot\img\profile.png" />
 	  <Content Remove="wwwroot\img\security_1.jpg" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <None Remove="Views\Server\xhn0yicx.1dj~" />
 	</ItemGroup>
 
 	<ItemGroup>
