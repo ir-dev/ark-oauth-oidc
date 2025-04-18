@@ -1,9 +1,5 @@
 ﻿namespace Ark.oAuth.Oidc
 {
-    public class ArkSetting
-    {
-        public ArkProject oidc_project { get; set; }
-    }
     public class ArkJwt
     {
         string _email = null;
@@ -44,25 +40,29 @@
         public string domain { get; set; }
         public string reason { get; set; }
     }
-    public class ArkSession
+    public class ArkAuthServerConfig
     {
-        public string session_id { get; set; }
-        public string project_id { get; set; } //actually: environment or plnat based hosting - but spread already
-        string _client_id;
-        public string client_id { get => (_client_id ?? "").ToLower(); set => _client_id = value; }  // each micro services
-        string _role;
-        public string role { get => (_role ?? "").ToLower(); set => _role = (value ?? "").ToLower(); } // role at each micro service level
-        string _plant;
-        public string plant { get => (_plant ?? "").ToLower(); set => _plant = value; } // factory
-        public string av_token { get; set; } // access token
-        public string code { get; set; } // pkce code
-        string _email;
-        public string email { get => (_email ?? "").ToLower(); set => _email = value; }
-        public string state { get; set; }
-        public string code_challenge { get; set; }
-        string _code_challenge_method;
-        public string code_challenge_method { get => (_code_challenge_method ?? "").ToLower(); set => _code_challenge_method = value; }
-        public ArkProject client_config { get; set; }
-        public ArkError error { get; set; }
+        public string TenantId { get; set; }
+        public string BasePath { get; set; }
+        public string Provider { get; set; }
+        public ArkEmailConfig EmailConfig { get; set; }
+    }
+    public class ArkEmailConfig
+    {
+        public string email { get; set; }
+        public string pw { get; set; }
+        public string from { get; set; }
+        public string display { get; set; }
+        public string subject { get; set; }
+        public string smtp { get; set; }
+        public int port { get; set; }
+        public string host_logo { get; set; }
+        public string client_logo { get; set; }
+        public string client_website_url { set; get; }
+        public string host_website_url { set; get; }
+        public string activation_link { set; get; }
+        public string privacy_policy_url { set; get; }
+        public string terms_url { set; get; }
+        public string host_company_name { set; get; }
     }
 }

@@ -1,215 +1,263 @@
-﻿html {
-    background: url(http://cdn.magdeleine.co/wp-content/uploads/2014/05/3jPYgeVCTWCMqjtb7Dqi_IMG_8251-1400x933.jpg) no-repeat center center fixed;
-    -webkit-background-size: cover;
-    -moz-background-size: cover;
-    -o-background-size: cover;
-    background-size: cover;
-    overflow: hidden;
-}
+﻿
+@import url(https://fonts.googleapis.com/css?family=Open+Sans:400,300,700,600);
 
-img {
-    display: block;
-    margin: auto;
-    width: 100%;
-    height: auto;
-}
-
-#login-button {
-    cursor: pointer;
-    padding: 30px;
-    margin: auto;
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    background: rgba(3,3,3,.8);
-    overflow: hidden;
-    opacity: 0.4;
-    box-shadow: 10px 10px 30px #000;
-    margin-top: -125px;
-}
-
-/* Login container */
-#container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    margin: auto;
-    width: 260px;
-    height: 330px;
-    border-radius: 5px;
-    background: rgba(3,3,3,0.25);
-    box-shadow: 1px 1px 50px #000;
-}
-
-.close-btn {
-    position: absolute;
-    cursor: pointer;
-    font-family: 'Open Sans Condensed', sans-serif;
-    line-height: 18px;
-    top: 3px;
-    right: 3px;
-    width: 20px;
-    height: 20px;
-    text-align: center;
-    border-radius: 10px;
-    opacity: .2;
-    -webkit-transition: all 2s ease-in-out;
-    -moz-transition: all 2s ease-in-out;
-    -o-transition: all 2s ease-in-out;
-    transition: all 0.2s ease-in-out;
-}
-
-    .close-btn:hover {
-        opacity: .5;
-    }
-
-/* Heading */
-h1 {
-    font-family: 'Open Sans Condensed', sans-serif;
-    position: relative;
-    margin-top: 0px;
-    text-align: center;
-    font-size: 40px;
-    color: #ddd;
-    text-shadow: 3px 3px 10px #000;
-}
-
-/* Inputs */
-a,
-input {
-    font-family: 'Open Sans Condensed', sans-serif;
-    text-decoration: none;
-    position: relative;
-    width: 80%;
-    display: block;
-    margin: 9px auto;
-    font-size: 17px;
-    color: #fff;
-    padding: 8px;
-    border-radius: 6px;
-    border: none;
-    background: rgba(3,3,3,.1);
-    -webkit-transition: all 2s ease-in-out;
-    -moz-transition: all 2s ease-in-out;
-    -o-transition: all 2s ease-in-out;
-    transition: all 0.2s ease-in-out;
-}
-
-    input:focus {
-        outline: none;
-        box-shadow: 3px 3px 10px #333;
-        background: rgba(3,3,3,.18);
-    }
-
-/* Placeholders */
-::-webkit-input-placeholder {
-    color: #ddd;
-}
-
-:-moz-placeholder { /* Firefox 18- */
-    color: red;
-}
-
-::-moz-placeholder { /* Firefox 19+ */
-    color: red;
-}
-
-:-ms-input-placeholder {
-    color: #333;
-}
-
-/* Link */
-a {
-    font-family: 'Open Sans Condensed', sans-serif;
-    text-align: center;
-    padding: 4px 8px;
-    background: rgba(107,255,3,0.3);
-}
-
-    a:hover {
-        opacity: 0.7;
-    }
-
-#remember-container {
-    position: relative;
-    margin: -5px 20px;
-}
-
-.checkbox {
-    position: relative;
-    cursor: pointer;
-    -webkit-appearance: none;
-    padding: 5px;
-    border-radius: 4px;
-    background: rgba(3,3,3,.2);
+.client-logo {
+    background-image: url('../../img/ark_logo_1.png');
     display: inline-block;
-    width: 16px;
-    height: 15px;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    height: 10%;
+    width: 50%;
 }
 
-    .checkbox:checked:active {
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05), inset 0px 1px 3px rgba(0,0,0,0.1);
+.auth-icon {
+    background-image: url('../../img/ark-auth.gif');
+    display: inline-block;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    height: 300px;
+}
+
+@media (max-width: 991px) {
+
+    #login {
+        margin: 0px;
+        main-height: 100vh;
     }
 
-    .checkbox:checked {
-        background: rgba(3,3,3,.4);
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05), inset 0px -15px 10px -12px rgba(0,0,0,0.05), inset 15px 10px -12px rgba(255,255,255,0.5);
-        color: #fff;
+    #left {
+        padding: 25px;
+        box-shadow: -0px -7px 15px #C14C2C inset;
+        min-height: 10vh;
     }
 
-        .checkbox:checked:after {
-            content: '\2714';
-            font-size: 10px;
-            position: absolute;
-            top: 0px;
-            left: 4px;
-            color: #fff;
+        #left .auth-icon {
+            width: 25%;
         }
 
-#remember {
-    position: absolute;
-    font-size: 13px;
-    font-family: 'Hind', sans-serif;
-    color: rgba(255,255,255,.5);
-    top: 7px;
-    left: 20px;
-}
-
-#forgotten {
-    position: absolute;
-    font-size: 12px;
-    font-family: 'Hind', sans-serif;
-    color: rgba(255,255,255,.2);
-    right: 0px;
-    top: 8px;
-    cursor: pointer;
-    -webkit-transition: all 2s ease-in-out;
-    -moz-transition: all 2s ease-in-out;
-    -o-transition: all 2s ease-in-out;
-    transition: all 0.2s ease-in-out;
-}
-
-    #forgotten:hover {
-        color: rgba(255,255,255,.6);
+    #right {
+        padding: 50px;
+        min-height: 90vh;
     }
 
-#forgotten-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    margin: auto;
-    width: 260px;
-    height: 180px;
-    border-radius: 10px;
-    background: rgba(3,3,3,0.25);
-    box-shadow: 1px 1px 50px #000;
-    display: none;
+    button {
+        width: 80%;
+    }
+
+    h1 {
+        margin-top: -20px !important;
+    }
 }
 
-.orange-btn {
-    background: rgba(87,198,255,.5);
+@media (min-width: 991px) and (max-width: 1200px) {
+    #left {
+        padding: 50px;
+        box-shadow: -0px -7px 15px #C14C2C inset;
+    }
+
+        #left .auth-icon {
+            width: 50%;
+        }
+
+    #right {
+        padding: 50px;
+    }
+
+
+    #login {
+        margin: 0px;
+        margin-top: 75px;
+        margin-bottom: 75px;
+    }
+
+    #username, #password, #clientid {
+        width: 80%;
+        margin: auto;
+    }
+
+    button {
+        width: 70%;
+    }
+
+    h1 {
+        margin-top: -20px !important;
+    }
 }
+
+@media (min-width: 1200px) {
+
+    #left {
+        box-shadow: -6px -0px 10px #AF4528 inset;
+        margin-top: 10px;
+        height: 480px;
+    }
+
+        #left .auth-icon {
+            width: 50%;
+        }
+
+    #right {
+        height: 500px;
+    }
+
+    #login {
+        margin: 0px;
+        margin-top: 15vh;
+        margin-bottom: 100px;
+    }
+
+    i {
+        margin-top: 200px;
+    }
+
+    #username, #password, #clientid {
+        width: 80%;
+        margin: auto;
+    }
+
+    button {
+        width: 60%;
+    }
+
+    h1 {
+        margin-top: 30px !important;
+    }
+}
+
+body {
+    marign: 0px;
+    padding: 0px;
+    background-color: #2A2A29;
+}
+
+.container-fluid {
+    marign: 0px;
+    padding: 0px;
+}
+
+.row {
+    marign: 0px;
+    padding: 0px;
+}
+
+#left {
+    background-color: darkblue;
+}
+
+#right {
+    background-color: #fff;
+}
+
+i {
+    margin: 0xp;
+    padding: 0px;
+    font-size: 1.75em;
+    color: #fff;
+}
+
+h1 {
+    margin: 0xp;
+    padding: 0px;
+    margin-bottom: 20px;
+    color: #3A3331;
+    font-family: 'Open Sans', sans-serif;
+    font-weight: 500;
+    font-size: 2.25em;
+}
+
+h2 {
+    margin: 0xp;
+    padding: 0px;
+    margin-top: 0px !important;
+    color: #fff;
+    font-family: 'Open Sans', sans-serif;
+    font-weight: 300;
+    font-size: 2.25em;
+}
+
+h4 {
+    margin-top: 0px !important;
+    font-family: 'Open Sans', sans-serif;
+    font-size: .9em;
+    color: #35150C;
+    font-weight: 300;
+}
+
+#username span, #password span, #clientid span, button {
+    display: block;
+}
+
+#username input, #password input, #clientid input {
+    width: 100%;
+}
+
+button {
+    margin: auto;
+}
+
+#username span, #password span, #clientid span {
+    font-family: 'Open Sans', sans-serif;
+    font-weight: 500;
+    padding: 5px;
+    margin-top: 20px;
+}
+
+#username input, #password input, #clientid input {
+    font-family: 'Open Sans', sans-serif;
+    font-weight: 500;
+    padding: 12px;
+    border-radius: 0px;
+    border: none;
+    border-bottom: 3px solid #D8D8D8;
+    font-size: 1.25em;
+}
+
+    #username input:focus, #password input:focus. #clientid input:focus {
+        outline: none;
+        color: darkblue;
+        border-bottom: 3px solid darkblue;
+    }
+
+button {
+    color: #fff;
+    background-color: darkblue;
+    border: 2px solid #C14C2C;
+    border-radius: 5px;
+    padding: 10px;
+    margin-top: 50px;
+    font-family: 'Open Sans', sans-serif;
+    border-radius: 5px;
+}
+
+    button:hover {
+        color: darkblue;
+        background-color: #fff;
+        border: 2px solid darkblue;
+        border-radius: 5px;
+    }
+
+    button:focus {
+        outline: none;
+    }
+
+#acct {
+    margin-top: 30px;
+    color: #C14C2C;
+}
+
+#signup-button {
+    color: #fff;
+    background-color: darkblue;
+    border: 2px solid #C14C2C;
+    border-radius: 5px;
+    margin-top: 10px;
+}
+
+    #signup-button:hover {
+        color: darkblue;
+        background-color: #fff;
+        border: 2px solid darkblue;
+        border-radius: 5px;
+    }

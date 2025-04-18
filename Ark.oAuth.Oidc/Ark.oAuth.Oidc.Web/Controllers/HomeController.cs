@@ -1,27 +1,25 @@
 ﻿using Ark.oAuth.Oidc.Web.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
 
 namespace Ark.oAuth.Oidc.Web.Controllers
 {
     public class HomeController : Controller
     {
-        ArkDataContext _ctx;
-
-        public HomeController(ArkDataContext ctx)
+        public HomeController()
         {
-            _ctx = ctx;
         }
 
         public IActionResult Index()
         {
-            //ViewBag.claims = _ctx.oidc_claims.ToList();
-            var ss = _ctx.Database.GenerateCreateScript();
-            Console.WriteLine(ss);
             return View();
         }
-
+        public IActionResult Login()
+        {
+            return View();
+        }
+        [Authorize]
         public IActionResult User()
         {
             return View();

@@ -4,33 +4,45 @@ namespace Ark.oAuth.Oidc
 {
     public class ArkDataContext : DbContext
     {
-        public virtual DbSet<ServiceAccount> service_accounts { get; set; }
-        public virtual DbSet<User> users { get; set; }
-        public virtual DbSet<UserRequest> user_request { get; set; }
-        public virtual DbSet<ArkProject> oidc_project { get; set; }
+        public virtual DbSet<ArkServiceAccount> service_accounts { get; set; }
+        public virtual DbSet<ArkTenant> tenants { get; set; }
+        public virtual DbSet<ArkClient> clients { get; set; }
+        public virtual DbSet<ArkUser> users { get; set; }
         public virtual DbSet<PkceCodeFlow> pkce_code_flow { get; set; }
-        public virtual DbSet<ArkClaim> oidc_claims { get; set; }
-        public virtual DbSet<ArkScope> oidc_scopes { get; set; }
-        public virtual DbSet<ClientRoleScope> client_role_scopes { get; set; }
+        public virtual DbSet<ArkClaim> claims { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<ArkProject>()
-                .HasIndex(prop => prop.project_id);
             modelBuilder.Entity<ArkClaim>()
-                .HasIndex(prop => prop.claim_id);
-            modelBuilder.Entity<ArkScope>()
-                .HasKey(prop => new { prop.scope_id, prop.claim_id });
-            modelBuilder.Entity<ClientRoleScope>()
-                .HasKey(prop => new { prop.client, prop.role });
-            modelBuilder.Entity<User>()
+                .HasIndex(prop => prop.key);
+            modelBuilder.Entity<ArkUser>()
                 .HasIndex(prop => prop.email);
-            modelBuilder.Entity<ServiceAccount>()
+            modelBuilder.Entity<ArkServiceAccount>()
                 .HasIndex(prop => prop.account_id);
         }
-        //protected override void OnConfiguring(DbContextOptionsBuilder options)
-        //=> options.UseSqlite($"Data Source=./data/ntt_auth.db");
+        protected virtual void InitalizeContext()
+        {
+            // https://blog.oneunicorn.com/2012/03/12/secrets-of-detectchanges-part-3-switching-off-automatic-detectchanges/
+            ChangeTracker.AutoDetectChangesEnabled = false;
+            ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+            Database.SetCommandTimeout(360);
+        }
         protected override void OnConfiguring(DbContextOptionsBuilder options)
+        {
+            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            if (string.IsNullOrEmpty(ser.Provider) || ser.Provider.ToLower() == "sqlite")
+                options.UseSqlite(_config.GetConnectionString("ArkAuthConnection"));
+            else if (ser.Provider.ToLower() == "mysql")
+                options.UseMySQL(_config.GetConnectionString("ArkAuthConnection"));
+            else if (ser.Provider.ToLower() == "postgres")
+                options.UseNpgsql(_config.GetConnectionString("ArkAuthConnection"));
+        }
+        //=> options.UseSqlite(_config.GetConnectionString("ArkAuthConnection"));
+        //=> options.UseMySQL(_config.GetConnectionString("ArkAuthConnection"));
 
-        public ArkDataContext(DbContextOptions<ArkDataContext> options) : base(options) { }
+        public ArkDataContext(DbContextOptions<ArkDataContext> options, IConfiguration config) : base(options)
+        {
+            _config = config;
+        }
+        IConfiguration _config;
     }
 }

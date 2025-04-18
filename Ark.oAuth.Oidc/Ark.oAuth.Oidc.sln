@@ -12,8 +12,10 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7CC1C75B-B414-4E68-B2D9-C3ED5A1A6B06}"
 	ProjectSection(SolutionItems) = preProject
 		Ark.oAuth.Oidc\Ark.oAuth.Oidc.nuspec = Ark.oAuth.Oidc\Ark.oAuth.Oidc.nuspec
+		..\custom-pkce-flow.md = ..\custom-pkce-flow.md
 		key_points.txt = key_points.txt
 		nuget.config = nuget.config
+		..\README.md = ..\README.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.oAuth.Client", "Ark.oAuth.Client\Ark.oAuth.Client.csproj", "{5CB2A48F-101D-4C21-A206-A2E122BC4574}"

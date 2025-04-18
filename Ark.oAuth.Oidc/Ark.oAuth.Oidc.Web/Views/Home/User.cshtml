@@ -3,6 +3,7 @@
 }
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Product Management</title>
@@ -237,9 +238,9 @@
 
         /* Popover container */
         .popover {
-            width: 500px;
-            position: absolute;
-            top: 20%;
+            width: 740px;
+            position: fixed;
+            top: 11%;
             left: 50%;
             transform: translate(-50%, 0);
             display: none;
@@ -249,12 +250,14 @@
             padding: 24px;
             z-index: 10;
             transition: all 0.3s ease-in-out;
-            max-height: 700px;
-            overflow-y: auto;
         }
 
         /* Title */
         .popover-title {
+            position: sticky;
+            top: 0;
+            background: white;
+            padding: 10px;
             font-size: 20px;
             font-weight: bold;
             text-align: center;
@@ -269,6 +272,14 @@
             gap: 16px;
             margin-bottom: 20px;
         }
+
+        .popover form {
+            margin-top: 10px;
+            overflow-y: auto;
+            max-height: 700px;
+            padding: 10px;
+        }
+
 
         /* Input group with floating labels */
         .input-group {
@@ -412,6 +423,7 @@
             gap: 5px;
             align-items: center;
             flex-grow: 1;
+            width: 100%;
         }
 
             .selected-tags input {
@@ -419,6 +431,12 @@
                 outline: none;
                 flex-grow: 1;
                 font-size: 14px;
+                width: 100%;
+                margin-top: 5px;
+            }
+
+            .selected-tags .tag {
+                display: inline-flex;
             }
 
         .tag {
@@ -445,8 +463,9 @@
     <div class="nav">
         <div class="nav-logo">
             <h2 style="font-family: Glory;display: flex;background-color: #070f26;align-items:center;margin: 0px;color: white;">
-                <img src="/base/img/nttdata_logo_.png"
-                     style="margin-right: 10px;;width: 140px;padding: 10px;">
+                <img src="/ntt-ux-trial/User Management/nttdata_logo_.png" alt="logo" style="    margin-right: 10px;
+                width: 155px;
+                padding: 4px;">
                 <span>Intelligent Planner (User Management)</span>
             </h2>
         </div>
@@ -465,7 +484,7 @@
                 </a>
                 <span style="font-size:xx-large;padding-bottom:0px;cursor:pointer;margin-right: 10px;background-color: antiquewhite;border-radius: 50%;">👨🏻‍💼</span>
                 <img style="width:140px;height:35px;" id="logo-company"
-                     src="/brand/logo_company.png"
+                     @* src="@ViewBag.ctx.base_url_static/@ViewBag.company/brand/logo_company.png" *@
                      onerror="this.src='https://placehold.co/300x100'" />
             </div>
         </div>
@@ -547,77 +566,51 @@
 
 
     <script>
-        const userData = [
-            {
-                name: "John Doe",
-                userId: "#JD267400",
-                email: "john.doe@example.com",
-                location: "New York, USA",
-                status: "Active"
-            },
-            {
-                name: "Alice Smith",
-                userId: "#AS651535",
-                email: "alice.smith@example.com",
-                location: "London, UK",
-                status: "Active"
-            },
-            {
-                name: "Michael Johnson",
-                userId: "#MJ651535",
-                email: "michael.johnson@example.com",
-                location: "Toronto, Canada",
-                status: "Inactive"
-            },
-            {
-                name: "Emma Brown",
-                userId: "#EB651535",
-                email: "emma.brown@example.com",
-                location: "Sydney, Australia",
-                status: "On Leave"
-            },
-            {
-                name: "Liam Wilson",
-                userId: "#LW487441",
-                email: "liam.wilson@example.com",
-                location: "Berlin, Germany",
-                status: "Suspended"
-            },
-            {
-                name: "Sophia Davis",
-                userId: "#SD449003",
-                email: "sophia.davis@example.com",
-                location: "Paris, France",
-                status: "Active"
-            },
-            {
-                name: "Ethan Martinez",
-                userId: "#EM651535",
-                email: "ethan.martinez@example.com",
-                location: "Madrid, Spain",
-                status: "Inactive"
-            },
-            {
-                name: "Olivia Taylor",
-                userId: "#OT449003",
-                email: "olivia.taylor@example.com",
-                location: "Tokyo, Japan",
-                status: "On Leave"
-            },
-            {
-                name: "Noah Anderson",
-                userId: "#NA449003",
-                email: "noah.anderson@example.com",
-                location: "Los Angeles, USA",
-                status: "Suspended"
-            },
-            {
-                name: "Ava Thomas",
-                userId: "#AT558612",
-                email: "ava.thomas@example.com",
-                location: "Milan, Italy",
-                status: "Active"
-            }
+        let userData = [
+                  {
+          "userId": 12345,
+          "name": "Test 1",
+          "email": "test@gmail.com",
+          "phone": "0785643768",
+          "client": "Test pvt ltd",
+          "location": "Chennai",
+          "role": ["role 19", "Role3"],
+          "claim": ["Claim2"],
+          "scope": ["Scope1"]
+        },
+        {
+          "userId": 67890,
+          "name": "John Doe",
+          "email": "johndoe@example.com",
+          "phone": "9876543210",
+          "client": "XYZ Corp",
+          "location": "Bangalore",
+          "role": ["Admin", "Manager"],
+          "claim": ["Claim1", "Claim3"],
+          "scope": ["Scope2", "Scope3"]
+        },
+        {
+          "userId": 54321,
+          "name": "Alice Smith",
+          "email": "alice.smith@example.com",
+          "phone": "9234567890",
+          "client": "ABC Ltd",
+          "location": "Mumbai",
+          "role": ["User", "Supervisor"],
+          "claim": ["Claim4"],
+          "scope": ["Scope1", "Scope4"]
+        },
+        {
+          "userId": 98765,
+          "name": "Robert Brown",
+          "email": "robert.brown@example.com",
+          "phone": "8123456789",
+          "client": "LMN Pvt Ltd",
+          "location": "Delhi",
+          "role": ["Developer", "Tester"],
+          "claim": ["Claim2", "Claim5"],
+          "scope": ["Scope3", "Scope5"]
+        }
         ];
 
 
@@ -642,32 +635,121 @@
                 },
                 { title: "User ID", field: "userId" },
                 { title: "Email", field: "email" },
-                { title: "Location", field: "location" },
+                { title: "Phone", field: "phone" },
+                { title: "Client", field: "client" },
                 {
-                    title: "Status",
-                    field: "status",
+                    title: "Role",
+                    field: "role",
                     formatter: function (cell) {
-                        const status = cell.getValue();
-                        const statusClass = `status-${status.toLowerCase().replace(' ', '-')}`;
-                        return `<span class="status-pill ${statusClass}">${status}</span>`;
+                        const roles = cell.getValue();
+                        if (Array.isArray(roles) && roles.length) {
+                            return `
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 5px;">
+                                    ${roles.map(role => `
+                                        <span style="
+                                            background: #007bff;
+                                            color: white;
+                                            padding: 5px 8px;
+                                            border-radius: 10px;
+                                            font-size: 12px;
+                                            text-align: center;
+                                            white-space: nowrap;">
+                                            ${role}
+                                        </span>
+                                    `).join("")}
+                                </div>`;
+                        }
+                        return "";
                     }
                 },
                 {
-                    title: "Action",
-                    field: "actions",
-                    formatter: function () {
-                        return '<button class="more-actions"><i class="fas fa-ellipsis-h"></i></button>';
-                    },
-                    width: 80,
-                    hozAlign: "center"
-                }
+                    title: "Claim",
+                    field: "claim",
+                    formatter: function (cell) {
+                        const claims = cell.getValue();
+                        if (Array.isArray(claims) && claims.length) {
+                            return `
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 5px;">
+                                    ${claims.map(claim => `
+                                        <span style="
+                                            background: #007bff;
+                                            color: white;
+                                            padding: 5px 8px;
+                                            border-radius: 10px;
+                                            font-size: 12px;
+                                            text-align: center;
+                                            white-space: nowrap;">
+                                            ${claim}
+                                        </span>
+                                    `).join("")}
+                                </div>`;
+                        }
+                        return "";
+                    }
+                },
+                {
+                    title: "Scope",
+                    field: "scope",
+                    formatter: function (cell) {
+                        const scopes = cell.getValue();
+                        if (Array.isArray(scopes) && scopes.length) {
+                            return `
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 5px;">
+                                    ${scopes.map(scope => `
+                                        <span style="
+                                            background: #007bff;
+                                            color: white;
+                                            padding: 5px 8px;
+                                            border-radius: 10px;
+                                            font-size: 12px;
+                                            text-align: center;
+                                            white-space: nowrap;">
+                                            ${scope}
+                                        </span>
+                                    `).join("")}
+                                </div>`;
+                        }
+                        return "";
+                    }
+                },
+                { title: "Location", field: "location" },
+
             ]
+        });
+
+        let editingUserId = null;
+        table.on("rowClick", function (e, row) {
+            const rowData = row.getData(); // Get clicked row data
+            console.log("Row Data:", rowData);
+
+            editingUserId = rowData.userId;
+
+            // Populate popover fields
+            document.getElementById("name").value = rowData.name || "";
+            document.getElementById("email").value = rowData.email || "";
+            document.getElementById("phone").value = rowData.phone || "";
+            document.getElementById("client").value = rowData.client || "";
+            document.getElementById("location").value = rowData.location || "";
+
+            // Set selected roles, claims, and scopes
+            selectedRoles = rowData.role || [];
+            selectedClaims = rowData.claim || [];
+            selectedScopes = rowData.scope || [];
+
+            // Update the UI to show selected tags
+            updateSelectedTags("roles");
+            updateSelectedTags("claims");
+            updateSelectedTags("scopes");
+
+            // Show the popover
+            document.getElementById("popover").style.display = "block";
+            document.getElementById("overlay").style.display = "block";
         });
 
         function toggleUserPopover() {
             var popover = document.getElementById("popover");
             var overlay = document.getElementById("overlay");
-
+            editingUserId = null;
             if (popover.style.display === 'block') {
                 popover.style.display = 'none';
                 overlay.style.display = 'none';
@@ -697,6 +779,14 @@
             document.getElementById("email").value = "";
             document.getElementById("phone").value = "";
             document.getElementById("location").value = "";
+            document.getElementById("client").value = "";
+            selectedRoles = [];
+            selectedClaims = [];
+            selectedScopes = [];
+
+            updateSelectedTags("roles");
+            updateSelectedTags("claims");
+            updateSelectedTags("scopes");
             document.getElementById("popover").style.display = "none";
             overlay.style.display = 'none';
         }
@@ -754,14 +844,39 @@
         function updateSelectedTags(type) {
             let selectedArray = getSelectedArray(type);
             const container = document.getElementById(`${type}Tags`);
-            container.innerHTML = `<input type="text" id="${type}Input" onkeydown="handleInput(event, '${type}')" placeholder="Type or select ${type}">`;
 
+            // Clear previous content
+            container.innerHTML = "";
+
+            // Create tag elements and add them above the input field
             selectedArray.forEach(tag => {
                 const tagElement = document.createElement("span");
                 tagElement.classList.add("tag");
-                tagElement.innerHTML = `${tag} <button onclick="removeTag('${tag}', '${type}')">×</button>`;
+
+                const tagText = document.createElement("span");
+                tagText.textContent = tag;
+                tagText.onclick = () => editTag(tag, type);
+
+                const removeButton = document.createElement("button");
+                removeButton.innerHTML = "×";
+                removeButton.onclick = (event) => {
+                    event.stopPropagation();
+                    removeTag(tag, type);
+                };
+
+                tagElement.appendChild(tagText);
+                tagElement.appendChild(removeButton);
                 container.appendChild(tagElement);
             });
+
+            // Re-add the input field **after** the tags
+            const inputField = document.createElement("input");
+            inputField.type = "text";
+            inputField.id = `${type}Input`;
+            inputField.placeholder = `Type or select ${type}`;
+            inputField.onkeydown = (event) => handleInput(event, type);
+
+            container.appendChild(inputField); // Add input field at the bottom
         }
 
         function removeTag(tag, type) {
@@ -786,20 +901,48 @@
             event.preventDefault();
             var popover = document.getElementById("popover");
             var overlay = document.getElementById("overlay");
+
             var name = document.getElementById("name").value;
             var email = document.getElementById("email").value;
             var phone = document.getElementById("phone").value;
-            console.log("User Details Submitted:", { name, email, phone });
-            popover.style.display = 'none';
-            overlay.style.display = 'none';
-            handleClose();
-            const formData = {
-                roles: selectedRoles,
-                claims: selectedClaims,
-                scopes: selectedScopes
+            var client = document.getElementById("client").value;
+            var location = document.getElementById("location").value;
+
+            console.log("User Details Submitted:", { name, email, phone, client, location, selectedRoles, selectedClaims, selectedScopes });
+
+            let newData = {
+                userId: editingUserId || Math.floor(Math.random() * 100000),
+                name,
+                email,
+                phone,
+                client,
+                location,
+                role: selectedRoles,
+                claim: selectedClaims,
+                scope: selectedScopes
             };
 
-            console.log("Form Data Submitted:", formData);
+            let userIndex = userData.findIndex(user => user.userId === editingUserId);
+            if (userIndex !== -1) {
+                userData[userIndex] = newData;
+            } else {
+                userData.push(newData);
+            }
+
+            table.setData(userData);
+
+            selectedRoles = [];
+            selectedClaims = [];
+            selectedScopes = [];
+
+            updateSelectedTags("roles");
+            updateSelectedTags("claims");
+            updateSelectedTags("scopes");
+            handleClose();
+
+
+            popover.style.display = 'none';
+            overlay.style.display = 'none';
         });
 
         // Initialize dropdowns on page load

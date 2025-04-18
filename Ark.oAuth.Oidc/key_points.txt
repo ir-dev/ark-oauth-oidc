@@ -14,3 +14,14 @@ https://developer.okta.com/docs/reference/api/oidc/#endpoints
 
 - https://blog.blackballsoftware.com/posts/2018/9/20/installing-contentfiles-and-assemblies-with-aspnet-core-and-nuget
 - nuget with css
+
+https://rsa-key-gen.immanuel.co/
+
+https://rsa-key-gen.immanuel.co/api/keys
+
+https://ark-oidc-server.immanuel.co/auth/oauth/v1/.well-known/ark_server/openid-configuration
+
+
+middleware order sequence: good msdn
+
+https://learn.microsoft.com/en-us/aspnet/core/fundamentals/middleware/?view=aspnetcore-5.0

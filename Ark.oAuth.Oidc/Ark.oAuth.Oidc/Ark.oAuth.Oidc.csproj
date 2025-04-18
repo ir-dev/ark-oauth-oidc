@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
-		<TargetFramework>net6.0</TargetFramework>
-		<Version>0.0.2.18</Version>
-		<Description>base oAuth oidc implementation</Description>
+		<TargetFramework>net8.0</TargetFramework>
+		<Version>1.0.3</Version>
+		<Description>oAuth2 oidc IdP implementation</Description>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<OutputType>Library</OutputType>
@@ -14,16 +14,31 @@
 
 	<ItemGroup>
 	  <Content Remove="wwwroot\css\ark-oauth-login.css" />
+	  <Content Remove="wwwroot\email\user_activation_.html" />
+	  <Content Remove="wwwroot\img\ark-auth.gif" />
 	  <Content Remove="wwwroot\img\ark_idp.png" />
+	  <Content Remove="wwwroot\img\ark_logo_1.png" />
 	  <Content Remove="wwwroot\img\ark_oauth_logo.png" />
 	  <Content Remove="wwwroot\img\imm_c_dev_1.png" />
 	  <Content Remove="wwwroot\img\oauth-bg.jpg" />
+	  <Content Remove="wwwroot\img\profile.png" />
 	  <Content Remove="wwwroot\img\security_1.jpg" />
 	</ItemGroup>
 
 	<ItemGroup>
+	  <EmbeddedResource Include="wwwroot\email\user_activation_.html" />
+	  <EmbeddedResource Include="wwwroot\img\profile.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Page Include="wwwroot\img\ark_logo_1.png" />
+	</ItemGroup>
+
+	<ItemGroup>
 	  <EmbeddedResource Include="wwwroot\css\ark-oauth-login.css" />
+	  <EmbeddedResource Include="wwwroot\img\ark-auth.gif" />
 	  <EmbeddedResource Include="wwwroot\img\ark_idp.png" />
+	  <EmbeddedResource Include="wwwroot\img\ark_logo_1.png" />
 	  <EmbeddedResource Include="wwwroot\img\ark_oauth_logo.png" />
 	  <EmbeddedResource Include="wwwroot\img\imm_c_dev_1.png" />
 	  <EmbeddedResource Include="wwwroot\img\oauth-bg.jpg" />
@@ -31,8 +46,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="Ark.EfCore" Version="0.0.1.1" />
-	  <PackageReference Include="MySql.EntityFrameworkCore" Version="7.0.16" />
-	  <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+	  <PackageReference Include="Ark.EfCore" Version="0.0.1.3" />
+	  <PackageReference Include="ark.net.util" Version="1.0.4.6" />
+	  <PackageReference Include="Azure.Identity" Version="1.13.2" />
+	  <PackageReference Include="BouncyCastle.Cryptography" Version="2.5.1" />
 	</ItemGroup>
 </Project>

@@ -1,0 +1,56 @@
+﻿@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>NTT (IdP) - Login</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="~/css/ark-oauth-login.css" />
+</head>
+<body>
+    <div class="container-fluid">
+        <form method="post" name="Login_Form" class="form-signin">
+            <div class="row" id="login">
+                <div class="col-xs-12 col-md-10 col-md-offset-1 col-lg-2 col-lg-offset-3 text-center" id="left">
+                    <img src="@ViewBag.client_logo" alt="client logo" height="70">
+                    <h2 style="color: white;">Identity Provider</h2>
+                    <div class="auth-icon"></div>
+                    <div>
+                        <a href="@ViewBag.client_url" target="_blank">Client Config</a>
+                    </div>
+                </div>
+
+                <div class="col-xs-12 col-md-10 col-md-offset-1 col-lg-4 col-lg-offset-0" id="right">
+                    <h1 class="text-center">Log In</h1>
+
+                    <hr style="border-top: 3px double #8c8b8b;" />
+                    <div id="username">
+                        <span>Username:</span>
+                        <input type="text" data-cust="username" name="Username" placeholder="username" required="" />
+                    </div>
+
+                    <div id="password">
+                        <span>Password:</span>
+                        <input type="password" data-cust="password" class="form-control" name="Password" placeholder="*********" required="" />
+                    </div>
+
+                    <button class="btn btn-lg btn-primary btn-block" data-cust="login" name="Submit" value="Login" type="Submit">Login</button>
+                    @if (ViewBag.IsError)
+                    {
+                        <div style="text-align:center;color: red; margin-top: 10px;">
+                            @ViewBag.msg
+                        </div>
+                    }
+                    <br />
+                    <div style="text-align: center;position: absolute; bottom: 10px;right: 10px;">
+                        <img src="@ViewBag.host_logo" height="50" style="" alt="host server logo">
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
