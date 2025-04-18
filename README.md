@@ -1,14 +1,15 @@
 
-# ASP.NET Core IdentityServer4 - Authorization Code & Client Credentials Flow
+TODO: update the md file
 
-This project demonstrates how to implement and use both **Authorization Code Flow with PKCE** and **Client Credentials Flow** using **IdentityServer4** in an ASP.NET Core application.
+# ASP.NET Core IdentityServer - Authorization Code & Client Credentials Flow
+
+This project is an implementation of oAuth2 oidc's **Authorization Code Flow with PKCE** and **Client Credentials Flow** using an ASP.NET Core application.
 
 ---
 
 ## 🔧 Prerequisites
 
-- [.NET 6 or 7 SDK](https://dotnet.microsoft.com/download)
-- IdentityServer4 (or Duende IdentityServer for newer .NET versions)
+- [.NET8 SDK](https://dotnet.microsoft.com/download)
 - Basic knowledge of OAuth2 and OpenID Connect
 
 ---

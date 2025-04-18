@@ -12,7 +12,7 @@
 }
 
 .auth-icon {
-    background-image: url('../../img/ark-auth.gif');
+    background-image: url('../../img/ark-auth.gif'), url('../img/ark-auth.gif'), url('/img/ark-auth.gif'), url('img/ark-auth.gif');
     display: inline-block;
     background-size: cover;
     background-position: center;
