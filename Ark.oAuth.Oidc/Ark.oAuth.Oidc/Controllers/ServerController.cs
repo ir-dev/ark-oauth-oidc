@@ -77,7 +77,9 @@ namespace Ark.oAuth.Oidc.Controllers
             tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
             var tnt = await _da.GetTenant(tenant_id);
             client_id = string.IsNullOrEmpty(client_id) ? throw new ApplicationException("client_id_empty") : client_id;
-            ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/oauth/v1/.well-known/{client_id}/openid-configuration";
+            ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/oauth/{tenant_id}/v1/.well-known/{client_id}/openid-configuration";
+            ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
+            ViewBag.client_logo = ser.EmailConfig?.client_logo ?? $"";
             return View();
         }
         [HttpPost]
@@ -95,7 +97,9 @@ namespace Ark.oAuth.Oidc.Controllers
         {
             ViewBag.IsError = false;
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
-            ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/v1/.well-known/{client_id}/openid-configuration";
+            ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/oauth/{tenant_id}/v1/.well-known/{client_id}/openid-configuration";
+            ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
+            ViewBag.client_logo = ser.EmailConfig?.client_logo ?? $"";
             try
             {
                 var tt = await _da.GetTenant(tenant_id);

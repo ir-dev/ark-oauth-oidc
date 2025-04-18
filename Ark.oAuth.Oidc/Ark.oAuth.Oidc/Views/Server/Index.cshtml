@@ -9,17 +9,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" />
     <link rel="stylesheet" type="text/css" href="~/css/ark-oauth-login.css" />
-    <link rel="shortcut icon" type="image/png" href="https://immanuel.co/favicon.ico" />
 </head>
 <body>
     <div class="container-fluid">
         <form method="post" name="Login_Form" class="form-signin">
             <div class="row" id="login">
                 <div class="col-xs-12 col-md-10 col-md-offset-1 col-lg-2 col-lg-offset-3 text-center" id="left">
-                    @* <img src="@ViewBag.ctx.base_url_static/base/img/nttdata_logo_.png" style="width:100%;margin-top: 10px;" /> *@
-                    <div class="client-logo"></div>
+                    <img src="@ViewBag.client_logo" alt="client logo" height="70">
                     <h2 style="color: white;">Identity Provider</h2>
-                    @* <img class="auth-icon" src="@ViewBag.ctx.base_url_static/base/libs/ntt-auth/ntt-auth.gif" width="150" style="" /> *@
                     <div class="auth-icon"></div>
                     <div>
                         <a href="@ViewBag.client_url" target="_blank">Client Config</a>
@@ -47,6 +44,10 @@
                             @ViewBag.msg
                         </div>
                     }
+                    <br />
+                    <div style="text-align: center;position: absolute; bottom: 10px;right: 10px;">
+                        <img src="@ViewBag.host_logo" height="50" style="" alt="host server logo">
+                    </div>
                 </div>
             </div>
         </form>
