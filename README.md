@@ -5,6 +5,10 @@ TODO: update the md file
 
 This project is an implementation of oAuth2 oidc's **Authorization Code Flow with PKCE** and **Client Credentials Flow** using an ASP.NET Core application.
 
+Customized in such a way that, its very felixible for develpers to to just start uinsg wiht out any hurdles.
+
+TO DO: soon to update a video file explaining this identity enablement with very few steps.
+
 ---
 
 ## 🔧 Prerequisites
