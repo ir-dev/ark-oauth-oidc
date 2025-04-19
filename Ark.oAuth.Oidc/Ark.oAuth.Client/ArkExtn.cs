@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using Org.BouncyCastle.Asn1.Ocsp;
 using System.Security.Cryptography;
 using System.Text;
+using static Org.BouncyCastle.Crypto.Engines.SM2Engine;
 
 namespace Ark.oAuth
 {
@@ -29,6 +30,20 @@ namespace Ark.oAuth
             //return configuration.GetSection("ark_oauth_client").Get<ArkAuthConfig>() ?? throw new ApplicationException("config missing");
             return configuration.GetSection("ark_oauth_client").Get<ArkAuthConfig>() ?? new ArkAuthConfig();
         }
+        public static void StoreCookie(this HttpResponse response, string key, string val, int mins, string domain, SameSiteMode ss_mode = SameSiteMode.None)
+        {
+            CookieOptions option = new CookieOptions();
+            option.Expires = DateTime.Now.AddMinutes(mins).ToLocalTime();
+            option.Secure = true;
+            option.HttpOnly = true;
+            option.SameSite = ss_mode;
+            option.Domain = domain;
+            response.Cookies.Append(key, val, option);
+        }
+        public static string? ReadCookie(this HttpRequest request, string key)
+        {
+            return request.Cookies[key];
+        }
         //All client config is taken from app settings
         public static void AddArkOidcClient(this IServiceCollection services, IConfiguration configuration)
         {
@@ -45,20 +60,20 @@ namespace Ark.oAuth
                 options.SaveToken = true;
                 // Enable detailed logging in your token validation
                 options.IncludeErrorDetails = true;
-                var client_config = LoadConfig(configuration);
+                var cc = LoadConfig(configuration);
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
-                    ValidIssuer = client_config.Issuer,
+                    ValidIssuer = cc.Issuer,
                     ValidateAudience = true,
-                    ValidAudience = client_config.Audience,
+                    ValidAudience = cc.Audience,
                     ValidateLifetime = true,
                     IssuerSigningKeyResolver = (string token, SecurityToken securityToken, string kid, TokenValidationParameters validationParameters) =>
                     {
                         List<SecurityKey> keys = new List<SecurityKey>();
                         //if (!config.app_list.ContainsKey(kid)) throw new SecurityTokenInvalidSignatureException("Unable to validate signature, invalid token with 'kid' value.");
                         //var app = config.app_list[kid];
-                        var pub_conf_key = client_config.RsaPublic;
+                        var pub_conf_key = cc.RsaPublic;
                         var publicKey = Convert.FromBase64String(pub_conf_key);
                         RSA rsa = RSA.Create();
                         rsa.ImportSubjectPublicKeyInfo(publicKey, out _);
@@ -99,7 +114,7 @@ namespace Ark.oAuth
                         //&code_challenge_method=S256
                         var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
                         var code_challenge = ctx.Request.Query.ContainsKey("code_challenge") ? ctx.Request.Query["code_challenge"][0] : "";
-                        var ff = $"{client_config.AuthServerUrl}/{client_config.TenantId}/v1/connect/authorize?response_type=code&client_id={client_config.ClientId}&redirect_uri={client_config.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=invalid_token";
+                        var ff = $"{cc.AuthServerUrl}/{cc.TenantId}/v1/connect/authorize?response_type=code&client_id={cc.ClientId}&redirect_uri={cc.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=invalid_token";
                         ctx.Response.Redirect($"{ff}");
                         return Task.CompletedTask;
                     },
@@ -121,8 +136,10 @@ namespace Ark.oAuth
                         //its no tken, so inititate auth process
                         ctx.HandleResponse();
                         var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
-                        var code_challenge = PkceHelper.GenerateCodeChallenge($"JESUSmyLORD_{ark.net.util.DateUtil.CurrentTimeStamp()}");
-                        var ff = $"{client_config.AuthServerUrl}/{client_config.TenantId}/v1/connect/authorize?response_type=code&client_id={client_config.ClientId}&redirect_uri={client_config.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
+                        var code_verifier = $"JESUSmyLORD_{ark.net.util.DateUtil.CurrentTimeStamp()}";
+                        var code_challenge = PkceHelper.GenerateCodeChallenge(code_verifier);
+                        var ff = $"{cc.AuthServerUrl}/{cc.TenantId}/v1/connect/authorize?response_type=code&client_id={cc.ClientId}&redirect_uri={cc.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
+                        ctx.Response.StoreCookie($"ark_oauth_cv_{cc.ClientId}", code_verifier, cc.ExpireMins, cc.Domain);
                         ctx.Response.Redirect($"{ff}");
                         //}
                         return Task.CompletedTask;
@@ -144,15 +161,16 @@ namespace Ark.oAuth
             builder.Use(async (context, next) =>
             {
                 var config = builder.ApplicationServices.GetRequiredService<IConfiguration>();
-                var conf = config.GetSection("ark_oauth_client").Get<ArkAuthConfig>();
+                var cc = config.GetSection("ark_oauth_client").Get<ArkAuthConfig>();
                 if (context.Request.Query.ContainsKey("err") && !string.IsNullOrEmpty(context.Request.Query["err"]) && (context.Request.Query["err"] == "access_denied" || context.Request.Query["err"] == "invalid_token" || context.Request.Query["err"] == "token_error"))
                 {
                     foreach (var cookie in context.Request.Cookies.Keys)
                     {
+                        if (cookie == $"ark_oauth_cv_{cc.ClientId}") continue;
                         context.Response.Cookies.Delete(cookie, new CookieOptions()
                         {
                             Secure = true,
-                            Domain = conf.Domain
+                            Domain = cc.Domain
                         });
                     }
                     //CookieOptions option = new CookieOptions();
@@ -162,7 +180,8 @@ namespace Ark.oAuth
                     //context.Response.Cookies.Append("ark_oauth_tkn", string.Empty, option);
                     //context.Response.Cookies.Delete("ark_oauth_tkn");
                 }
-                var token = context.Request.Cookies[$"ark_oauth_tkn"];
+                //var token = context.Request.Cookies[$"ark_oauth_tkn_{cc.ClientId}"];
+                var token = context.Request.ReadCookie($"ark_oauth_tkn_{cc.ClientId}");
                 var endpoint = context.GetEndpoint();
                 var authorizeData = endpoint?.Metadata.GetOrderedMetadata<IAuthorizeData>();
                 if (!string.IsNullOrEmpty(token) && authorizeData?.Any() == true)

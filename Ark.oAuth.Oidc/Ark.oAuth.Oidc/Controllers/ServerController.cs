@@ -41,7 +41,7 @@ namespace Ark.oAuth.Oidc.Controllers
         }
         [HttpPost]
         [Route("{tenant_id}/v1/password/reset/{uid}")]
-        public async Task<dynamic> PasswordReset([FromRoute] string tenant_id, [FromRoute] string uid, 
+        public async Task<dynamic> PasswordReset([FromRoute] string tenant_id, [FromRoute] string uid,
             [FromForm] string action_type, [FromForm] string pw1, [FromForm] string pw2)
         {
             ViewBag.IsError = false;
@@ -84,8 +84,8 @@ namespace Ark.oAuth.Oidc.Controllers
         }
         [HttpPost]
         [Route("{tenant_id}/v1/connect/authorize")]
-        public async Task<IActionResult> Index([FromRoute] string tenant_id, 
-            [FromForm] string Username, 
+        public async Task<IActionResult> Index([FromRoute] string tenant_id,
+            [FromForm] string Username,
             [FromForm] string Password,
             [FromQuery] string response_type,
             [FromQuery] string client_id,
@@ -120,6 +120,38 @@ namespace Ark.oAuth.Oidc.Controllers
             }
             return View();
         }
+        [HttpPost]
+        [Consumes("application/x-www-form-urlencoded")]
+        [Route("{tenant_id}/v1/token")]
+        public async Task<dynamic> Token([FromRoute] string tenant_id,
+            [FromForm] string grant_type,
+            [FromForm] string code,
+            [FromForm] string redirect_uri,
+            [FromForm] string client_id,
+            [FromForm] string code_verifier)
+        {
+            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            try
+            {
+                var tt = await _da.GetTenant(tenant_id);
+                if (tt == null) throw new ApplicationException("invalid_tenant");
+                var cc = await _da.GetClient(client_id);
+                if (cc == null) throw new ApplicationException("unauthorized_client");
+                if (cc.redirect_url.ToLower().Trim() != redirect_uri.ToLower().Trim()) throw new ApplicationException("invalid_request");
+                var pk = await _da.GetPkceCode(code, true);
+                if (pk == null) throw new ApplicationException("invalid_grant");
+                return new
+                {
+                    access_token = pk.access_token,
+                    id_token = "",
+                    refresh_token = pk.refresh_token
+                };
+            }
+            catch (Exception ex)
+            {
+                return new { error = ex.Message };
+            }
+        }
         [Authorize]
         [Route("{tenant_id}/v1/server/manage")]
         public async Task<IActionResult> Manage([FromRoute] string tenant_id)
@@ -148,7 +180,7 @@ namespace Ark.oAuth.Oidc.Controllers
                 response_types_supported = new List<string>() { "code" },
                 client_config_section = new
                 {
-                    ark_oauth_client = new 
+                    ark_oauth_client = new
                     {
                         Issuer = tt.issuer,
                         Audience = tt.audience,

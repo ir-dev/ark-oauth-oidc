@@ -160,13 +160,20 @@ namespace Ark.oAuth.Oidc
             {
                 usr = _ctx.users.FirstOrDefault(t => t.email == un && (t.client_id ?? "").ToLower() == (client ?? "").ToLower());
                 if (usr == null) throw new ApplicationException("invalid creds client.");
-                if (!_util.VerifyPasswordPBKDF2(pw, usr.hash_pw)) throw new ApplicationException("invalid creds.");
             }
+            if (!_util.VerifyPasswordPBKDF2(pw, usr.hash_pw)) throw new ApplicationException("invalid creds.");
             return usr;
         }
-        public async Task<PkceCodeFlow?> GetPkceCode(string code)
+        public async Task<PkceCodeFlow?> GetPkceCode(string code, bool invalidate = false)
         {
-            return await _ctx.pkce_code_flow.FirstOrDefaultAsync(t => t.code == code);
+            var tt = await _ctx.pkce_code_flow.FirstOrDefaultAsync(t => t.code == code && !t.inactivate);
+            if (invalidate)
+            {
+                tt.inactivate = true;
+                _ctx.pkce_code_flow.Update(tt);
+                await _ctx.SaveChangesAsync();
+            }
+            return tt;
         }
         public async Task UpsertPkceCode(string token, ArkTenant tenant, string code, string code_challenge, string code_challenge_method, string state, string scopes, string claims, DateTime expires_at, string redirect_uri, string response_type)
         {

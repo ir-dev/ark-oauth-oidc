@@ -7,6 +7,8 @@ This project is an implementation of oAuth2 oidc's **Authorization Code Flow wit
 
 Customized in such a way that, its very felixible for develpers to to just start uinsg wiht out any hurdles.
 
+Very much useful for SAAS based oauth enablement. considered most scenarios for tenant & client approach.
+
 TO DO: soon to update a video file explaining this identity enablement with very few steps.
 
 ---
