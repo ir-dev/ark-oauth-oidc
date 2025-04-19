@@ -108,8 +108,9 @@ namespace Ark.oAuth.Oidc.Controllers
                 if (cc.redirect_url.ToLower().Trim() != redirect_uri.ToLower().Trim()) throw new ApplicationException("invalid_redirect_uri");
                 var usr = await _da.ValidateUserCreds(Username, Password, client_id);
                 var tkn = await _ts.BuildAsymmetric_AccessToken(tt, code_challenge);
-                await _da.UpsertPkceCode(tkn.Item1, tt, code_challenge, code_challenge, code_challenge_method, state, scope, "", tkn.Item2, redirect_uri, response_type);
-                return Redirect($"{cc.redirect_url}?token={tkn.Item1}");
+                string code = Guid.NewGuid().ToString();
+                await _da.UpsertPkceCode(tkn.Item1, tt, code, code_challenge, code_challenge_method, state, scope, "", tkn.Item2, redirect_uri, response_type);
+                return Redirect($"{cc.redirect_url}?code={code}&state={state}");
             }
             catch (Exception ex)
             {
@@ -129,7 +130,8 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.tenant = tt;
             ViewBag.base_path = ser.BasePath;
             ViewBag.IsError = false;
-            //ViewBag.ctx = 
+            ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
+            ViewBag.client_logo = ser.EmailConfig?.client_logo ?? $"";
             return View();
         }
 

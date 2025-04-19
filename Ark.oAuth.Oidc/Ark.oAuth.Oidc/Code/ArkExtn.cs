@@ -155,7 +155,7 @@ namespace Ark.oAuth.Oidc
                                 claims = lls,
                                 active = true,
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                                clients = new List<string>() { ser.TenantId },
+                                client_id = ser.TenantId,
                                 email = "admin",
                                 emailed = false,
                                 hash_pw = util.HashPasswordPBKDF2("admin"),

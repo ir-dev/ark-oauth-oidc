@@ -115,6 +115,16 @@ namespace Ark.oAuth.Oidc
                 data = await da.GetUsers()
             };
         }
+        [Route("v1/user/list/client/{client_id}")]
+        public async Task<dynamic> UserListByClient([FromRoute] string client_id, [FromServices] DataAccess da)
+        {
+            return new
+            {
+                error = false,
+                msg = $"users list for client ({client_id}) loaded.",
+                data = await da.GetUsersByClient(client_id)
+            };
+        }
         [HttpPost]
         [Route("v1/user/upsert")]
         public async Task<dynamic> UserUpdate([FromServices] DataAccess da, [FromBody] ArkUser user)

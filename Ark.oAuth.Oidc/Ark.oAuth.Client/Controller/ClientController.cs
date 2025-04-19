@@ -26,7 +26,7 @@ namespace Ark.oAuth.Client
             option.SameSite = SameSiteMode.None;
             option.Domain = cc.Domain;
             Response.Cookies.Append($"ark_oauth_tkn", token, option);
-            ViewBag.redirect = cc.RedirectRelative;
+            //ViewBag.redirect = string.IsNullOrEmpty(redirect_relative) ? cc.RedirectRelative : redirect_relative;
             return View();
             //Response.Redirect($"{cc.RedirectRelative}");
         }

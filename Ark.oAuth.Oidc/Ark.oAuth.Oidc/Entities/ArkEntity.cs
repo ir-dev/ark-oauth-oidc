@@ -44,6 +44,8 @@ namespace Ark.oAuth
     public class ArkUser
     {
         [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public string id { get; set; } 
         public string email { get; set; } // used for login
         public string? hash_pw { get; set; }
         public string? ref_uid { get; set; } // referecee uid, used in url sent to email
@@ -52,13 +54,7 @@ namespace Ark.oAuth
         public string name { get; set; } // full name
         public string type { get; set; } = "user"; // type of account - defaul: null, 'user', 'service'
         public bool active { get; set; } = true;
-        public string? clients_ { get; set; }
-        [NotMapped]
-        public List<string> clients
-        {
-            get => System.Text.Json.JsonSerializer.Deserialize<List<string>>(string.IsNullOrEmpty(clients_) ? "[]" : clients_);
-            set => clients_ = System.Text.Json.JsonSerializer.Serialize(value ?? new List<string>());
-        }
+        public string? client_id { get; set; }
         public string? claims_ { get; set; }
         [NotMapped]
         public List<string> claims
@@ -88,7 +84,7 @@ namespace Ark.oAuth
         public string audience { get => (_audience ?? "").ToLower(); set => _audience = value; }
         string _response_type;
         public string response_type { get => (_response_type ?? "").ToLower(); set => _response_type = value; }
-        public string code_challenge { get; set; }
+        public string code_challenge { get; set; } //code_verifier
         string _code_challenge_method;
         public string code_challenge_method { get => (_code_challenge_method ?? "").ToLower(); set => _code_challenge_method = value; }
         public string? state { get; set; }

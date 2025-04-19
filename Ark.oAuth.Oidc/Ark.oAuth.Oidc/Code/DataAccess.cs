@@ -47,7 +47,7 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<ArkClient> UpsertClient(ArkClient client)
         {
-            var tt = await _ctx.clients.FirstOrDefaultAsync(t => t.client_id == client.client_id);
+            var tt = await _ctx.clients.FirstOrDefaultAsync(t => t.client_id.ToLower() == client.client_id.ToLower());
             if (tt == null)
             {
                 client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
@@ -85,12 +85,16 @@ namespace Ark.oAuth.Oidc
         {
             return await _ctx.users.ToListAsync();
         }
+        public async Task<List<ArkUser>> GetUsersByClient(string client_id)
+        {
+            return await _ctx.users.Where(t => (t.client_id ?? "").ToLower() == (client_id ?? "").ToLower()) .ToListAsync();
+        }
         public async Task<ArkUser> UpsertUser(ArkUser user)
         {
             var tt = await _ctx.users.FirstOrDefaultAsync(t => t.email == user.email);
             if (tt == null)
             {
-                var cnt = await _ctx.clients.FirstOrDefaultAsync(t => user.clients.Contains(t.client_id));
+                var cnt = await _ctx.clients.FirstOrDefaultAsync(t => user.client_id == t.client_id);
                 if (cnt == null) throw new ApplicationException("client not assigned for the user.");
                 var tnt = await _ctx.tenants.FirstOrDefaultAsync(t => cnt.tenants.Contains(t.tenant_id));
                 // new user - ste reset mode - true
@@ -112,14 +116,14 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<ArkUser> UserResetPw(ArkUser user)
         {
-            var uu = await _ctx.users.FirstOrDefaultAsync(t => t.email == user.email);
+            var uu = await _ctx.users.FirstOrDefaultAsync(t => t.email == user.email && t.client_id.ToLower() == (user.client_id ?? "").ToLower());
             if (uu == null)
             {
                 // Shouldn't be the case
             }
             else
             {
-                var cnt = await _ctx.clients.FirstOrDefaultAsync(t => uu.clients.Contains(t.client_id));
+                var cnt = await _ctx.clients.FirstOrDefaultAsync(t => uu.client_id.ToLower() == t.client_id.ToLower());
                 var tnt = await _ctx.tenants.FirstOrDefaultAsync(t => cnt.tenants.Contains(t.tenant_id));
                 _ctx.ChangeTracker.Clear();
                 uu.reset_mode = true;
@@ -152,8 +156,12 @@ namespace Ark.oAuth.Oidc
         {
             var usr = _ctx.users.FirstOrDefault(t => t.email == un);
             if (usr == null) throw new ApplicationException("invalid creds");
-            if (!_util.VerifyPasswordPBKDF2(pw, usr.hash_pw)) throw new ApplicationException("invalid creds.");
-            if (!usr.clients.Contains(client)) throw new ApplicationException("invalid creds client.");
+            if ((usr.client_id ?? "").ToLower() != (client ?? "").ToLower())
+            {
+                usr = _ctx.users.FirstOrDefault(t => t.email == un && (t.client_id ?? "").ToLower() == (client ?? "").ToLower());
+                if (usr == null) throw new ApplicationException("invalid creds client.");
+                if (!_util.VerifyPasswordPBKDF2(pw, usr.hash_pw)) throw new ApplicationException("invalid creds.");
+            }
             return usr;
         }
         public async Task<PkceCodeFlow?> GetPkceCode(string code)
@@ -171,7 +179,7 @@ namespace Ark.oAuth.Oidc
                 code_challenge = code_challenge,
                 code_challenge_method = code_challenge_method,
                 state = state,
-                refresh_token = code_challenge,
+                refresh_token = Guid.NewGuid().ToString(),
                 scopes = scopes,
                 claims = claims,
                 expires_at = expires_at,

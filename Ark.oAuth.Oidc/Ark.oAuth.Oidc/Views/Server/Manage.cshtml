@@ -1,282 +1,282 @@
 ﻿@{
-    Layout = null;
+	Layout = null;
 }
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ark-js-util@latest/ark-util.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ark-js-alert@1.0.2/ark-alert.min.js"></script>
-    <link rel="shortcut icon" type="image/png" href="https://immanuel.co/favicon.ico" />
-    <style>
-        html, body {
-            font-family: 'Open Sans', sans-serif;
-            height: 100%;
-            padding: 0px;
-            margin: 0px;
-        }
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>@ViewBag.tenant.display : IdP </title>
+	<link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+	<script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/ark-js-util@latest/ark-util.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/ark-js-alert@1.0.2/ark-alert.min.js"></script>
+	<style>
+		html, body {
+			font-family: 'Open Sans', sans-serif;
+			height: 100%;
+			padding: 0px;
+			margin: 0px;
+		}
 
-        body {
-            background: #FFFFFF;
-            height: 100%;
-            font-family: sans-serif;
-        }
+		body {
+			background: #FFFFFF;
+			height: 100%;
+			font-family: sans-serif;
+		}
 
-        img {
-            max-width: 100%;
-        }
+		img {
+			max-width: 100%;
+		}
 
-        ul {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-        }
+		ul {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+		}
 
-        a {
-            text-decoration: none;
-        }
+		a {
+			text-decoration: none;
+		}
 
-        #header {
-            float: left;
-            width: 100%;
-            background: #ffffff;
-            position: relative;
-        }
+		#header {
+			float: left;
+			width: 100%;
+			background: #ffffff;
+			position: relative;
+		}
 
-        .header-nav {
-            min-height: 64px;
-            -webkit-box-sizing: border-box;
-            -moz-box-sizing: border-box;
-            box-sizing: border-box;
-            background: #279BE4;
-        }
+		.header-nav {
+			min-height: 64px;
+			-webkit-box-sizing: border-box;
+			-moz-box-sizing: border-box;
+			box-sizing: border-box;
+			background: #279BE4;
+		}
 
-        .menu-button {
-            float: left;
-            font-size: 29px;
-            color: #fff;
-            padding: 12px 19px;
-        }
+		.menu-button {
+			float: left;
+			font-size: 29px;
+			color: #fff;
+			padding: 12px 19px;
+		}
 
-        .nav ul {
-            height: 64px;
-            float: right;
-        }
+		.nav ul {
+			height: 64px;
+			float: right;
+		}
 
-            .nav ul li {
-                float: left;
-                position: relative;
-                padding: 11px;
-            }
+			.nav ul li {
+				float: left;
+				position: relative;
+				padding: 11px;
+			}
 
-        .nav > ul > li:first-child {
-            border-left: none;
-        }
+		.nav > ul > li:first-child {
+			border-left: none;
+		}
 
-        .nav ul li a {
-            color: #fff;
-            padding: 1px;
-            float: left;
-        }
+		.nav ul li a {
+			color: #fff;
+			padding: 1px;
+			float: left;
+		}
 
-        .nav ul li i {
-            color: #fff;
-        }
+		.nav ul li i {
+			color: #fff;
+		}
 
-        .nav ul li:hover {
-            background: #01A9F0;
-            color: #fff;
-        }
+		.nav ul li:hover {
+			background: #01A9F0;
+			color: #fff;
+		}
 
-        .user-profile {
-            float: right;
-        }
+		.user-profile {
+			float: right;
+		}
 
-            .user-profile > div {
-                float: left;
-                padding: 20px 8px;
-                position: relative;
-            }
+			.user-profile > div {
+				float: left;
+				padding: 20px 8px;
+				position: relative;
+			}
 
-            .user-profile i {
-                font-size: 1.2em;
-                color: #5F6F86;
-            }
+			.user-profile i {
+				font-size: 1.2em;
+				color: #5F6F86;
+			}
 
-                .user-profile i:hover {
-                    color: #397AC5;
-                }
+				.user-profile i:hover {
+					color: #397AC5;
+				}
 
-        .font-icon i:after {
-            position: absolute;
-            content: '3';
-            background: #E74C3C;
-            color: #fff;
-            font-size: 12px;
-            border-radius: 50%;
-            width: 10px;
-            height: 10px;
-            padding: 3px 4px 4px 3px;
-            text-align: center;
-            top: 12px;
-            right: 11px;
-        }
+		.font-icon i:after {
+			position: absolute;
+			content: '3';
+			background: #E74C3C;
+			color: #fff;
+			font-size: 12px;
+			border-radius: 50%;
+			width: 10px;
+			height: 10px;
+			padding: 3px 4px 4px 3px;
+			text-align: center;
+			top: 12px;
+			right: 11px;
+		}
 
-        .font-icon {
-            padding: 8px 10px;
-        }
+		.font-icon {
+			padding: 8px 10px;
+		}
 
-            .font-icon i {
-                font-size: 24px;
-            }
+			.font-icon i {
+				font-size: 24px;
+			}
 
-        .nav-mail .font-icon i:after {
-            background: #2ECC71;
-        }
+		.nav-mail .font-icon i:after {
+			background: #2ECC71;
+		}
 
-        div.user-image {
-            padding: 9px 5px;
-            margin: 0 5px;
-            border-left: 1px solid #ccc;
-            border-right: 1px solid #ccc;
-        }
+		div.user-image {
+			padding: 9px 5px;
+			margin: 0 5px;
+			border-left: 1px solid #ccc;
+			border-right: 1px solid #ccc;
+		}
 
-        .nav-profile {
-            background: #0274BD;
-        }
+		.nav-profile {
+			background: #0274BD;
+		}
 
-        .nav-profile-image img {
-            width: 39px;
-            height: 41px;
-            border-radius: 50%;
-            float: left;
-        }
+		.nav-profile-image img {
+			width: 39px;
+			height: 41px;
+			border-radius: 50%;
+			float: left;
+		}
 
-        .nav-profile-name {
-            float: right;
-            margin: 11px 7px 8px 14px;
-            color: #fff;
-        }
+		.nav-profile-name {
+			float: right;
+			margin: 11px 7px 8px 14px;
+			color: #fff;
+		}
 
-            .nav-profile-name i {
-                padding: 0 0 0 11px;
-            }
+			.nav-profile-name i {
+				padding: 0 0 0 11px;
+			}
 
-        .nav-chat i:after {
-            display: none;
-        }
+		.nav-chat i:after {
+			display: none;
+		}
 
-        ::-webkit-scrollbar {
-            width: 12px;
-        }
+		::-webkit-scrollbar {
+			width: 12px;
+		}
 
-        ::-webkit-scrollbar-track {
-            -webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.3);
-            border-radius: 10px;
-        }
+		::-webkit-scrollbar-track {
+			-webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.3);
+			border-radius: 10px;
+		}
 
-        ::-webkit-scrollbar-thumb {
-            border-radius: 10px;
-            -webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.5);
-        }
+		::-webkit-scrollbar-thumb {
+			border-radius: 10px;
+			-webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.5);
+		}
 
-        .content-header p {
-            margin: 0;
-            padding-left: 2px;
-        }
+		.content-header p {
+			margin: 0;
+			padding-left: 2px;
+		}
 
-        /* drag drop */
+		/* drag drop */
 
-        /* External Tag Menu (on right side) */
-        #external-menu {
-            border: 1px solid #ccc;
-            padding: 10px;
-            width: 200px;
-            background: #f9f9f9;
-            box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
-            height: 275px;
-            overflow-y: auto;
-        }
+		/* External Tag Menu (on right side) */
+		#external-menu {
+			border: 1px solid #ccc;
+			padding: 10px;
+			width: 200px;
+			background: #f9f9f9;
+			box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
+			height: 275px;
+			overflow-y: auto;
+		}
 
-            #external-menu h4 {
-                margin-top: 0;
-            }
+			#external-menu h4 {
+				margin-top: 0;
+			}
 
-        .draggable-item {
-            padding: 6px 10px;
-            background: #007BFF;
-            color: white;
-            margin-bottom: 6px;
-            cursor: grab;
-            border-radius: 5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+		.draggable-item {
+			padding: 6px 10px;
+			background: #007BFF;
+			color: white;
+			margin-bottom: 6px;
+			cursor: grab;
+			border-radius: 5px;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
 
-            .draggable-item button {
-                background: transparent;
-                border: none;
-                color: white;
-                font-weight: bold;
-                margin-left: 10px;
-                cursor: pointer;
-            }
+			.draggable-item button {
+				background: transparent;
+				border: none;
+				color: white;
+				font-weight: bold;
+				margin-left: 10px;
+				cursor: pointer;
+			}
 
-        #new-tag-input {
-            width: 100%;
-            padding: 6px;
-            margin-top: 10px;
-            margin-bottom: 10px;
-            box-sizing: border-box;
-        }
+		#new-tag-input {
+			width: 100%;
+			padding: 6px;
+			margin-top: 10px;
+			margin-bottom: 10px;
+			box-sizing: border-box;
+		}
 
-        .drop-cell {
-            border: 1px dashed #aaa;
-            min-height: 40px;
-            max-height: 60px;
-            overflow-y: auto;
-            padding: 4px;
-        }
+		.drop-cell {
+			border: 1px dashed #aaa;
+			min-height: 40px;
+			max-height: 60px;
+			overflow-y: auto;
+			padding: 4px;
+		}
 
-        .tag {
-            display: inline-block;
-            background-color: #e0f7fa;
-            color: #00796b;
-            padding: 2px 6px;
-            margin: 2px;
-            border-radius: 12px;
-            font-size: 0.85em;
-            position: relative;
-            white-space: nowrap;
-        }
+		.tag {
+			display: inline-block;
+			background-color: #e0f7fa;
+			color: #00796b;
+			padding: 2px 6px;
+			margin: 2px;
+			border-radius: 12px;
+			font-size: 0.85em;
+			position: relative;
+			white-space: nowrap;
+		}
 
-            .tag button {
-                background: none;
-                border: none;
-                color: #00796b;
-                margin-left: 4px;
-                font-weight: bold;
-                cursor: pointer;
-            }
-    </style>
+			.tag button {
+				background: none;
+				border: none;
+				color: #00796b;
+				margin-left: 4px;
+				font-weight: bold;
+				cursor: pointer;
+			}
+	</style>
 </head>
 
 <body>
-    <div id="header">
-        <div class="header-nav">
-            <div class="menu-button">
-                <!--<i class="fa fa-navicon"></i>-->
-                <img src="~/img/ark_oauth_logo.png" height="64" />
-            </div>
-            <div class="nav">
-                <ul>
-                    @* <li class="nav-settings">
+	<div id="header">
+		<div class="header-nav">
+			<div class="menu-button">
+				<!--<i class="fa fa-navicon"></i>-->
+				<img src="@ViewBag.host_logo" height="64" />
+			</div>
+			<div class="nav">
+				<ul>
+					@* <li class="nav-settings">
             <div class="font-icon"><i class="fa fa-tasks"></i></div>
           </li>
           <li class="nav-mail">
@@ -288,385 +288,399 @@
           <li class="nav-chat">
             <div class="font-icon"><i class="fa fa-comments-o"></i></div>
           </li> *@
-                    <li class="nav-profile">
-                        <div class="nav-profile-image">
-                            <img src="~/img/profile.png" alt="profile-img" alt="profile image">
-                        </div>
-                    </li>
-                    <li>
-                        <img src="~/img/ark_logo_1.png" height="64" />
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </div>
-    <div style="padding: 20px;">
-        <h2>Tenant List <button id="tenant-add">Add</button></h2>
-        <div id="tbl_tenant"></div>
-    </div>
-    <div style="padding: 20px;">
-        <h2>Client List <button id="client-add">Add</button></h2>
-        <div id="tbl_client"></div>
-    </div>
-    <div style="font-family: sans-serif;display: block;gap: 20px;padding: 20px;">
-        <h2 style="display:block;">User / Claims Mapping <button id="user-add">Add</button></h2>
-        <div style="display:flex;gap: 20px;">
-            <div id="tabulator-table" style="width: 74%;"></div>
-            <div id="external-menu">
-                <h4>Claims</h4>
-                <input type="text" id="new-tag-input" placeholder="Add new tag..." />
-                <div id="tag-list">
-                    <!-- Draggable tags go here -->
-                </div>
-            </div>
-        </div>
-    </div>
-    <script src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
-    <script>
-            // External tag management
-            // let externalTags = [
-            //     "sub", "iss", "aud", "exp", "iat", "name", "family_name", "given_name", "email", "email_verified", "gender", "phone_number", "address"
-            // ];
-            let externalTags = [];
+					<li class="nav-profile">
+						<div class="nav-profile-image">
+							<img src="~/img/profile.png" alt="profile-img" alt="profile image">
+						</div>
+					</li>
+					<li>
+						<img src="@ViewBag.client_logo" height="64" />
+					</li>
+				</ul>
+			</div>
+		</div>
+	</div>
+	<div style="padding: 20px;">
+		<h2>Tenant List <button id="tenant-add">Add</button></h2>
+		<div id="tbl_tenant"></div>
+	</div>
+	<div style="padding: 20px;">
+		<h2>Client List <button id="client-add">Add</button></h2>
+		<div id="tbl_client"></div>
+	</div>
+	<div style="font-family: sans-serif;display: block;gap: 20px;padding: 20px;">
+		<h2 style="display:block;">
+			User / Claims Mapping
+			<select id="sel-client">
+				<option value="">Select</option>
+			</select>
+			<button id="user-add">Add</button>
+		</h2>
+		<div style="display:flex;gap: 20px;">
+			<div id="tabulator-table" style="width: 74%;"></div>
+			<div id="external-menu">
+				<h4>Claims</h4>
+				<input type="text" id="new-tag-input" placeholder="Add new tag..." />
+				<div id="tag-list">
+					<!-- Draggable tags go here -->
+				</div>
+			</div>
+		</div>
+	</div>
+	<script src="https://unpkg.com/tabulator-tables@5.5.0/dist/js/tabulator.min.js"></script>
+	<script>
+			// External tag management
+			// let externalTags = [
+			//     "sub", "iss", "aud", "exp", "iat", "name", "family_name", "given_name", "email", "email_verified", "gender", "phone_number", "address"
+			// ];
+			let externalTags = [];
 
-            function renderTags() {
-              const container = document.getElementById("tag-list");
-              container.innerHTML = "";
-              externalTags.forEach((tag, index) => {
-                const el = document.createElement("div");
-                el.className = "draggable-item";
-                el.setAttribute("draggable", "true");
-                el.dataset.tag = tag;
-                el.innerHTML = `
-                  <span>${tag}</span>
-                  <button onclick="removeExternalTag(${index})">&times;</button>
-                `;
-                el.addEventListener("dragstart", e => {
-                  e.dataTransfer.setData("text/plain", tag);
-                });
-                container.appendChild(el);
-              });
-            }
+			function renderTags() {
+			  const container = document.getElementById("tag-list");
+			  container.innerHTML = "";
+			  externalTags.forEach((tag, index) => {
+				const el = document.createElement("div");
+				el.className = "draggable-item";
+				el.setAttribute("draggable", "true");
+				el.dataset.tag = tag;
+				el.innerHTML = `
+				  <span>${tag}</span>
+				  <button onclick="removeExternalTag(${index})">&times;</button>
+				`;
+				el.addEventListener("dragstart", e => {
+				  e.dataTransfer.setData("text/plain", tag);
+				});
+				container.appendChild(el);
+			  });
+			}
 
-            function removeExternalTag(index) {
-              externalTags.splice(index, 1);
-              renderTags();
-            }
+			function removeExternalTag(index) {
+			  externalTags.splice(index, 1);
+			  renderTags();
+			}
 
-            document.getElementById("new-tag-input").addEventListener("keypress", e => {
-              if (e.key === "Enter") {
-                const value = e.target.value.trim();
-                if (value && !externalTags.includes(value)) {
-                  fetch('/@ViewBag.base_path/api/oauth/v1/claim/upsert', {
-                            method: "POST",
-                            body: JSON.stringify({
-                                key: value,
-                                display: value
-                            }),
-                            headers: {
-                                'Accept': 'application/json',
-                                'Content-Type': 'application/json'
-                            }
-                        })
-                        .then(t => t.json())
-                        .then(t => {
-                            externalTags.unshift(value);
-                            renderTags();
-                            ark_alert.alert('s', `saved tenant succesfully`, 3000);
-                        });
-                  e.target.value = "";
-                }
-              }
-            });
+			document.getElementById("new-tag-input").addEventListener("keypress", e => {
+			  if (e.key === "Enter") {
+				const value = e.target.value.trim();
+				if (value && !externalTags.includes(value)) {
+				  fetch('/@ViewBag.base_path/api/oauth/v1/claim/upsert', {
+							method: "POST",
+							body: JSON.stringify({
+								key: value,
+								display: value
+							}),
+							headers: {
+								'Accept': 'application/json',
+								'Content-Type': 'application/json'
+							}
+						})
+						.then(t => t.json())
+						.then(t => {
+							externalTags.unshift(value);
+							renderTags();
+							ark_alert.alert('s', `saved tenant succesfully`, 3000);
+						});
+				  e.target.value = "";
+				}
+			  }
+			});
 
-            // Table
-            // const tableData = [
-            //   { email: "ark1@immanuel.co", name: "John Doe", clients: [],  dropzone: null },
-            //   { email: "ark2@immanuel.co", name: "Jane Smith", clients: [], dropzone: undefined },
-            //   { email: "ark3@immanuel.co", name: "Alice Johnson", clients: [] },
-            //   { email: "ark4@immanuel.co", name: "John Doe", clients: [], dropzone: [
-            //       "sub", "iss", "aud", "exp", "iat", "name", "family_name", "given_name", "email", "email_verified", "gender", "phone_number", "address"
-            //   ] },
-            //   { email: "ark5@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
-            //   { email: "ark6@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
-            //   { email: "ark7@immanuel.co", name: "John Doe", clients: [], dropzone: [] },
-            //   { email: "ark8@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
-            //   { email: "ark9@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
-            // ];
-            let tableData= [], table;
-            var load_user = (clnts) => {
-                var laod_tbl = () => {
-                table = new Tabulator("#tabulator-table", {
-                  height: "300px",
-                  data: tableData,
-                  layout:"fitDataFill",
-                  responsiveLayout:"collapse",
-                  columns: [
-                    { title: "Name", field: "name", editor:"input", },
-                    { title: "Email", field: "email", editor:"input" },
-                    {title:"Client", field:"clients", editor:"list",
-                        editorParams: {
-                            //values: ["client_1", "client_2"],
-                            values: clnts.map(tt => tt.client_id),
-                            clearable:true,
-                            multiselect:true
-                        }
-                    },
-                    {title:"Active", field:"active", editor:"list",
-                        editorParams: {
-                            values: [ true, false ]
-                        }
-                    },
-                    {
-                      title: "Drop Claims Here",
-                      field: "claims",
-                      width: 300,
-                      formatter: (cell) => {
-                        const itms = cell.getValue();
-                        var contain = ark_util.textToDom(`<div class="drop-cell" style="display:flex; flex-wrap: wrap;" ondrop="handleDrop(event, ${cell.getRow().getPosition()})" ondragover="event.preventDefault()"></div>`);
-                        (itms || []).forEach((t, ix) => {
-                            var dd = ark_util.textToDom(`<span class="tag">${t}<button>×</button></span>`);
-                            dd.querySelector('button').addEventListener('click', evt => {
-                                itms.splice(ix, 1);
-                                dd.remove();
-                            });
-                            contain.appendChild(dd);
-                        });
-                        return contain;
-                      }
-                    },
-                    {
-                        formatter: () => `<button>Save</button>`,
-                        field: "save",
-                        width:60,
-                        hozAlign:"center",
-                        cellClick:function(e, cell) {
-                            //alert("Printing row data for: " + cell.getRow().getData().name)
-                            var tg = cell.getRow().getData();
-                            //tg.active = tg.active == 'true' ? true: false;
-                            console.log('save clicked,', tg);
-                            fetch('/@ViewBag.base_path/api/oauth/v1/user/upsert', {
-                            method: "POST",
-                            body: JSON.stringify(tg),
-                            headers: {
-                                'Accept': 'application/json',
-                                'Content-Type': 'application/json'
-                                }
-                            })
-                            .then(t => t.json())
-                            .then(t => {
-                                ark_alert.alert('s', `saved user succesfully`, 3000);
-                            });
-                        }
-                    },
-                    {
-                        formatter: () => `<button>Reset Password</button>`,
-                        field: "reset_pw",
-                        width:160,
-                        hozAlign:"center",
-                        cellClick:function(e, cell) {
-                            //alert("Printing row data for: " + cell.getRow().getData().name)
-                            var tg = cell.getRow().getData();
-                            //tg.active = tg.active == 'true' ? true: false;
-                            console.log('reset pw clicked,', tg);
-                            fetch('/@ViewBag.base_path/api/oauth/v1/user/pw/reset/init', {
-                            method: "POST",
-                            body: JSON.stringify(tg),
-                            headers: {
-                                'Accept': 'application/json',
-                                'Content-Type': 'application/json'
-                                }
-                            })
-                            .then(t => t.json())
-                            .then(t => {
-                                ark_alert.alert('s', `password reset request succesfully`, 3000);
-                            });
-                        }
-                    }
-                  ],
-                });
-            }
-             fetch('/@ViewBag.base_path/api/oauth/v1/user/list')
-            .then(t => t.json())
-            .then(t => {
-                tableData = t.data;
-                laod_tbl();
-            });
-        }
-            // Drop handling
-        window.handleDrop = function (e, rowIndex) {
-          e.preventDefault();
-          const data = e.dataTransfer.getData("text/plain");
-          const row = table.getRowFromPosition(rowIndex, true);
-          var dtt = row.getData();
-          dtt.claims = dtt.claims || [];
-          const cell = row.getCell("claims");
-          //const itms = cell.getValue();
-          var itms = dtt.claims;
-          var contain = cell.getElement().querySelector('.drop-cell');
-          if (itms.indexOf(data) < 0) {
-              ((idx) => {
-                var dd = ark_util.textToDom(`<span class="tag">${data}<button>×</button></span>`);
-                dd.querySelector('button').addEventListener('click', evt => {
-                    itms.splice(idx, 1);
-                    dd.remove();
-                });
-                itms.push(data);
-                table.updateData([dtt]);
-                contain.appendChild(dd);
-              })(itms.length);
-          }
-        };
+			// Table
+			// const tableData = [
+			//   { email: "ark1@immanuel.co", name: "John Doe", clients: [],  dropzone: null },
+			//   { email: "ark2@immanuel.co", name: "Jane Smith", clients: [], dropzone: undefined },
+			//   { email: "ark3@immanuel.co", name: "Alice Johnson", clients: [] },
+			//   { email: "ark4@immanuel.co", name: "John Doe", clients: [], dropzone: [
+			//       "sub", "iss", "aud", "exp", "iat", "name", "family_name", "given_name", "email", "email_verified", "gender", "phone_number", "address"
+			//   ] },
+			//   { email: "ark5@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
+			//   { email: "ark6@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
+			//   { email: "ark7@immanuel.co", name: "John Doe", clients: [], dropzone: [] },
+			//   { email: "ark8@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
+			//   { email: "ark9@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
+			// ];
+			let tableData= [], table;
+			var load_user = (client_id) => {
+				var laod_tbl = () => {
+				table = new Tabulator("#tabulator-table", {
+				  height: "300px",
+				  data: tableData,
+				  layout:"fitDataFill",
+				  responsiveLayout:"collapse",
+				  columns: [
+					{ title: "Name", field: "name", editor:"input", },
+					{ title: "Email", field: "email", editor:"input" },
+					{title:"Client", field:"client_id" },
+					{title:"Active", field:"active", editor:"list",
+						editorParams: {
+							values: [ true, false ]
+						}
+					},
+					{
+					  title: "Drop Claims Here",
+					  field: "claims",
+					  width: 300,
+					  formatter: (cell) => {
+						const itms = cell.getValue();
+						var contain = ark_util.textToDom(`<div class="drop-cell" style="display:flex; flex-wrap: wrap;" ondrop="handleDrop(event, ${cell.getRow().getPosition()})" ondragover="event.preventDefault()"></div>`);
+						(itms || []).forEach((t, ix) => {
+							var dd = ark_util.textToDom(`<span class="tag">${t}<button>×</button></span>`);
+							dd.querySelector('button').addEventListener('click', evt => {
+								itms.splice(ix, 1);
+								dd.remove();
+							});
+							contain.appendChild(dd);
+						});
+						return contain;
+					  }
+					},
+					{
+						formatter: () => `<button>Save</button>`,
+						field: "save",
+						width:60,
+						hozAlign:"center",
+						cellClick:function(e, cell) {
+							//alert("Printing row data for: " + cell.getRow().getData().name)
+							var tg = cell.getRow().getData();
+							//tg.active = tg.active == 'true' ? true: false;
+							console.log('save clicked,', tg);
+							fetch('/@ViewBag.base_path/api/oauth/v1/user/upsert', {
+							method: "POST",
+							body: JSON.stringify(tg),
+							headers: {
+								'Accept': 'application/json',
+								'Content-Type': 'application/json'
+								}
+							})
+							.then(t => t.json())
+							.then(t => {
+								if (t.error) ark_alert.alert('f', `user saving failed`, 5000);
+								else ark_alert.alert('s', `saved user succesfully`, 3000);
+							});
+						}
+					},
+					{
+						formatter: () => `<button>Reset Password</button>`,
+						field: "reset_pw",
+						width:160,
+						hozAlign:"center",
+						cellClick:function(e, cell) {
+							//alert("Printing row data for: " + cell.getRow().getData().name)
+							var tg = cell.getRow().getData();
+							//tg.active = tg.active == 'true' ? true: false;
+							console.log('reset pw clicked,', tg);
+							fetch('/@ViewBag.base_path/api/oauth/v1/user/pw/reset/init', {
+							method: "POST",
+							body: JSON.stringify(tg),
+							headers: {
+								'Accept': 'application/json',
+								'Content-Type': 'application/json'
+								}
+							})
+							.then(t => t.json())
+							.then(t => {
+								ark_alert.alert('s', `password reset request succesfully`, 3000);
+							});
+						}
+					}
+				  ],
+				});
+			}
+			if (client_id) {
+				fetch(`/@ViewBag.base_path/api/oauth/v1/user/list/client/${client_id}`)
+				.then(t => t.json())
+				.then(t => {
+					tableData = t.data;
+					laod_tbl();
+				});
+			} else {
+				tableData = [];
+					laod_tbl();
+			}
+		}
+			// Drop handling
+		window.handleDrop = function (e, rowIndex) {
+		  e.preventDefault();
+		  const data = e.dataTransfer.getData("text/plain");
+		  const row = table.getRowFromPosition(rowIndex, true);
+		  var dtt = row.getData();
+		  dtt.claims = dtt.claims || [];
+		  const cell = row.getCell("claims");
+		  //const itms = cell.getValue();
+		  var itms = dtt.claims;
+		  var contain = cell.getElement().querySelector('.drop-cell');
+		  if (itms.indexOf(data) < 0) {
+			  ((idx) => {
+				var dd = ark_util.textToDom(`<span class="tag">${data}<button>×</button></span>`);
+				dd.querySelector('button').addEventListener('click', evt => {
+					itms.splice(idx, 1);
+					dd.remove();
+				});
+				itms.push(data);
+				table.updateData([dtt]);
+				contain.appendChild(dd);
+			  })(itms.length);
+		  }
+		};
 
 
-        function removeTagFromCell(rowIndex, tagText) {
-            const row = table.getRowFromPosition(rowIndex, true);
-            const cell = row.getCell("claims");
-            const html = cell.getValue()  || [];
+		function removeTagFromCell(rowIndex, tagText) {
+			const row = table.getRowFromPosition(rowIndex, true);
+			const cell = row.getCell("claims");
+			const html = cell.getValue()  || [];
 
-            const tagRegex = new RegExp(`<span class="tag"[^>]*>${tagText}<button[^>]*>×<\\/button><\\/span>`, 'g');
-            const updated = html.replace(tagRegex, '');
+			const tagRegex = new RegExp(`<span class="tag"[^>]*>${tagText}<button[^>]*>×<\\/button><\\/span>`, 'g');
+			const updated = html.replace(tagRegex, '');
 
-            cell.setValue(updated);
-        }
-        document.getElementById("user-add").addEventListener("click", evt => {
-            table.addRow({});
-        });
-        // Initial render
-        //renderTags();
-        fetch('/@ViewBag.base_path/api/oauth/v1/claim/list')
-        .then(t => t.json())
-        .then(t => {
-            externalTags = t.data.map(t1 => t1.key);
-            renderTags();
-        });
-    </script>
+			cell.setValue(updated);
+		}
+		document.getElementById("user-add").addEventListener("click", evt => {
+			if (document.getElementById("sel-client").value) {
+			 table.addRow({ client_id : document.getElementById("sel-client").value});
+			}
+		});
+		// Initial render
+		//renderTags();
+		fetch('/@ViewBag.base_path/api/oauth/v1/claim/list')
+		.then(t => t.json())
+		.then(t => {
+			externalTags = t.data.map(t1 => t1.key);
+			renderTags();
+		});
+	</script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.8.3/modernizr.min.js" type="text/javascript"></script>
-    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700' rel='stylesheet' type='text/css'>
-    <link href="https://unpkg.com/tabulator-tables/dist/css/tabulator.min.css" rel="stylesheet">
-    <script type="text/javascript" src="https://unpkg.com/tabulator-tables/dist/js/tabulator.min.js"></script>
-    <script>
-        const master_table = (opt) => {
-                            //custom formatter definition
-            var printIcon = function(cell, formatterParams, onRendered){ //plain text value
-                return "<i class='fa fa-print'></i>";
-            };
-            let tableMaster = new Tabulator(opt.selector, {
-                data: opt.data, //assign data to table
-                autoColumns: true, //create columns from data field names
-                autoColumnsDefinitions: function(definitions) {
-                    definitions.forEach((column) => {
-                        if (column.field == 'active') {
-                            column.editor = "list";
-                            column.editorParams = {
-                                values:[ "true", "false" ]
-                            };
-                        } else {
-                            column.editor = "input";
-                        }
-                    });
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.8.3/modernizr.min.js" type="text/javascript"></script>
+	<link href='https://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700' rel='stylesheet' type='text/css'>
+	<link href="https://unpkg.com/tabulator-tables/dist/css/tabulator.min.css" rel="stylesheet">
+	<script type="text/javascript" src="https://unpkg.com/tabulator-tables/dist/js/tabulator.min.js"></script>
+	<script>
+		const master_table = (opt) => {
+							//custom formatter definition
+			var printIcon = function(cell, formatterParams, onRendered){ //plain text value
+				return "<i class='fa fa-print'></i>";
+			};
+			let tableMaster = new Tabulator(opt.selector, {
+				data: opt.data, //assign data to table
+				autoColumns: true, //create columns from data field names
+				autoColumnsDefinitions: function(definitions) {
+					definitions.forEach((column) => {
+						if (column.field == 'active') {
+							column.editor = "list";
+							column.editorParams = {
+								values:[ "true", "false" ]
+							};
+						} else {
+							column.editor = "input";
+						}
+					});
 
-                    definitions.push({
-                        formatter: () => `<button>Save</button>`,
-                        field: "save",
-                        width:60,
-                        hozAlign:"center",
-                        cellClick:function(e, cell) {
-                            //alert("Printing row data for: " + cell.getRow().getData().name)
-                            var tg = cell.getRow().getData();
-                            tg.active = tg.active == 'true' ? true: false;
-                            if (opt.onsave) opt.onsave(tg);
-                        }
-                    });
+					definitions.push({
+						formatter: () => `<button>Save</button>`,
+						field: "save",
+						width:60,
+						hozAlign:"center",
+						cellClick:function(e, cell) {
+							//alert("Printing row data for: " + cell.getRow().getData().name)
+							var tg = cell.getRow().getData();
+							tg.active = tg.active == 'true' ? true: false;
+							if (opt.onsave) opt.onsave(tg);
+						}
+					});
 
-                    definitions.splice()
-                    return definitions;
-                }
-            });
-            return {
-                reset: () => {
-                    tableMaster.clearCellEdited();
-                },
-                table: tableMaster
-            }
-        }
-    </script>
-    <script>
-        var tbl_tenant, ten_lst;
-        fetch('/@ViewBag.base_path/api/oauth/v1/tenant/list')
-        .then(t => t.json())
-        .then(t => {
-            tbl_tenant = master_table({
-                data: t.data,
-                selector: '#tbl_tenant',
-                onsave: (tg) => {
-                    fetch('/@ViewBag.base_path/api/oauth/v1/tenant/upsert', {
-                            method: "POST",
-                            body: JSON.stringify(tg),
-                            headers: {
-                                'Accept': 'application/json',
-                                'Content-Type': 'application/json'
-                            }
-                        })
-                        .then(t => t.json())
-                        .then(t => {
-                            ark_alert.alert('s', `saved tenant succesfully`, 3000);
-                        });
-                }
-            });
-            ten_lst = t.data;
-        });
-        document.getElementById("tenant-add").addEventListener("click", evt => {
-            tbl_tenant.table.addRow({});
-        });
-    </script>
-    <script>
-        var tbl_client;
-        fetch('/@ViewBag.base_path/api/oauth/v1/client/list')
-        .then(t => t.json())
-        .then(t => {
-            tbl_client = master_table({
-                data: t.data,
-                selector: '#tbl_client',
-                onsave: (tg) => {
-                    fetch('/@ViewBag.base_path/api/oauth/v1/client/upsert', {
-                            method: "POST",
-                            body: JSON.stringify(tg),
-                            headers: {
-                                'Accept': 'application/json',
-                                'Content-Type': 'application/json'
-                            }
-                        })
-                        .then(t => t.json())
-                        .then(t => {
-                            ark_alert.alert('s', `saved client succesfully`, 3000);
-                        });
-                }
-            });
-            setTimeout(() => {
-                    tbl_client.table.deleteColumn('tenants_');
-                    tbl_client.table.deleteColumn('tenants');
-                    tbl_client.table.addColumn({
-                    title:"Tenants",
-                    field:"tenants",
-                    editor:"list",
-                    editorParams:{
-                        values: ten_lst.reduce((accm, itm) => {
-                            accm[itm.name] = itm.name;
-                            return accm;
-                        }, {}),
-                        clearable:true,
-                        multiselect: false,
-                        placeholderEmpty:"No Results Found"
-                    }
-                }, true, 'save');
-            }, 2000);
-            load_user(t.data)
-        });
-        document.getElementById("client-add").addEventListener("click", evt => {
-            tbl_client.table.addRow({});
-        });
-    </script>
+					definitions.splice()
+					return definitions;
+				}
+			});
+			return {
+				reset: () => {
+					tableMaster.clearCellEdited();
+				},
+				table: tableMaster
+			}
+		}
+	</script>
+	<script>
+		var tbl_tenant, ten_lst;
+		fetch('/@ViewBag.base_path/api/oauth/v1/tenant/list')
+		.then(t => t.json())
+		.then(t => {
+			tbl_tenant = master_table({
+				data: t.data,
+				selector: '#tbl_tenant',
+				onsave: (tg) => {
+					fetch('/@ViewBag.base_path/api/oauth/v1/tenant/upsert', {
+							method: "POST",
+							body: JSON.stringify(tg),
+							headers: {
+								'Accept': 'application/json',
+								'Content-Type': 'application/json'
+							}
+						})
+						.then(t => t.json())
+						.then(t => {
+							ark_alert.alert('s', `saved tenant succesfully`, 3000);
+						});
+				}
+			});
+			ten_lst = t.data;
+		});
+		document.getElementById("tenant-add").addEventListener("click", evt => {
+			tbl_tenant.table.addRow({});
+		});
+	</script>
+	<script>
+		var tbl_client;
+		fetch('/@ViewBag.base_path/api/oauth/v1/client/list')
+		.then(t => t.json())
+		.then(t => {
+			tbl_client = master_table({
+				data: t.data,
+				selector: '#tbl_client',
+				onsave: (tg) => {
+					tg.tenants = [ tg.tenants ];
+					fetch('/@ViewBag.base_path/api/oauth/v1/client/upsert', {
+							method: "POST",
+							body: JSON.stringify(tg),
+							headers: {
+								'Accept': 'application/json',
+								'Content-Type': 'application/json'
+							}
+						})
+						.then(t => t.json())
+						.then(t => {
+							ark_alert.alert('s', `saved client succesfully`, 3000);
+						});
+				}
+			});
+			setTimeout(() => {
+					tbl_client.table.deleteColumn('tenants_');
+					tbl_client.table.deleteColumn('tenants');
+					tbl_client.table.addColumn({
+					title:"Tenants",
+					field:"tenants",
+					editor:"list",
+					editorParams:{
+						values: ten_lst.reduce((accm, itm) => {
+							accm[itm.tenant_id] = itm.name;
+							return accm;
+						}, {}),
+						clearable:true,
+						multiselect: false,
+						placeholderEmpty:"No Results Found"
+					}
+				}, true, 'save');
+			}, 2000);
+			var scc = document.querySelector("#sel-client");
+			(t.data || []).forEach(tt => {
+				scc.add(new Option(tt.name, tt.client_id));
+			});
+			scc.addEventListener('change', evt => {
+				load_user(evt.target.value);
+			});
+		});
+		document.getElementById("client-add").addEventListener("click", evt => {
+			tbl_client.table.addRow({});
+		});
+	</script>
 </body>
 </html>
