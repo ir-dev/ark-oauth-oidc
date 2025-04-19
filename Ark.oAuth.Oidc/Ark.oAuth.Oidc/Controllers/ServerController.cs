@@ -144,7 +144,8 @@ namespace Ark.oAuth.Oidc.Controllers
                 {
                     access_token = pk.access_token,
                     id_token = "",
-                    refresh_token = pk.refresh_token
+                    refresh_token = pk.refresh_token,
+                    redirect_relative = cc.redirect_relative
                 };
             }
             catch (Exception ex)
@@ -178,20 +179,29 @@ namespace Ark.oAuth.Oidc.Controllers
                 code_challenge_methods_supported = new List<string>() { "S256" },
                 grant_types_supported = new List<string>() { "authorization_code", "client_credentials", "refresh_token" },
                 response_types_supported = new List<string>() { "code" },
-                client_config_section = new
+                ark_oauth_client = new 
                 {
-                    ark_oauth_client = new
+                    Issuer = tt.issuer,
+                    Audience = tt.audience,
+                    RsaPublic = tt.rsa_public,
+                    RedirectUri = cc.redirect_url,
+                    //RedirectRelative = cc.redirect_relative,// "/auth/oauth/ark_server/v1/server/manage",
+                    AuthServerUrl = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/oauth")}",
+                    ClientId = client_id,
+                    RouteKey = new List<string>() { "client_id", "company" },
+                    TenantId = tt.tenant_id,
+                    Domain = cc.domain,
+                    ExpireMins = tt.expire_mins,
+                    Clients = new Dictionary<string, dynamic>()
                     {
-                        Issuer = tt.issuer,
-                        Audience = tt.audience,
-                        RsaPublic = tt.rsa_public,
-                        RedirectUri = cc.redirect_url,
-                        RedirectRelative = cc.redirect_relative,// "/auth/oauth/ark_server/v1/server/manage",
-                        AuthServerUrl = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/oauth")}",
-                        ClientId = client_id,
-                        TenantId = tt.tenant_id,
-                        Domain = cc.domain,
-                        ExpireMins = tt.expire_mins
+                        {
+                            client_id, new
+                            {
+                                RedirectRelative = cc.redirect_relative,
+                                RedirectUri = cc.redirect_url,
+                                ClientId = client_id
+                            }
+                        }
                     }
                 }
             };

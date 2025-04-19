@@ -127,7 +127,7 @@ namespace Ark.oAuth.Oidc
                                 name = ser.TenantId,
                                 redirect_relative = "/auth/oauth/ark_server/v1/server/manage",
                                 tenants = new List<string>() { ser.TenantId },
-                                redirect_url = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/callback",
+                                redirect_url = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}/callback",
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
                             });
                             var lls = new List<string>()
