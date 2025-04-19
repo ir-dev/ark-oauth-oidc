@@ -637,7 +637,7 @@
 				data: t.data,
 				selector: '#tbl_client',
 				onsave: (tg) => {
-					tg.tenants = tg.tenants && tg.tenants.length ? tg.tenants : [ tg.tenants ];
+					tg.tenants = Array.isArray(tg.tenants) ? tg.tenants : tg.tenants ? [ tg.tenants ] : [];
 					fetch('/@ViewBag.base_path/api/oauth/v1/client/upsert', {
 							method: "POST",
 							body: JSON.stringify(tg),

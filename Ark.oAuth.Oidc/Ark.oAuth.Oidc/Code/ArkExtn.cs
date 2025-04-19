@@ -120,14 +120,14 @@ namespace Ark.oAuth.Oidc
                             });
                             dbContext.clients.Add(new ArkClient()
                             {
-                                client_id = ser.TenantId, //same as server id
+                                client_id = $"{ser.TenantId}_client", //same as server id
                                 display = $"{ser.TenantId} Client App",
                                 domain = $"{htp.HttpContext.Request.Host}",
                                 expire_mins = 480,
                                 name = ser.TenantId,
                                 redirect_relative = "/auth/oauth/ark_server/v1/server/manage",
                                 tenants = new List<string>() { ser.TenantId },
-                                redirect_url = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}/callback",
+                                redirect_url = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
                             });
                             var lls = new List<string>()
@@ -155,7 +155,7 @@ namespace Ark.oAuth.Oidc
                                 claims = lls,
                                 active = true,
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                                client_id = ser.TenantId,
+                                client_id = $"{ser.TenantId}_client",
                                 email = "admin",
                                 emailed = false,
                                 hash_pw = util.HashPasswordPBKDF2("admin"),

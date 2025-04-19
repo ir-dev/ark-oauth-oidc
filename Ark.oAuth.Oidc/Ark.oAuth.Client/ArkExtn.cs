@@ -205,37 +205,24 @@ namespace Ark.oAuth
         {
             builder.Use(async (context, next) =>
             {
-                var config = builder.ApplicationServices.GetRequiredService<IConfiguration>();
-                var cc = LoadConfig(config);
-                var client_id = context.Request.ReadRoute(cc.RouteKey) ?? cc.ClientId;
-                if (context.Request.Query.ContainsKey("err") && !string.IsNullOrEmpty(context.Request.Query["err"]) && (context.Request.Query["err"] == "access_denied" || context.Request.Query["err"] == "invalid_token" || context.Request.Query["err"] == "token_error"))
-                {
-
-                    context.Response.DeleteCookie($"ark_oauth_tkn_{client_id}", cc.Domain);
-                    //foreach (var cookie in context.Request.Cookies.Keys)
-                    //{
-                    //    if (cookie == $"ark_oauth_cv_{client_id}") continue;
-                    //    context.Response.Cookies.Delete(cookie, new CookieOptions()
-                    //    {
-                    //        Secure = true,
-                    //        Domain = cc.Domain
-                    //    });
-                    //}
-
-                    //CookieOptions option = new CookieOptions();
-                    //option.Expires = DateTime.Now.AddDays(-1);
-                    //option.Secure = true;
-                    //option.IsEssential = true;
-                    //context.Response.Cookies.Append("ark_oauth_tkn", string.Empty, option);
-                    //context.Response.Cookies.Delete("ark_oauth_tkn");
-                }
-                //var token = context.Request.Cookies[$"ark_oauth_tkn_{cc.ClientId}"];
-                var token = context.Request.ReadCookie($"ark_oauth_tkn_{client_id}");
                 var endpoint = context.GetEndpoint();
                 var authorizeData = endpoint?.Metadata.GetOrderedMetadata<IAuthorizeData>();
-                if (!string.IsNullOrEmpty(token) && authorizeData?.Any() == true)
+                if (authorizeData?.Any() == true) //authorize attribute
                 {
-                    context.Request.Headers.Add("Authorization", "Bearer " + token);
+                    var config = builder.ApplicationServices.GetRequiredService<IConfiguration>();
+                    var ccc = LoadConfig(config);
+                    var client_id = context.Request.ReadRoute(ccc.RouteKey) ?? ccc.ClientId;
+                    KeyValuePair<string, ArkApp> capp = ccc.Clients.FirstOrDefault(t2 => t2.Key.ToLower() == client_id.ToLower());
+                    capp = capp.Key == null ? new KeyValuePair<string, ArkApp>(client_id, new ArkApp() { ClientId = client_id, RedirectRelative = ccc.RedirectRelative, RedirectUri = ccc.RedirectUri }) : capp;
+                    if (context.Request.Query.ContainsKey("err") && !string.IsNullOrEmpty(context.Request.Query["err"]) && (context.Request.Query["err"] == "access_denied" || context.Request.Query["err"] == "invalid_token" || context.Request.Query["err"] == "token_error"))
+                    {
+                        context.Response.DeleteCookie($"ark_oauth_tkn_{client_id}", ccc.Domain);
+                    }
+                    var token = context.Request.ReadCookie($"ark_oauth_tkn_{client_id}");
+                    if (!string.IsNullOrEmpty(token) && authorizeData?.Any() == true)
+                    {
+                        context.Request.Headers.Add("Authorization", "Bearer " + token);
+                    }
                 }
                 await next();
             });

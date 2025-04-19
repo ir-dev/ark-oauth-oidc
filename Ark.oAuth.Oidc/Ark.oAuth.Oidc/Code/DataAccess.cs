@@ -129,7 +129,7 @@ namespace Ark.oAuth.Oidc
                 uu.reset_mode = true;
                 uu.ref_uid = Guid.NewGuid().ToString();
                 string email_content = await _util.GetActivationEmail(tnt.tenant_id, uu.ref_uid);
-                uu.emailed = await _util.SendMail(uu.email, email_content, "NTTDATA: Intelligent Scheduler - Activation Link");
+                uu.emailed = await _util.SendMail(uu.email, email_content, $"NTTDATA: Intelligent Scheduler - Activation Link");
                 uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Update(uu);
             }
