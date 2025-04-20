@@ -38,7 +38,7 @@ namespace Ark.oAuth
             //return configuration.GetSection("ark_oauth_client").Get<ArkAuthConfig>() ?? throw new ApplicationException("config missing");
             return configuration.GetSection("ark_oauth_client").Get<ArkAuthConfig>() ?? new ArkAuthConfig();
         }
-        public static void StoreCookie(this HttpResponse response, string key, string val, int mins, string domain, SameSiteMode ss_mode = SameSiteMode.None)
+        public static void StoreCookie(this HttpResponse response, string key, string val, int mins, string domain, SameSiteMode ss_mode = SameSiteMode.Strict)
         {
             CookieOptions option = new CookieOptions();
             option.Expires = DateTime.Now.AddMinutes(mins).ToLocalTime();
@@ -57,7 +57,8 @@ namespace Ark.oAuth
             response.Cookies.Delete(key, new CookieOptions()
             {
                 Secure = true,
-                Domain = domain
+                Domain = domain,
+                SameSite = SameSiteMode.Strict
             });
         }
         public static string? ReadRoute(this HttpRequest request, string key)
