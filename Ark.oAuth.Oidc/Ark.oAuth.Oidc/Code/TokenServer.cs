@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using System.Runtime.InteropServices;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -26,13 +27,17 @@ namespace Ark.oAuth.Oidc
         {
             var privateKey = tenant.rsa_private.ToByteArray();
             //uncomment for ubuntu releases
-            //using RSA rsa = RSA.Create();
+            RSA rsa = RSA.Create();
             //comment below for ubuntu
             #region WindowsSupport
-            CspParameters cspParams = new CspParameters();
-            cspParams.KeyContainerName = Guid.NewGuid().ToString().ToUpperInvariant();
-            cspParams.Flags = CspProviderFlags.UseMachineKeyStore;
-            RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(cspParams);
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                CspParameters cspParams = new CspParameters();
+                cspParams.KeyContainerName = Guid.NewGuid().ToString().ToUpperInvariant();
+                cspParams.Flags = CspProviderFlags.UseMachineKeyStore;
+                //RSACryptoServiceProvider rsa = new RSACryptoServiceProvider(cspParams);
+                rsa = new RSACryptoServiceProvider(cspParams);
+            }
             #endregion
             rsa.ImportPkcs8PrivateKey(privateKey, out _);
             //var signCreds = new SigningCredentials(new RsaSecurityKey(rsa) { KeyId = client.client_id }, SecurityAlgorithms.RsaSha256)
