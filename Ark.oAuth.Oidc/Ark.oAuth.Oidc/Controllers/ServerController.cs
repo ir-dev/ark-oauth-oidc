@@ -70,16 +70,25 @@ namespace Ark.oAuth.Oidc.Controllers
             return View();
         }
         [Route("{tenant_id}/v1/connect/authorize")]
-        public async Task<IActionResult> Index([FromRoute] string tenant_id, [FromQuery] string client_id)
+        public async Task<IActionResult> Index([FromRoute] string tenant_id, [FromQuery] string client_id, [FromQuery] string redirect_uri)
         {
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             ViewBag.IsError = false;
-            tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
-            var tnt = await _da.GetTenant(tenant_id);
-            client_id = string.IsNullOrEmpty(client_id) ? throw new ApplicationException("client_id_empty") : client_id;
-            ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/oauth/{tenant_id}/v1/.well-known/{client_id}/openid-configuration";
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
             ViewBag.client_logo = ser.EmailConfig?.client_logo ?? $"";
+            try
+            {
+                tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
+                var tnt = await _da.GetTenant(tenant_id);
+                client_id = string.IsNullOrEmpty(client_id) ? throw new ApplicationException("mismatch_client") : client_id;
+                redirect_uri = string.IsNullOrEmpty(redirect_uri) ? throw new ApplicationException("invalid_request, check if client config is managed right.") : redirect_uri;
+                ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/oauth/{tenant_id}/v1/.well-known/{client_id}/openid-configuration";
+            }
+            catch (Exception ex)
+            {
+                ViewBag.IsError = true;
+                ViewBag.msg = ex.Message;
+            }
             return View();
         }
         [HttpPost]

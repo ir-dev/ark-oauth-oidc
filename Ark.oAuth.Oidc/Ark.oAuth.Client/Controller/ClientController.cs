@@ -41,7 +41,7 @@ namespace Ark.oAuth.Client
                 var rr = await resp.Content.ReadAsStringAsync();
                 resp.EnsureSuccessStatusCode();
                 var jo = System.Text.Json.JsonSerializer.Deserialize<JsonObject>(rr);
-                Response.Cookies.Delete($"ark_oauth_cv_{client_id}");
+                Response.DeleteCookie($"ark_oauth_cv_{client_id}", ccc.Domain);
 
                 //CookieOptions option = new CookieOptions();
                 //    option.Expires = DateTime.Now.AddDays(cc.ExpireMins).ToLocalTime();
