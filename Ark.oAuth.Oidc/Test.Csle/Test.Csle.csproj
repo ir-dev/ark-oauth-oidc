@@ -7,4 +7,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="IntptrMax.YoloSharp" Version="1.1.5" />
+    <PackageReference Include="TorchSharp-cpu" Version="0.105.0" />
+  </ItemGroup>
+
 </Project>
