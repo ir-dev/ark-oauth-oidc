@@ -45,6 +45,7 @@
         public string TenantId { get; set; }
         public string BasePath { get; set; }
         public string Provider { get; set; }
+        public bool EnableLogTrace { get; set; }
         public ArkEmailConfig EmailConfig { get; set; }
     }
     public class ArkEmailConfig

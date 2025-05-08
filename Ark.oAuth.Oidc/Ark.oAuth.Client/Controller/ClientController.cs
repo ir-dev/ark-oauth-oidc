@@ -1,6 +1,7 @@
 ﻿using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Ark.oAuth.Client
 {
@@ -73,6 +74,23 @@ namespace Ark.oAuth.Client
             var cc = LoadConfig();
             return cc;
         }
-
+        [Authorize]
+        [Route("{tenant_id}/v1/client/logoff")]
+        public dynamic Logoff()
+        {
+            var cc = LoadConfig();
+            foreach (var cookie in Request.Cookies.Keys)
+            {
+                Response.Cookies.Delete(cookie, new CookieOptions()
+                {
+                    Secure = true,
+                    Domain = cc.Domain
+                });
+            }
+            return new
+            {
+                msg = "logged off, beter close the browser."
+            };
+        }
     }
 }

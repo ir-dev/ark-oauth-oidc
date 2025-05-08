@@ -113,4 +113,21 @@ namespace Ark.oAuth
         }
         public bool is_active { get; set; } = true;
     }
+
+    [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    public class ArkAudit
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public string id { get; set; }
+        public string ref_key { get; set; }
+        public string ref_val { get; set; }
+        public string log_type { get; set; }
+        public string message { get; set; }
+        public string details { get; set; }
+        public string by { get; set; }
+        public string ip { get; set; }
+        public DateTime at { get; set; } = DateTime.UtcNow;
+
+    }
 }

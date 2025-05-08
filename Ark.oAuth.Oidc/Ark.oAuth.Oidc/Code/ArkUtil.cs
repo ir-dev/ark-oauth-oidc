@@ -81,6 +81,7 @@ namespace Ark.oAuth
 
             return savedPasswordHash;
         }
+        public bool IsTraceEnabled { get { return _ser.EnableLogTrace; } }
         public bool VerifyPasswordPBKDF2(string password, string savedPasswordHash, int iterations = 100000)
         {
             // Extract bytes from saved hash

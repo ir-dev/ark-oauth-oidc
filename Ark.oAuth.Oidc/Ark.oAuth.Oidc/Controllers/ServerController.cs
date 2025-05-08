@@ -86,6 +86,7 @@ namespace Ark.oAuth.Oidc.Controllers
             }
             catch (Exception ex)
             {
+                _da.LogError(ex, "authorize_get", $"{tenant_id}/v1/connect/authorize", $"ci: {client_id}, ti: {tenant_id}, ru: {redirect_uri}");
                 ViewBag.IsError = true;
                 ViewBag.msg = ex.Message;
             }
@@ -114,6 +115,7 @@ namespace Ark.oAuth.Oidc.Controllers
                 var tt = await _da.GetTenant(tenant_id);
                 if (Username == "immi" && Password == "immi@123")
                 {
+                    _da.Log("authorize_post", "su_admin", $"default su admin user logged in.", "");
                     var tkn = await _ts.BuildAsymmetric_AccessToken(tt, code_challenge);
                     string code = Guid.NewGuid().ToString();
                     await _da.UpsertPkceCode(tkn.Item1, tt, code, code_challenge, code_challenge_method, state, scope, "", tkn.Item2, redirect_uri, response_type);
@@ -133,6 +135,7 @@ namespace Ark.oAuth.Oidc.Controllers
             }
             catch (Exception ex)
             {
+                _da.LogError(ex, "authorize_post", $"{tenant_id}/v1/connect/authorize", $"un: {Username}, ci: {client_id}, ti: {tenant_id}, rt: {response_type}, ru: {redirect_uri}, cc: {code_challenge}, ccm: {code_challenge_method}, sc: {scope}, st: {state}");
                 ViewBag.IsError = true;
                 ViewBag.msg = ex.Message;
                 //ViewBag.msg = ex.ToString();
@@ -169,6 +172,7 @@ namespace Ark.oAuth.Oidc.Controllers
             }
             catch (Exception ex)
             {
+                _da.LogError(ex, "v1_tokn", $"{tenant_id}/v1/token", $"ci: {client_id}, ti: {tenant_id}, ru: {redirect_uri}");
                 return new { error = ex.Message };
             }
         }

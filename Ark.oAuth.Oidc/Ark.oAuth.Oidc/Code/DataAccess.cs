@@ -87,7 +87,7 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<List<ArkUser>> GetUsersByClient(string client_id)
         {
-            return await _ctx.users.Where(t => (t.client_id ?? "").ToLower() == (client_id ?? "").ToLower()) .ToListAsync();
+            return await _ctx.users.Where(t => (t.client_id ?? "").ToLower() == (client_id ?? "").ToLower()).ToListAsync();
         }
         public async Task<ArkUser> UpsertUser(ArkUser user)
         {
@@ -203,6 +203,51 @@ namespace Ark.oAuth.Oidc
         public async Task EnsureCreatedAsync()
         {
             await _ctx.Database.EnsureCreatedAsync();
+        }
+        public void Log(string? ref_key, string? ref_val, string? message, string? details, string? log_type = "trace")
+        {
+            try
+            {
+                if (!_util.IsTraceEnabled) return;
+                _ctx.audit_trace.Add(new ArkAudit()
+                {
+                    ref_key = ref_key,
+                    ref_val = ref_val,
+                    log_type = log_type,
+                    message = message,
+                    details = details,
+                    by = "ark_admin",
+                    ip = "",
+                    at = DateTime.UtcNow
+                });
+                _ctx.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+        }
+        public void LogError(Exception exp, string? ref_key, string? ref_val, string? message)
+        {
+            try
+            {
+                _ctx.audit_trace.Add(new ArkAudit()
+                {
+                    ref_key = ref_key,
+                    ref_val = ref_val,
+                    log_type = "error",
+                    message = message,
+                    details = exp.ToString(),
+                    by = "ark_admin",
+                    ip = "",
+                    at = DateTime.UtcNow
+                });
+                _ctx.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
         }
     }
 }

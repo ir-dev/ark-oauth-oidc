@@ -10,6 +10,7 @@ namespace Ark.oAuth.Oidc
         public virtual DbSet<ArkUser> users { get; set; }
         public virtual DbSet<PkceCodeFlow> pkce_code_flow { get; set; }
         public virtual DbSet<ArkClaim> claims { get; set; }
+        public virtual DbSet<ArkAudit> audit_trace { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<ArkClaim>()
@@ -18,6 +19,8 @@ namespace Ark.oAuth.Oidc
                 .HasIndex(prop => prop.email);
             modelBuilder.Entity<ArkServiceAccount>()
                 .HasIndex(prop => prop.account_id);
+            //modelBuilder.Entity<ArkAudit>()
+            //    .ToTable($"audit_trace_{ark.net.util.DateUtil.CurrentDateStamp()}"); // not createing every day
         }
         protected virtual void InitalizeContext()
         {
