@@ -105,14 +105,16 @@ namespace Ark.oAuth.Oidc
                             var htp = scope.ServiceProvider.GetService<IHttpContextAccessor>();
                             var util = scope.ServiceProvider.GetRequiredService<ArkUtil>();
                             dynamic dd = util.GetKeys().Result;
+                            var baseurl = !string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}";
+                            var domain = new Uri(baseurl).Host;
                             //1st time -> create client for server to manage users
                             dbContext.tenants.Add(new ArkTenant()
                             {
                                 tenant_id = ser.TenantId,
                                 name = ser.TenantId,
                                 display = $"{ser.TenantId} Admin Console",
-                                audience = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/ark/oauth/v1/aud",
-                                issuer = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/ark/oauth/v1/iss",
+                                audience = $"{baseurl}/ark/oauth/v1/aud",
+                                issuer = $"{baseurl}/ark/oauth/v1/iss",
                                 expire_mins = 480,
                                 rsa_private = dd.private_key,
                                 rsa_public = dd.public_key,
@@ -122,12 +124,12 @@ namespace Ark.oAuth.Oidc
                             {
                                 client_id = $"{ser.TenantId}_client", //same as server id
                                 display = $"{ser.TenantId} Client App",
-                                domain = $"{htp.HttpContext.Request.Host}",
+                                domain = $"{domain}",
                                 expire_mins = 480,
                                 name = ser.TenantId,
                                 redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/manage",
                                 tenants = new List<string>() { ser.TenantId },
-                                redirect_url = $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
+                                redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
                             });
                             var lls = new List<string>()

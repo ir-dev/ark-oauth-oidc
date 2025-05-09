@@ -152,15 +152,21 @@ namespace Ark.oAuth.Oidc.Controllers
             [FromForm] string client_id,
             [FromForm] string code_verifier)
         {
+            _da.Log("v1_token", $"{tenant_id}/v1/token", $"reached.", "", "verbose");
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             try
             {
+                _da.Log("v1_token", $"{tenant_id}/v1/token", $"step-1", "", "verbose");
                 var tt = await _da.GetTenant(tenant_id);
+                _da.Log("v1_token", $"{tenant_id}/v1/token", $"step-2", "", "verbose");
                 if (tt == null) throw new ApplicationException("invalid_tenant");
                 var cc = await _da.GetClient(client_id);
+                _da.Log("v1_token", $"{tenant_id}/v1/token", $"step-3", "", "verbose");
                 if (cc == null) throw new ApplicationException("unauthorized_client");
                 if (cc.redirect_url.ToLower().Trim() != redirect_uri.ToLower().Trim()) throw new ApplicationException("invalid_request");
+                _da.Log("v1_token", $"{tenant_id}/v1/token", $"step-4", "", "verbose");
                 var pk = await _da.GetPkceCode(code, true);
+                _da.Log("v1_token", $"{tenant_id}/v1/token", $"step-5", "", "verbose");
                 if (pk == null) throw new ApplicationException("invalid_grant");
                 return new
                 {
@@ -172,7 +178,7 @@ namespace Ark.oAuth.Oidc.Controllers
             }
             catch (Exception ex)
             {
-                _da.LogError(ex, "v1_tokn", $"{tenant_id}/v1/token", $"ci: {client_id}, ti: {tenant_id}, ru: {redirect_uri}");
+                _da.LogError(ex, "v1_token", $"{tenant_id}/v1/token", $"ci: {client_id}, ti: {tenant_id}, ru: {redirect_uri}");
                 return new { error = ex.Message };
             }
         }

@@ -46,6 +46,7 @@
         public string BasePath { get; set; }
         public string Provider { get; set; }
         public bool EnableLogTrace { get; set; }
+        public string BaseUrl { get; set; }
         public ArkEmailConfig EmailConfig { get; set; }
     }
     public class ArkEmailConfig
