@@ -308,13 +308,17 @@
 		<h2>Client List <button id="client-add">Add</button></h2>
 		<div id="tbl_client"></div>
 	</div>
+	<div style="padding: 20px;">
+		<h2>User List <button id="user-add">Add</button></h2>
+		<div id="tbl_user"></div>
+	</div>
 	<div style="font-family: sans-serif;display: block;gap: 20px;padding: 20px;">
 		<h2 style="display:block;">
 			User / Claims Mapping
 			<select id="sel-client">
 				<option value="">Select</option>
 			</select>
-			<button id="user-add">Add</button>
+			<button id="user1-add">Add</button>
 		</h2>
 		<div style="display:flex;gap: 20px;">
 			<div id="tabulator-table" style="width: 74%;"></div>
@@ -385,33 +389,28 @@
 			  }
 			});
 
-			// Table
-			// const tableData = [
-			//   { email: "ark1@immanuel.co", name: "John Doe", clients: [],  dropzone: null },
-			//   { email: "ark2@immanuel.co", name: "Jane Smith", clients: [], dropzone: undefined },
-			//   { email: "ark3@immanuel.co", name: "Alice Johnson", clients: [] },
-			//   { email: "ark4@immanuel.co", name: "John Doe", clients: [], dropzone: [
-			//       "sub", "iss", "aud", "exp", "iat", "name", "family_name", "given_name", "email", "email_verified", "gender", "phone_number", "address"
-			//   ] },
-			//   { email: "ark5@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
-			//   { email: "ark6@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
-			//   { email: "ark7@immanuel.co", name: "John Doe", clients: [], dropzone: [] },
-			//   { email: "ark8@immanuel.co", name: "Jane Smith", clients: [], dropzone: [] },
-			//   { email: "ark9@immanuel.co", name: "Alice Johnson", clients: [], dropzone: [] },
-			// ];
-			let tableData= [], table;
-			var load_user = (client_id) => {
-				var laod_tbl = () => {
+		let tableData= [], table;
+		var load_user = (user_id) => {
+			var laod_tbl = () => {
 				table = new Tabulator("#tabulator-table", {
 				  height: "300px",
 				  data: tableData,
 				  layout:"fitDataFill",
 				  responsiveLayout:"collapse",
 				  columns: [
-					{ title: "Name", field: "name", editor:"input", },
-					{ title: "Email", field: "email", editor:"input" },
-					{title:"Client", field:"client_id" },
-					{title:"Active", field:"active", editor:"list",
+					{ title: "Email", field: "email" },
+					{ 
+						title:"Client",
+						field:"client_id",
+						editor:"list",
+						editorParams: {
+							values: tbl_client.table.getData().map(t => t.client_id)
+						}
+					},
+					{
+						title:"Active", 
+						field:"active", 
+						editor:"list",
 						editorParams: {
 							values: [ true, false ]
 						}
@@ -486,8 +485,8 @@
 				  ],
 				});
 			}
-			if (client_id) {
-				fetch(`/@ViewBag.base_path/api/oauth/v1/user/list/client/${client_id}`)
+			if (user_id) {
+				fetch(`/@ViewBag.base_path/api/oauth/v1/user/list/client/claims/mapping/${user_id}`)
 				.then(t => t.json())
 				.then(t => {
 					tableData = t.data;
@@ -534,9 +533,10 @@
 
 			cell.setValue(updated);
 		}
-		document.getElementById("user-add").addEventListener("click", evt => {
+
+		document.getElementById("user1-add").addEventListener("click", evt => {
 			if (document.getElementById("sel-client").value) {
-			 table.addRow({ client_id : document.getElementById("sel-client").value});
+			 table.addRow({ email : document.getElementById("sel-client").value});
 			}
 		});
 		// Initial render
@@ -670,16 +670,68 @@
 					}
 				}, true, 'save');
 			}, 2000);
+		});
+		document.getElementById("client-add").addEventListener("click", evt => {
+			tbl_client.table.addRow({});
+		});
+	</script>
+	<script>
+		var tbl_user;
+		fetch('/@ViewBag.base_path/api/oauth/v1/user/list')
+		.then(t => t.json())
+		.then(t => {
+			tbl_user = master_table({
+				data: t.data,
+				selector: '#tbl_user',
+				onsave: (tg) => {
+					fetch('/@ViewBag.base_path/api/oauth/v1/user/upsert', {
+							method: "POST",
+							body: JSON.stringify(tg),
+							headers: {
+								'Accept': 'application/json',
+								'Content-Type': 'application/json'
+							}
+						})
+						.then(t => t.json())
+						.then(t => {
+							if (t.error) ark_alert.alert('f', `user saving failed`, 5000);
+							else ark_alert.alert('s', `saved user succesfully`, 2000);
+						});
+				}
+			});
+			setTimeout(() => {
+					tbl_user.table.deleteColumn('emailed');
+					tbl_user.table.deleteColumn('reset_mode');
+					tbl_user.table.deleteColumn('type');
+					tbl_user.table.addColumn({
+						title:"emailed",
+						field:"emailed",
+						editor:"list",
+						editorParams:{ values:[ true, false ] }
+					}, true, 'save');
+					tbl_user.table.addColumn({
+						title:"reset_mode",
+						field:"reset_mode",
+						editor:"list",
+						editorParams:{ values:[ true, false ] }
+					}, true, 'save');
+					tbl_user.table.addColumn({
+						title:"type",
+						field:"type",
+						editor:"list",
+						editorParams:{ values:[ 'user', 'service' ] }
+					}, true, 'save');
+			}, 2000);
 			var scc = document.querySelector("#sel-client");
 			(t.data || []).forEach(tt => {
-				scc.add(new Option(tt.name, tt.client_id));
+				scc.add(new Option(tt.name, tt.email));
 			});
 			scc.addEventListener('change', evt => {
 				load_user(evt.target.value);
 			});
 		});
-		document.getElementById("client-add").addEventListener("click", evt => {
-			tbl_client.table.addRow({});
+		document.getElementById("user-add").addEventListener("click", evt => {
+			tbl_user.table.addRow({});
 		});
 	</script>
 </body>

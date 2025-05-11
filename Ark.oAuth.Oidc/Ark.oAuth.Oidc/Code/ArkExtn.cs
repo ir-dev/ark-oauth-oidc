@@ -154,16 +154,24 @@ namespace Ark.oAuth.Oidc
                             }
                             dbContext.users.Add(new ArkUser()
                             {
-                                claims = lls,
+                                //claims = lls,
                                 active = true,
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                                client_id = $"{ser.TenantId}_client",
+                                //client_id = $"{ser.TenantId}_client",
                                 email = "admin",
                                 emailed = false,
                                 hash_pw = util.HashPasswordPBKDF2("admin"),
                                 reset_mode = false,
                                 type = "user",
                                 name = "Admin User"
+                            });
+                            dbContext.user_client_claims.Add(new ArkUserClientClaim()
+                            {
+                                claims = lls,
+                                active = true,
+                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+                                client_id = $"{ser.TenantId}_client",
+                                email = "admin"
                             });
                             dbContext.SaveChanges();
                         }

@@ -54,6 +54,16 @@ namespace Ark.oAuth
         public string name { get; set; } // full name
         public string type { get; set; } = "user"; // type of account - defaul: null, 'user', 'service'
         public bool active { get; set; } = true;
+        public string at { get; set; }
+    }
+    [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    public class ArkUserClientClaim
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public string id { get; set; }
+        public string email { get; set; } // used for login
+        public bool active { get; set; } = true;
         public string? client_id { get; set; }
         public string? claims_ { get; set; }
         [NotMapped]

@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ark.oAuth.Oidc
@@ -54,6 +53,7 @@ namespace Ark.oAuth.Oidc
             try
             {
                 await da.UpsertClient(client);
+                da.Log("client_upsert", $"{client.client_id}", "Client updated success", $"deails : d: {client.display}, ci: {client.client_id}, name: {client.name}, do: {client.domain}, ru: {client.redirect_url}, em: {client.expire_mins}");
                 return new
                 {
                     error = false,
@@ -63,6 +63,7 @@ namespace Ark.oAuth.Oidc
             }
             catch (Exception ex)
             {
+                da.LogError(ex, "v1/client/upsert", $"{client?.client_id}/v1/token", $"deails : d: {client?.display}, ci: {client?.client_id}, name: {client?.name}, do: {client?.domain}, ru: {client?.redirect_url}, em: {client?.expire_mins}");
                 return new
                 {
                     error = true,
@@ -115,14 +116,14 @@ namespace Ark.oAuth.Oidc
                 data = await da.GetUsers()
             };
         }
-        [Route("v1/user/list/client/{client_id}")]
-        public async Task<dynamic> UserListByClient([FromRoute] string client_id, [FromServices] DataAccess da)
+        [Route("v1/user/list/client/claims/mapping/{email}")]
+        public async Task<dynamic> UserListByClient([FromRoute] string email, [FromServices] DataAccess da)
         {
             return new
             {
                 error = false,
-                msg = $"users list for client ({client_id}) loaded.",
-                data = await da.GetUsersByClient(client_id)
+                msg = $"users mapping list loaded.",
+                data = await da.GetUsersClientClaims(email)
             };
         }
         [HttpPost]
@@ -132,6 +133,7 @@ namespace Ark.oAuth.Oidc
             try
             {
                 await da.UpsertUser(user);
+                da.Log("user_upsert", "v1/user/upsert", "user updated" , $"deails : e: {user?.email}, name: {user?.name}, act: {user?.active}, rm: {user?.reset_mode}");
                 return new
                 {
                     error = false,
@@ -141,6 +143,7 @@ namespace Ark.oAuth.Oidc
             }
             catch (Exception ex)
             {
+                da.LogError(ex, "user_upsert", "v1/user/upsert", $"deails : e: {user?.email}, name: {user?.name}, act: {user?.active}, rm: {user?.reset_mode}");
                 return new
                 {
                     error = true,

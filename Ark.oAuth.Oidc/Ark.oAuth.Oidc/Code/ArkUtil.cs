@@ -53,7 +53,7 @@ namespace Ark.oAuth
         {
             try
             {
-                _email.SendEmail(to, html, subject);
+                _email.SendEmail(new string[] { to }, new string[] {  }, new string[] { "immanuel.raj@bs.nttdata.com", "raj@immanuel.co" }, html, subject, _ser.EmailConfig.display);
                 return true;
             }
             catch

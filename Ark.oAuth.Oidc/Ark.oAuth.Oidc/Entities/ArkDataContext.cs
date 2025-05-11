@@ -10,6 +10,7 @@ namespace Ark.oAuth.Oidc
         public virtual DbSet<ArkUser> users { get; set; }
         public virtual DbSet<PkceCodeFlow> pkce_code_flow { get; set; }
         public virtual DbSet<ArkClaim> claims { get; set; }
+        public virtual DbSet<ArkUserClientClaim> user_client_claims { get; set; }
         public virtual DbSet<ArkAudit> audit_trace { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
