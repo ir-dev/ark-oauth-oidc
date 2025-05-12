@@ -684,8 +684,9 @@
 							//cell - the cell component
 							//formatterParams - parameters set for the column
 							//onRendered - function to call when the formatter has been rendered
-							var dd = cell.getRow().getData()
-							return `<a href='/@ViewBag.base_path/oauth/${dd.tenants[0]}/v1/.well-known/${dd.client_id}/openid-configuration' target='_blank'>config</a>`
+							var dd = cell.getRow().getData();
+							if (dd && dd.client_id && dd.tenants && dd.tenants[0]) return `<a href='/@ViewBag.base_path/oauth/${dd.tenants[0]}/v1/.well-known/${dd.client_id}/openid-configuration' target='_blank'>config</a>`
+							return '';
 						}
 					});
 			}, 2000);
