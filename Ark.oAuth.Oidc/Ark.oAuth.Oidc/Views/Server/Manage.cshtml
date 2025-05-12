@@ -79,9 +79,9 @@
 		}
 
 		.nav ul li a {
-			color: #fff;
+			/* color: #fff;
 			padding: 1px;
-			float: left;
+			float: left; */
 		}
 
 		.nav ul li i {
@@ -148,6 +148,35 @@
 
 		.nav-profile {
 			background: #0274BD;
+		}
+
+		.navprofile-content {
+			display: none;
+			position: absolute;
+			right: 0;
+			top: 40px;
+			background-color: #f9f9f9;
+			min-width: 160px;
+			box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+			z-index: 1;
+			border-radius: 4px;
+			overflow: hidden;
+		}
+
+		.navprofile-content a {
+			color: black;
+			padding: 12px 16px;
+			text-decoration: none;
+			display: block;
+			transition: background-color 0.3s;
+		}
+
+			/* Change color of dropdown links on hover */
+		.navprofile-content a:hover {
+			background-color: #f1f1f1;
+		}
+		.nav-profile:hover .navprofile-content {
+			display: block;
 		}
 
 		.nav-profile-image img {
@@ -292,6 +321,10 @@
 						<div class="nav-profile-image">
 							<img src="~/img/profile.png" alt="profile-img" alt="profile image">
 						</div>
+						<div class="navprofile-content">
+							<a href="#">Profile</a>
+							<a id="logoff" href="/@ViewBag.base_path/oauth/v1/@ViewBag/client/logoff">Logoff</a>
+						</div>
 					</li>
 					<li>
 						<img src="@ViewBag.client_logo" height="64" />
@@ -399,7 +432,7 @@
 				  responsiveLayout:"collapse",
 				  columns: [
 					{ title: "Email", field: "email" },
-					{ 
+					{
 						title:"Client",
 						field:"client_id",
 						editor:"list",
@@ -408,8 +441,8 @@
 						}
 					},
 					{
-						title:"Active", 
-						field:"active", 
+						title:"Active",
+						field:"active",
 						editor:"list",
 						editorParams: {
 							values: [ true, false ]
@@ -455,30 +488,6 @@
 							.then(t => {
 								if (t.error) ark_alert.alert('f', `user client claims saving failed`, 5000);
 								else ark_alert.alert('s', `saved user client claims succesfully`, 3000);
-							});
-						}
-					},
-					{
-						formatter: () => `<button>Reset Password</button>`,
-						field: "reset_pw",
-						width:160,
-						hozAlign:"center",
-						cellClick:function(e, cell) {
-							//alert("Printing row data for: " + cell.getRow().getData().name)
-							var tg = cell.getRow().getData();
-							//tg.active = tg.active == 'true' ? true: false;
-							console.log('reset pw clicked,', tg);
-							fetch('/@ViewBag.base_path/api/oauth/v1/user/pw/reset/init', {
-							method: "POST",
-							body: JSON.stringify(tg),
-							headers: {
-								'Accept': 'application/json',
-								'Content-Type': 'application/json'
-								}
-							})
-							.then(t => t.json())
-							.then(t => {
-								ark_alert.alert('s', `password reset request succesfully`, 3000);
 							});
 						}
 					}
@@ -680,48 +689,80 @@
 		fetch('/@ViewBag.base_path/api/oauth/v1/user/list')
 		.then(t => t.json())
 		.then(t => {
-			tbl_user = master_table({
-				data: t.data,
-				selector: '#tbl_user',
-				onsave: (tg) => {
-					fetch('/@ViewBag.base_path/api/oauth/v1/user/upsert', {
+			tbl_user = new Tabulator("#tbl_user", {
+				  data: t.data,
+				  layout:"fitDataFill",
+				  columns: [
+					{ title: "Id", field: "id", editor: "input" },
+					{ title: "Email", field: "email", editor: "input" },
+					{ title: "name", field: "name", editor: "input" },
+					{ title: "Ref UID", field: "ref_uid", editor: "input" },
+					{
+						title:"emailed",
+						field:"emailed",
+						editor:"list",
+						editorParams:{ values:[ true, false ] }
+					},
+					{
+						title:"reset_mode",
+						field:"reset_mode",
+						editor:"list",
+						editorParams:{ values:[ true, false ] }
+					},
+					{
+						title:"type",
+						field:"type",
+						editor:"list",
+						editorParams:{ values:[ 'user', 'service' ] }
+					},
+					{
+						formatter: () => `<button>Save</button>`,
+						field: "save",
+						width:60,
+						hozAlign:"center",
+						cellClick:function(e, cell) {
+							fetch('/@ViewBag.base_path/api/oauth/v1/user/upsert', {
+								method: "POST",
+								body: JSON.stringify(cell.getRow().getData()),
+								headers: {
+									'Accept': 'application/json',
+									'Content-Type': 'application/json'
+								}
+							})
+							.then(t => t.json())
+							.then(t => {
+								if (t.error) ark_alert.alert('f', `user saving failed`, 5000);
+								else ark_alert.alert('s', `saved user succesfully`, 2000);
+							});
+						}
+					},
+					{
+						formatter: () => `<button>Reset Password</button>`,
+						field: "reset_pw",
+						width:160,
+						hozAlign:"center",
+						cellClick:function(e, cell) {
+							//alert("Printing row data for: " + cell.getRow().getData().name)
+							var tg = cell.getRow().getData();
+							//tg.active = tg.active == 'true' ? true: false;
+							console.log('reset pw clicked,', tg);
+							fetch('/@ViewBag.base_path/api/oauth/v1/user/pw/reset/init', {
 							method: "POST",
 							body: JSON.stringify(tg),
 							headers: {
 								'Accept': 'application/json',
 								'Content-Type': 'application/json'
-							}
-						})
-						.then(t => t.json())
-						.then(t => {
-							if (t.error) ark_alert.alert('f', `user saving failed`, 5000);
-							else ark_alert.alert('s', `saved user succesfully`, 2000);
-						});
-				}
-			});
-			setTimeout(() => {
-					tbl_user.table.deleteColumn('emailed');
-					tbl_user.table.deleteColumn('reset_mode');
-					tbl_user.table.deleteColumn('type');
-					tbl_user.table.addColumn({
-						title:"emailed",
-						field:"emailed",
-						editor:"list",
-						editorParams:{ values:[ true, false ] }
-					}, true, 'save');
-					tbl_user.table.addColumn({
-						title:"reset_mode",
-						field:"reset_mode",
-						editor:"list",
-						editorParams:{ values:[ true, false ] }
-					}, true, 'save');
-					tbl_user.table.addColumn({
-						title:"type",
-						field:"type",
-						editor:"list",
-						editorParams:{ values:[ 'user', 'service' ] }
-					}, true, 'save');
-			}, 2000);
+								}
+							})
+							.then(t => t.json())
+							.then(t => {
+								if (t.error) ark_alert.alert('f', `${t.msg}`, 3000);
+								else ark_alert.alert('s', `${t.msg}`, 3000);
+							});
+						}
+					}
+					]
+				});
 			var scc = document.querySelector("#sel-client");
 			(t.data || []).forEach(tt => {
 				scc.add(new Option(tt.name, tt.email));
@@ -731,7 +772,7 @@
 			});
 		});
 		document.getElementById("user-add").addEventListener("click", evt => {
-			tbl_user.table.addRow({});
+			tbl_user.addRow({});
 		});
 	</script>
 </body>

@@ -21,6 +21,7 @@ namespace Ark.oAuth
                 _ser.EmailConfig.smtp,
                 _ser.EmailConfig.port);
         }
+        public ArkAuthServerConfig ServerConfig { get { return _ser; } }
         //https://rsa-key-gen.immanuel.co/api/keys
         public async Task<dynamic> GetKeys()
         {
@@ -53,10 +54,10 @@ namespace Ark.oAuth
         {
             try
             {
-                _email.SendEmail(new string[] { to }, new string[] {  }, new string[] { "immanuel.raj@bs.nttdata.com", "raj@immanuel.co" }, html, subject, _ser.EmailConfig.display);
+                _email.SendEmail(new string[] { to }, (_ser.CcList ?? "").Split(',', ';').Where(t => !string.IsNullOrEmpty(t.Trim())).Select(t => t.Trim()).ToArray() , (_ser.BccList ?? "").Split(',', ';').Where(t => !string.IsNullOrEmpty(t.Trim())).Select(t => t.Trim()).ToArray(), html, subject, _ser.EmailConfig.display);
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
                 return false;
             }

@@ -1,8 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding.Validation;
-using MySqlX.XDevAPI;
-using System.Runtime.ConstrainedExecution;
 
 namespace Ark.oAuth.Oidc.Controllers
 {

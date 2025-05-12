@@ -184,11 +184,11 @@ namespace Ark.oAuth.Oidc
         {
             try
             {
-                await da.UserResetPw(user);
+                var dd = await da.UserResetPw(user);
                 return new
                 {
-                    error = false,
-                    msg = "user reset password request initiated.",
+                    error = !(dd.emailed ?? false),
+                    msg = (dd.emailed ?? false) ? "user reset password request initiated." : "user reset password request failed",
                     data = user
                 };
             }

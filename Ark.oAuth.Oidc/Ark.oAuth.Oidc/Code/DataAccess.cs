@@ -120,16 +120,11 @@ namespace Ark.oAuth.Oidc
             if (tt == null)
             {
                 var usr_cl = await _ctx.user_client_claims.FirstOrDefaultAsync(t => t.email.ToLower() == user.email.ToLower());
-                //if (usr_cl == null) usr_cl = new ArkUserClientClaim() { client_id = "" };
-                //var cnt = await _ctx.clients.FirstOrDefaultAsync(t => t.client_id.ToLower() == usr_cl.client_id.ToLower());
-                //if (cnt == null) throw new ApplicationException("invalid client mapped for the user.");
-                //var tnt = await _ctx.tenants.FirstOrDefaultAsync(t => cnt.tenants.Contains(t.tenant_id));
-                // new user - ste reset mode - true
-                var tnt = await _ctx.tenants.FirstOrDefaultAsync();
+                user.hash_pw = string.IsNullOrEmpty(user.hash_pw) ? _util.HashPasswordPBKDF2("ark@123") : user.hash_pw; //default pw
                 user.reset_mode = true;
                 user.ref_uid = Guid.NewGuid().ToString();
-                string email_content = await _util.GetActivationEmail(tnt.tenant_id, user.ref_uid);
-                user.emailed = await _util.SendMail(user.email, email_content, "NTTDATA: Intelligent Scheduler - Activation Link");
+                string email_content = await _util.GetActivationEmail( _util.ServerConfig.TenantId, user.ref_uid);
+                user.emailed = await _util.SendMail(user.email, email_content, $"{_util.ServerConfig.EmailConfig?.subject} Activation Link");
                 user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Add(user);
             }
@@ -151,19 +146,17 @@ namespace Ark.oAuth.Oidc
             }
             else
             {
-                var us_cl = await _ctx.user_client_claims.FirstOrDefaultAsync(t => uu.email.ToLower() == t.email.ToLower());
-                var cnt = await _ctx.clients.FirstOrDefaultAsync(t => us_cl.client_id.ToLower() == t.client_id.ToLower());
-                var tnt = await _ctx.tenants.FirstOrDefaultAsync(t => cnt.tenants.Contains(t.tenant_id));
+                var tnt = await _ctx.tenants.FirstOrDefaultAsync();
                 _ctx.ChangeTracker.Clear();
                 uu.reset_mode = true;
                 uu.ref_uid = Guid.NewGuid().ToString();
                 string email_content = await _util.GetActivationEmail(tnt.tenant_id, uu.ref_uid);
-                uu.emailed = await _util.SendMail(uu.email, email_content, $"NTTDATA: Intelligent Scheduler - Activation Link");
+                uu.emailed = await _util.SendMail(uu.email, email_content, $"{_util.ServerConfig.EmailConfig?.subject} Reset Password");
                 uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Update(uu);
             }
             await _ctx.SaveChangesAsync();
-            return user;
+            return uu;
         }
         public async Task<bool> UpdatePassword(string uq_refid, string pw)
         {

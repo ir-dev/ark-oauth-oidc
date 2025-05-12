@@ -47,6 +47,8 @@
         public string Provider { get; set; }
         public bool EnableLogTrace { get; set; }
         public string BaseUrl { get; set; }
+        public string CcList { get; set; }
+        public string BccList { get; set; }
         public ArkEmailConfig EmailConfig { get; set; }
     }
     public class ArkEmailConfig
