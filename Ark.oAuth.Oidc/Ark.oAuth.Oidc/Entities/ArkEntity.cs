@@ -28,6 +28,7 @@ namespace Ark.oAuth
         public string display { get; set; }
         public string domain { get; set; }
         public string redirect_url { get; set; }
+        public string logout_url { get; set; }
         public string? redirect_relative { get; set; }
         public bool active { get; set; } = true;
         public string? tenants_ { get; set; }

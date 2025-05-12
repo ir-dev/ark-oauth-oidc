@@ -23,6 +23,7 @@ namespace Ark.oAuth
     }
     public class ArkApp
     {
+        public string LogoutUri { get; set; }
         public string RedirectUri { get; set; }
         public string RedirectRelative { get; set; }
         public string ClientId { get; set; }

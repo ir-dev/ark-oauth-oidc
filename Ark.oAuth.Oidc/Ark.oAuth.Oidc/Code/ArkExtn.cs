@@ -130,6 +130,8 @@ namespace Ark.oAuth.Oidc
                                 redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/manage",
                                 tenants = new List<string>() { ser.TenantId },
                                 redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
+                                logout_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/logoff",
+
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
                             });
                             var lls = new List<string>()

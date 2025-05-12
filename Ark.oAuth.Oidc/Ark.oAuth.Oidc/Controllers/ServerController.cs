@@ -191,6 +191,7 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.IsError = false;
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
             ViewBag.client_logo = ser.EmailConfig?.client_logo ?? $"";
+            ViewBag.logout_url = (await _da.GetClients()).FirstOrDefault()?.logout_url;
             return View();
         }
 
@@ -225,7 +226,8 @@ namespace Ark.oAuth.Oidc.Controllers
                             {
                                 RedirectRelative = cc.redirect_relative,
                                 RedirectUri = cc.redirect_url,
-                                ClientId = client_id
+                                ClientId = client_id,
+                                LogoutUri = cc.logout_url
                             }
                         }
                     }

@@ -323,7 +323,7 @@
 						</div>
 						<div class="navprofile-content">
 							<a href="#">Profile</a>
-							<a id="logoff" href="/@ViewBag.base_path/oauth/v1/@ViewBag/client/logoff">Logoff</a>
+							<a id="logoff" href="javascript:void(0);">Logoff</a>
 						</div>
 					</li>
 					<li>
@@ -773,6 +773,13 @@
 		});
 		document.getElementById("user-add").addEventListener("click", evt => {
 			tbl_user.addRow({});
+		});
+	</script>
+	<script>
+		document.getElementById("logoff").addEventListener("click", evt => {
+			fetch('@ViewBag.logout_url').then(t => {
+				window.location.href = '/@ViewBag.base_path';
+			});
 		});
 	</script>
 </body>
