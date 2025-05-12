@@ -665,19 +665,29 @@
 					tbl_client.table.deleteColumn('tenants_');
 					tbl_client.table.deleteColumn('tenants');
 					tbl_client.table.addColumn({
-					title:"Tenants",
-					field:"tenants",
-					editor:"list",
-					editorParams:{
-						values: ten_lst.reduce((accm, itm) => {
-							accm[itm.tenant_id] = itm.name;
-							return accm;
-						}, {}),
-						clearable:true,
-						multiselect: false,
-						placeholderEmpty:"No Results Found"
-					}
-				}, true, 'save');
+						title:"Tenants",
+						field:"tenants",
+						editor:"list",
+						editorParams:{
+							values: ten_lst.reduce((accm, itm) => {
+								accm[itm.tenant_id] = itm.name;
+								return accm;
+							}, {}),
+							clearable:true,
+							multiselect: false,
+							placeholderEmpty:"No Results Found"
+						}
+					}, true, 'save');
+					tbl_client.table.addColumn({
+						title:"Config",
+						formatter: function(cell, formatterParams, onRendered){
+							//cell - the cell component
+							//formatterParams - parameters set for the column
+							//onRendered - function to call when the formatter has been rendered
+							var dd = cell.getRow().getData()
+							return `<a href='/@ViewBag.base_path/oauth/${dd.tenants[0]}/v1/.well-known/${dd.client_id}/openid-configuration' target='_blank'>config</a>`
+						}
+					});
 			}, 2000);
 		});
 		document.getElementById("client-add").addEventListener("click", evt => {
