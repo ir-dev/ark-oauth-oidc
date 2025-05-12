@@ -390,7 +390,7 @@
 			});
 
 		let tableData= [], table;
-		var load_user = (user_id) => {
+		var load_user_claims = (user_id) => {
 			var laod_tbl = () => {
 				table = new Tabulator("#tabulator-table", {
 				  height: "300px",
@@ -443,7 +443,7 @@
 							var tg = cell.getRow().getData();
 							//tg.active = tg.active == 'true' ? true: false;
 							console.log('save clicked,', tg);
-							fetch('/@ViewBag.base_path/api/oauth/v1/user/upsert', {
+							fetch('/@ViewBag.base_path/api/oauth/v1/user/client/claims/upsert', {
 							method: "POST",
 							body: JSON.stringify(tg),
 							headers: {
@@ -453,8 +453,8 @@
 							})
 							.then(t => t.json())
 							.then(t => {
-								if (t.error) ark_alert.alert('f', `user saving failed`, 5000);
-								else ark_alert.alert('s', `saved user succesfully`, 3000);
+								if (t.error) ark_alert.alert('f', `user client claims saving failed`, 5000);
+								else ark_alert.alert('s', `saved user client claims succesfully`, 3000);
 							});
 						}
 					},
@@ -727,7 +727,7 @@
 				scc.add(new Option(tt.name, tt.email));
 			});
 			scc.addEventListener('change', evt => {
-				load_user(evt.target.value);
+				load_user_claims(evt.target.value);
 			});
 		});
 		document.getElementById("user-add").addEventListener("click", evt => {

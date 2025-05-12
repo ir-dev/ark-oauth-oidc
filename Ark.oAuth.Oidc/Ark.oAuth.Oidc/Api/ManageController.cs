@@ -117,7 +117,7 @@ namespace Ark.oAuth.Oidc
             };
         }
         [Route("v1/user/list/client/claims/mapping/{email}")]
-        public async Task<dynamic> UserListByClient([FromRoute] string email, [FromServices] DataAccess da)
+        public async Task<dynamic> UserClientCLaimsList([FromRoute] string email, [FromServices] DataAccess da)
         {
             return new
             {
@@ -125,6 +125,32 @@ namespace Ark.oAuth.Oidc
                 msg = $"users mapping list loaded.",
                 data = await da.GetUsersClientClaims(email)
             };
+        }
+        [HttpPost]
+        [Route("v1/user/client/claims/upsert")]
+        public async Task<dynamic> UserUpdate([FromServices] DataAccess da, [FromBody] ArkUserClientClaim us_cl)
+        {
+            try
+            {
+                await da.UpsertUsersClientClaims(us_cl);
+                da.Log("user_cl_cl_upsert", "v1/user/client/claims/upsert", "user client claims updated", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, act: {us_cl?.active}, claims: {us_cl?.claims_}");
+                return new
+                {
+                    error = false,
+                    msg = "user updated.",
+                    data = us_cl
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "user_cl_cl_upsert", "v1/user/client/claims/upsert", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, act: {us_cl?.active}, claims: {us_cl?.claims_}");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = us_cl
+                };
+            }
         }
         [HttpPost]
         [Route("v1/user/upsert")]

@@ -88,14 +88,31 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<List<ArkUser>> GetUsersByClient(string client_id)
         {
-            return await _ctx.users.Where(t => 
-                _ctx.user_client_claims.Where(t1 =>  
-                    (t.email ?? "").ToLower()  == (t1.email ?? "").ToLower() && t1.client_id.ToLower() == (client_id ?? "").ToLower()).Any()).ToListAsync();
+            return await _ctx.users.Where(t =>
+                _ctx.user_client_claims.Where(t1 =>
+                    (t.email ?? "").ToLower() == (t1.email ?? "").ToLower() && t1.client_id.ToLower() == (client_id ?? "").ToLower()).Any()).ToListAsync();
         }
         public async Task<List<ArkUserClientClaim>> GetUsersClientClaims(string email)
         {
             return await _ctx.user_client_claims.Where(t1 =>
                     (email ?? "").ToLower() == (t1.email ?? "").ToLower()).ToListAsync();
+        }
+        public async Task<ArkUserClientClaim> UpsertUsersClientClaims(ArkUserClientClaim us_cl)
+        {
+            var tt = await _ctx.user_client_claims.FirstOrDefaultAsync(t => t.id == us_cl.id);
+            if (tt == null)
+            {
+                us_cl.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+                _ctx.user_client_claims.Add(us_cl);
+            }
+            else
+            {
+                _ctx.ChangeTracker.Clear();
+                us_cl.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+                _ctx.user_client_claims.Update(us_cl);
+            }
+            await _ctx.SaveChangesAsync();
+            return us_cl;
         }
         public async Task<ArkUser> UpsertUser(ArkUser user)
         {
@@ -251,6 +268,7 @@ namespace Ark.oAuth.Oidc
                     ip = "",
                     at = DateTime.UtcNow
                 });
+                _ctx.ChangeTracker.Clear();
                 _ctx.SaveChanges();
             }
             catch (Exception ex)
