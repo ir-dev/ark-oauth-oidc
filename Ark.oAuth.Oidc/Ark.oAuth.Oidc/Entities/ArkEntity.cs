@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace Ark.oAuth
 {
@@ -15,14 +16,17 @@ namespace Ark.oAuth
         public string rsa_private { get; set; }
         public string issuer { get; set; }
         public string audience { get; set; }
-        public bool active { get; set; } = true;
         public int expire_mins { get; set; } = 480; // durations
         public string at { get; set; }
     }
+    [Index(nameof(tenant_id), nameof(client_id), IsUnique = true)]
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     public class ArkClient
     {
         [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public string id { get; set; }
+        public string tenant_id { get; set; }
         public string client_id { get; set; }
         public string name { get; set; }
         public string display { get; set; }
@@ -30,18 +34,13 @@ namespace Ark.oAuth
         public string redirect_url { get; set; }
         public string logout_url { get; set; }
         public string? redirect_relative { get; set; }
-        public bool active { get; set; } = true;
-        public string? tenants_ { get; set; }
-        [NotMapped]
-        public List<string> tenants
-        {
-            get => System.Text.Json.JsonSerializer.Deserialize<List<string>>(string.IsNullOrEmpty(tenants_) ? "[]" : tenants_);
-            set => tenants_ = System.Text.Json.JsonSerializer.Serialize(value ?? new List<string>());
-        }
+        [ForeignKey(nameof(tenant_id))]
+        public ArkTenant tenant { get; set; }
         public int expire_mins { get; set; } = 480; // durations
         public string at { get; set; }
     }
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    [Index(nameof(email), IsUnique = true)]
     public class ArkUser
     {
         [Key]
@@ -54,18 +53,22 @@ namespace Ark.oAuth
         public bool? emailed { get; set; } = false; // set to true, once email is sent successful 
         public string name { get; set; } // full name
         public string type { get; set; } = "user"; // type of account - defaul: null, 'user', 'service'
-        public bool active { get; set; } = true;
         public string at { get; set; }
     }
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    [Index(nameof(email), nameof(tenant_id), nameof(client_id), IsUnique = true)]
     public class ArkUserClientClaim
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public string id { get; set; }
         public string email { get; set; } // used for login
-        public bool active { get; set; } = true;
-        public string? client_id { get; set; }
+        public string client_id { get; set; }
+        [ForeignKey(nameof(client_id))]
+        public ArkClient client { get; set; }
+        public string? tenant_id { get; set; }
+        [ForeignKey(nameof(tenant_id))]
+        public ArkTenant tenant { get; set; }
         public string? claims_ { get; set; }
         [NotMapped]
         public List<string> claims

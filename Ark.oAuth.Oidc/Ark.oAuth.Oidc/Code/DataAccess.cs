@@ -48,7 +48,8 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<ArkClient> UpsertClient(ArkClient client)
         {
-            var tt = await _ctx.clients.FirstOrDefaultAsync(t => t.client_id.ToLower() == client.client_id.ToLower());
+            if (string.IsNullOrEmpty((client?.id ?? "").Trim())) client.id = null;
+            var tt = await _ctx.clients.FirstOrDefaultAsync(t => t.id.ToLower() == (client.id ?? "").ToLower());
             if (tt == null)
             {
                 client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
@@ -59,6 +60,21 @@ namespace Ark.oAuth.Oidc
                 _ctx.ChangeTracker.Clear();
                 client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.clients.Update(client);
+            }
+            await _ctx.SaveChangesAsync();
+            return client;
+        }
+        public async Task<ArkClient> DeleteClient(ArkClient client)
+        {
+            if (string.IsNullOrEmpty(client.id)) return client; //added on the UI, delete before even saving
+            var tt = await _ctx.clients.FirstOrDefaultAsync(t => t.id.ToLower() == client.id.ToLower());
+            if (tt == null)
+            {
+                
+            }
+            else
+            {
+                _ctx.clients.Remove(tt);
             }
             await _ctx.SaveChangesAsync();
             return client;
@@ -97,6 +113,11 @@ namespace Ark.oAuth.Oidc
             return await _ctx.user_client_claims.Where(t1 =>
                     (email ?? "").ToLower() == (t1.email ?? "").ToLower()).ToListAsync();
         }
+        public async Task<List<ArkUserClientClaim>> GetUsersClientClaims(string email, string tenatn_id)
+        {
+            return await _ctx.user_client_claims.Where(t1 =>
+                    (email ?? "").ToLower() == (t1.email ?? "").ToLower() && (tenatn_id ?? "").ToLower() == (t1.tenant_id ?? "").ToLower()).ToListAsync();
+        }
         public async Task<ArkUserClientClaim> UpsertUsersClientClaims(ArkUserClientClaim us_cl)
         {
             var tt = await _ctx.user_client_claims.FirstOrDefaultAsync(t => t.id == us_cl.id);
@@ -110,6 +131,21 @@ namespace Ark.oAuth.Oidc
                 _ctx.ChangeTracker.Clear();
                 us_cl.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.user_client_claims.Update(us_cl);
+            }
+            await _ctx.SaveChangesAsync();
+            return us_cl;
+        }
+        public async Task<ArkUserClientClaim> DeleteUsersClientClaims(ArkUserClientClaim us_cl)
+        {
+            if (string.IsNullOrEmpty(us_cl?.id)) return us_cl; //added on the UI, delete before even saving
+            var tt = await _ctx.user_client_claims.FirstOrDefaultAsync(t => t.id.ToLower() == us_cl.id.ToLower());
+            if (tt == null)
+            {
+
+            }
+            else
+            {
+                _ctx.user_client_claims.Remove(tt);
             }
             await _ctx.SaveChangesAsync();
             return us_cl;

@@ -120,20 +120,20 @@ namespace Ark.oAuth.Oidc
                                 rsa_public = dd.public_key,
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
                             });
-                            dbContext.clients.Add(new ArkClient()
+                            var cll = new ArkClient()
                             {
+                                tenant_id = ser.TenantId,
                                 client_id = $"{ser.TenantId}_client", //same as server id
-                                display = $"{ser.TenantId} Client App",
+                                display = $"{ser.TenantId} Client App (Display)",
                                 domain = $"{domain}",
                                 expire_mins = 480,
-                                name = ser.TenantId,
+                                name = $"{ser.TenantId} name",
                                 redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/manage",
-                                tenants = new List<string>() { ser.TenantId },
                                 redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
                                 logout_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/logoff",
-
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
-                            });
+                            };
+                            dbContext.clients.Add(cll);
                             var lls = new List<string>()
                             {
                                 "sub",
@@ -157,7 +157,6 @@ namespace Ark.oAuth.Oidc
                             dbContext.users.Add(new ArkUser()
                             {
                                 //claims = lls,
-                                active = true,
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
                                 //client_id = $"{ser.TenantId}_client",
                                 email = "admin",
@@ -170,9 +169,9 @@ namespace Ark.oAuth.Oidc
                             dbContext.user_client_claims.Add(new ArkUserClientClaim()
                             {
                                 claims = lls,
-                                active = true,
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                                client_id = $"{ser.TenantId}_client",
+                                client_id = $"{cll.id}",
+                                tenant_id = $"{ser.TenantId}",
                                 email = "admin"
                             });
                             dbContext.SaveChanges();

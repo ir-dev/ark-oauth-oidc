@@ -63,7 +63,33 @@ namespace Ark.oAuth.Oidc
             }
             catch (Exception ex)
             {
-                da.LogError(ex, "v1/client/upsert", $"{client?.client_id}/v1/token", $"deails : d: {client?.display}, ci: {client?.client_id}, name: {client?.name}, do: {client?.domain}, ru: {client?.redirect_url}, em: {client?.expire_mins}");
+                da.LogError(ex, "v1/client/upsert", $"{client?.client_id}/client/upsert", $"deails : d: {client?.display}, ci: {client?.client_id}, name: {client?.name}, do: {client?.domain}, ru: {client?.redirect_url}, em: {client?.expire_mins}");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = client
+                };
+            }
+        }
+        [HttpPost]
+        [Route("v1/client/delete")]
+        public async Task<dynamic> ClientDelete([FromServices] DataAccess da, [FromBody] ArkClient client)
+        {
+            try
+            {
+                await da.DeleteClient(client);
+                da.Log("client_delete", $"{client.client_id}", "Client deleted success", $"details : d: {client.display}, ci: {client.client_id}, name: {client.name}, do: {client.domain}, ru: {client.redirect_url}, em: {client.expire_mins}");
+                return new
+                {
+                    error = false,
+                    msg = "clients deleted.",
+                    data = client
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "v1/client/delete", $"{client?.client_id}/v1/client/delete", $"deails : d: {client?.display}, ci: {client?.client_id}, name: {client?.name}, do: {client?.domain}, ru: {client?.redirect_url}, em: {client?.expire_mins}");
                 return new
                 {
                     error = true,
@@ -116,34 +142,60 @@ namespace Ark.oAuth.Oidc
                 data = await da.GetUsers()
             };
         }
-        [Route("v1/user/list/client/claims/mapping/{email}")]
-        public async Task<dynamic> UserClientCLaimsList([FromRoute] string email, [FromServices] DataAccess da)
+        [Route("v1/user/list/client/claims/mapping/{email}/{ten_id}")]
+        public async Task<dynamic> UserClientCLaimsList([FromRoute] string email, [FromRoute] string ten_id, [FromServices] DataAccess da)
         {
             return new
             {
                 error = false,
                 msg = $"users mapping list loaded.",
-                data = await da.GetUsersClientClaims(email)
+                data = await da.GetUsersClientClaims(email, ten_id)
             };
         }
         [HttpPost]
         [Route("v1/user/client/claims/upsert")]
-        public async Task<dynamic> UserUpdate([FromServices] DataAccess da, [FromBody] ArkUserClientClaim us_cl)
+        public async Task<dynamic> UserClaimsUpdate([FromServices] DataAccess da, [FromBody] ArkUserClientClaim us_cl)
         {
             try
             {
                 await da.UpsertUsersClientClaims(us_cl);
-                da.Log("user_cl_cl_upsert", "v1/user/client/claims/upsert", "user client claims updated", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, act: {us_cl?.active}, claims: {us_cl?.claims_}");
+                da.Log("user_cl_cl_upsert", "v1/user/client/claims/upsert", "user client claims updated", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, claims: {us_cl?.claims_}");
                 return new
                 {
                     error = false,
-                    msg = "user updated.",
+                    msg = "user client claims updated.",
                     data = us_cl
                 };
             }
             catch (Exception ex)
             {
-                da.LogError(ex, "user_cl_cl_upsert", "v1/user/client/claims/upsert", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, act: {us_cl?.active}, claims: {us_cl?.claims_}");
+                da.LogError(ex, "user_cl_cl_upsert", "v1/user/client/claims/upsert", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, claims: {us_cl?.claims_}");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = us_cl
+                };
+            }
+        }
+        [HttpPost]
+        [Route("v1/user/client/claims/delete")]
+        public async Task<dynamic> UserClaimsDelete([FromServices] DataAccess da, [FromBody] ArkUserClientClaim us_cl)
+        {
+            try
+            {
+                await da.DeleteUsersClientClaims(us_cl);
+                da.Log("user_cl_cl_delete", "v1/user/client/claims/delete", "delete client claims updated", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, claims: {us_cl?.claims_}");
+                return new
+                {
+                    error = false,
+                    msg = "user client claims mapping deleted.",
+                    data = us_cl
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "user_cl_cl_delete", "v1/user/client/claims/elete", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, claims: {us_cl?.claims_}");
                 return new
                 {
                     error = true,
@@ -159,7 +211,7 @@ namespace Ark.oAuth.Oidc
             try
             {
                 await da.UpsertUser(user);
-                da.Log("user_upsert", "v1/user/upsert", "user updated" , $"deails : e: {user?.email}, name: {user?.name}, act: {user?.active}, rm: {user?.reset_mode}");
+                da.Log("user_upsert", "v1/user/upsert", "user updated" , $"deails : e: {user?.email}, name: {user?.name}, rm: {user?.reset_mode}");
                 return new
                 {
                     error = false,
@@ -169,7 +221,7 @@ namespace Ark.oAuth.Oidc
             }
             catch (Exception ex)
             {
-                da.LogError(ex, "user_upsert", "v1/user/upsert", $"deails : e: {user?.email}, name: {user?.name}, act: {user?.active}, rm: {user?.reset_mode}");
+                da.LogError(ex, "user_upsert", "v1/user/upsert", $"deails : e: {user?.email}, name: {user?.name}, rm: {user?.reset_mode}");
                 return new
                 {
                     error = true,

@@ -80,8 +80,8 @@
 
 		.nav ul li a {
 			/* color: #fff;
-			padding: 1px;
-			float: left; */
+					padding: 1px;
+					float: left; */
 		}
 
 		.nav ul li i {
@@ -163,18 +163,19 @@
 			overflow: hidden;
 		}
 
-		.navprofile-content a {
-			color: black;
-			padding: 12px 16px;
-			text-decoration: none;
-			display: block;
-			transition: background-color 0.3s;
-		}
+			.navprofile-content a {
+				color: black;
+				padding: 12px 16px;
+				text-decoration: none;
+				display: block;
+				transition: background-color 0.3s;
+			}
 
-			/* Change color of dropdown links on hover */
-		.navprofile-content a:hover {
-			background-color: #f1f1f1;
-		}
+				/* Change color of dropdown links on hover */
+				.navprofile-content a:hover {
+					background-color: #f1f1f1;
+				}
+
 		.nav-profile:hover .navprofile-content {
 			display: block;
 		}
@@ -347,9 +348,12 @@
 	</div>
 	<div style="font-family: sans-serif;display: block;gap: 20px;padding: 20px;">
 		<h2 style="display:block;">
-			User / Claims Mapping
-			<select id="sel-client">
-				<option value="">Select</option>
+			User / Client / Claims Mapping
+			<select id="sel-user">
+				<option value="">Select User</option>
+			</select>
+			<select id="sel-tenant">
+				<option value="">Select Tenant</option>
 			</select>
 			<button id="user1-add">Add</button>
 		</h2>
@@ -423,29 +427,26 @@
 			});
 
 		let tableData= [], table;
-		var load_user_claims = (user_id) => {
+		var load_user_claims = () => {
+			if (table && table.clearData) table.clearData();
 			var laod_tbl = () => {
 				table = new Tabulator("#tabulator-table", {
 				  height: "300px",
 				  data: tableData,
 				  layout:"fitDataFill",
-				  responsiveLayout:"collapse",
 				  columns: [
 					{ title: "Email", field: "email" },
+					{ title:"Tenant", field:"tenant_id" },
 					{
 						title:"Client",
 						field:"client_id",
 						editor:"list",
 						editorParams: {
-							values: tbl_client.table.getData().map(t => t.client_id)
-						}
-					},
-					{
-						title:"Active",
-						field:"active",
-						editor:"list",
-						editorParams: {
-							values: [ true, false ]
+							//values: tbl_client.table.getData().filter(t => t.tenant_id == u_tnt).map(t => t.client_id)
+							values: tbl_client.table.getData().filter(t => t.tenant_id == u_tnt).reduce((accm, itm) => {
+								accm[itm.id] = `${itm.display} (${itm.tenant_id})`;
+								return accm;
+							}, {}),
 						}
 					},
 					{
@@ -490,12 +491,41 @@
 								else ark_alert.alert('s', `saved user client claims succesfully`, 3000);
 							});
 						}
+					},
+					{
+						formatter: () => `<button>Delete</button>`,
+						field: "delete",
+						width:60,
+						hozAlign:"center",
+						cellClick:function(e, cell) {
+							//alert("Printing row data for: " + cell.getRow().getData().name)
+							var tg = cell.getRow().getData();
+							tg.active = tg.active == 'true' ? true: false;
+							fetch('/@ViewBag.base_path/api/oauth/v1/user/client/claims/delete', {
+								method: "POST",
+								body: JSON.stringify(tg),
+								headers: {
+									'Accept': 'application/json',
+									'Content-Type': 'application/json'
+								}
+							})
+							.then(t => t.json())
+							.then(t => {
+								if (t.error) ark_alert.alert('f', `${t.msg}`, 3000);
+								else {
+									cell.getRow().delete();
+									ark_alert.alert('s', `${t.msg}`, 3000);
+								}
+							});
+						}
 					}
 				  ],
 				});
 			}
-			if (user_id) {
-				fetch(`/@ViewBag.base_path/api/oauth/v1/user/list/client/claims/mapping/${user_id}`)
+			var user_id = document.querySelector("#sel-user").value;
+			var u_tnt = document.querySelector("#sel-tenant").value;
+			if (user_id && u_tnt) {
+				fetch(`/@ViewBag.base_path/api/oauth/v1/user/list/client/claims/mapping/${user_id}/${u_tnt}`)
 				.then(t => t.json())
 				.then(t => {
 					tableData = t.data;
@@ -544,8 +574,10 @@
 		}
 
 		document.getElementById("user1-add").addEventListener("click", evt => {
-			if (document.getElementById("sel-client").value) {
-			 table.addRow({ email : document.getElementById("sel-client").value});
+			if (document.getElementById("sel-user").value && document.getElementById("sel-tenant").value) {
+				table.addRow({ email : document.getElementById("sel-user").value, tenant_id: document.getElementById("sel-tenant").value });
+			} else {
+				ark_alert.alert('w', `please select both user & tenant id, to map clients and claims.`, 3000);
 			}
 		});
 		// Initial render
@@ -610,74 +642,121 @@
 	</script>
 	<script>
 		var tbl_tenant, ten_lst;
-		fetch('/@ViewBag.base_path/api/oauth/v1/tenant/list')
-		.then(t => t.json())
-		.then(t => {
-			tbl_tenant = master_table({
-				data: t.data,
-				selector: '#tbl_tenant',
-				onsave: (tg) => {
-					fetch('/@ViewBag.base_path/api/oauth/v1/tenant/upsert', {
-							method: "POST",
-							body: JSON.stringify(tg),
-							headers: {
-								'Accept': 'application/json',
-								'Content-Type': 'application/json'
-							}
-						})
-						.then(t => t.json())
-						.then(t => {
-							ark_alert.alert('s', `saved tenant succesfully`, 3000);
-						});
-				}
+		var load_tenant = () => {
+			fetch('/@ViewBag.base_path/api/oauth/v1/tenant/list')
+			.then(t => t.json())
+			.then(t => {
+				tbl_tenant = master_table({
+					data: t.data,
+					selector: '#tbl_tenant',
+					onsave: (tg) => {
+						fetch('/@ViewBag.base_path/api/oauth/v1/tenant/upsert', {
+								method: "POST",
+								body: JSON.stringify(tg),
+								headers: {
+									'Accept': 'application/json',
+									'Content-Type': 'application/json'
+								}
+							})
+							.then(t => t.json())
+							.then(t => {
+								ark_alert.alert('s', `saved tenant succesfully`, 3000);
+								load_tenant();
+							});
+					}
+				});
+				ten_lst = t.data;
+				var scc = document.querySelector("#sel-tenant");
+				scc.innerHTML = '';
+				scc.add(new Option('Select Tenant', ''));
+				(t.data || []).forEach(tt => {
+					scc.add(new Option(tt.name, tt.tenant_id));
+				});
+				scc.addEventListener('change', evt => {
+					load_user_claims(evt.target.value);
+				});
+				load_client();
 			});
-			ten_lst = t.data;
-		});
+		}
 		document.getElementById("tenant-add").addEventListener("click", evt => {
 			tbl_tenant.table.addRow({});
 		});
+		load_tenant();
 	</script>
 	<script>
 		var tbl_client;
-		fetch('/@ViewBag.base_path/api/oauth/v1/client/list')
-		.then(t => t.json())
-		.then(t => {
-			tbl_client = master_table({
-				data: t.data,
-				selector: '#tbl_client',
-				onsave: (tg) => {
-					tg.tenants = Array.isArray(tg.tenants) ? tg.tenants : tg.tenants ? [ tg.tenants ] : [];
-					fetch('/@ViewBag.base_path/api/oauth/v1/client/upsert', {
-							method: "POST",
-							body: JSON.stringify(tg),
-							headers: {
-								'Accept': 'application/json',
-								'Content-Type': 'application/json'
-							}
-						})
-						.then(t => t.json())
-						.then(t => {
-							ark_alert.alert('s', `saved client succesfully`, 3000);
-						});
-				}
-			});
-			setTimeout(() => {
-					tbl_client.table.deleteColumn('tenants_');
-					tbl_client.table.deleteColumn('tenants');
+		var load_client = () => {
+			fetch('/@ViewBag.base_path/api/oauth/v1/client/list')
+			.then(t => t.json())
+			.then(t => {
+				tbl_client = master_table({
+					data: t.data,
+					selector: '#tbl_client',
+					onsave: (tg) => {
+						fetch('/@ViewBag.base_path/api/oauth/v1/client/upsert', {
+								method: "POST",
+								body: JSON.stringify(tg),
+								headers: {
+									'Accept': 'application/json',
+									'Content-Type': 'application/json'
+								}
+							})
+							.then(t => t.json())
+							.then(t => {
+								//ark_alert.alert('s', `saved client succesfully`, 3000);
+								if (t.error) ark_alert.alert('f', `${t.msg}`, 3000);
+								else {
+									ark_alert.alert('s', `${t.msg}`, 3000);
+									load_client();
+								}
+							});
+					}
+				});
+				setTimeout(() => {
+					tbl_client.table.deleteColumn('id');
+					tbl_client.table.deleteColumn('tenant_id');
+					tbl_client.table.deleteColumn('tenant');
 					tbl_client.table.addColumn({
-						title:"Tenants",
-						field:"tenants",
+						title:"tenant_id",
+						field:"tenant_id",
 						editor:"list",
 						editorParams:{
 							values: ten_lst.reduce((accm, itm) => {
 								accm[itm.tenant_id] = itm.name;
 								return accm;
 							}, {}),
-							clearable:true,
+							clearable:false,
 							multiselect: false,
 							placeholderEmpty:"No Results Found"
 						}
-					}, true, 'save');
+					}, true, 'client_id');
+					tbl_client.table.addColumn({
+						formatter: () => `<button>Delete</button>`,
+						field: "delete",
+						width:60,
+						hozAlign:"center",
+						cellClick:function(e, cell) {
+							//alert("Printing row data for: " + cell.getRow().getData().name)
+							var tg = cell.getRow().getData();
+							tg.active = tg.active == 'true' ? true: false;
+							fetch('/@ViewBag.base_path/api/oauth/v1/client/delete', {
+								method: "POST",
+								body: JSON.stringify(tg),
+								headers: {
+									'Accept': 'application/json',
+									'Content-Type': 'application/json'
+								}
+							})
+							.then(t => t.json())
+							.then(t => {
+								if (t.error) ark_alert.alert('f', `${t.msg}`, 3000);
+								else {
+									cell.getRow().delete();
+									ark_alert.alert('s', `${t.msg}`, 3000);
+								}
+							});
+						}
+					});
 					tbl_client.table.addColumn({
 						title:"Config",
 						formatter: function(cell, formatterParams, onRendered){
@@ -689,11 +768,12 @@
 							return '';
 						}
 					});
-			}, 2000);
-		});
+				}, 2000);
+			});
+		}
 		document.getElementById("client-add").addEventListener("click", evt => {
-			tbl_client.table.addRow({});
-		});
+				tbl_client.table.addRow({});
+			});
 	</script>
 	<script>
 		var tbl_user;
@@ -704,7 +784,6 @@
 				  data: t.data,
 				  layout:"fitDataFill",
 				  columns: [
-					{ title: "Id", field: "id", editor: "input" },
 					{ title: "Email", field: "email", editor: "input" },
 					{ title: "name", field: "name", editor: "input" },
 					{ title: "Ref UID", field: "ref_uid", editor: "input" },
@@ -774,7 +853,7 @@
 					}
 					]
 				});
-			var scc = document.querySelector("#sel-client");
+			var scc = document.querySelector("#sel-user");
 			(t.data || []).forEach(tt => {
 				scc.add(new Option(tt.name, tt.email));
 			});
