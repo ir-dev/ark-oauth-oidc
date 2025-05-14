@@ -21,9 +21,9 @@ namespace Ark.oAuth.Oidc
         {
             return await _ctx.tenants.ToListAsync();
         }
-        public async Task<ArkClient?> GetClient(string client_id)
+        public async Task<ArkClient?> GetClient(string tenant_id, string client_id) //cmposite key
         {
-            return await _ctx.clients.FirstOrDefaultAsync(t => t.client_id.ToLower().Trim() == (client_id ?? "").ToLower().Trim());
+            return await _ctx.clients.FirstOrDefaultAsync(t => t.tenant_id.ToLower().Trim() == (tenant_id ?? "").ToLower().Trim() &&  t.client_id.ToLower().Trim() == (client_id ?? "").ToLower().Trim());
         }
         public async Task<ArkTenant> UpsertTenant(ArkTenant tenant)
         {
@@ -57,6 +57,7 @@ namespace Ark.oAuth.Oidc
             }
             else
             {
+                client.id = tt.id;
                 _ctx.ChangeTracker.Clear();
                 client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.clients.Update(client);
@@ -170,6 +171,7 @@ namespace Ark.oAuth.Oidc
             else
             {
                 _ctx.ChangeTracker.Clear();
+                user.id = tt.id;
                 user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Update(user);
             }

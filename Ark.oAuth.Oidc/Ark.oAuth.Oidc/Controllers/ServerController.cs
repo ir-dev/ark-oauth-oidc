@@ -110,25 +110,15 @@ namespace Ark.oAuth.Oidc.Controllers
             try
             {
                 var tt = await _da.GetTenant(tenant_id);
-                if (Username == "immi" && Password == "immi@123")
-                {
-                    _da.Log("authorize_post", "su_admin", $"default su admin user logged in.", "");
-                    var tkn = await _ts.BuildAsymmetric_AccessToken(tt, code_challenge);
-                    string code = Guid.NewGuid().ToString();
-                    await _da.UpsertPkceCode(tkn.Item1, tt, code, code_challenge, code_challenge_method, state, scope, "", tkn.Item2, redirect_uri, response_type);
-                    return Redirect($"{redirect_uri}?code={code}&state={state}");
-                }
-                else
-                {
-                    if (tt == null) throw new ApplicationException("invalid_tenant");
-                    var cc = await _da.GetClient(client_id);
-                    if (cc.redirect_url.ToLower().Trim() != redirect_uri.ToLower().Trim()) throw new ApplicationException("invalid_redirect_uri");
-                    var usr = await _da.ValidateUserCreds(Username, Password, client_id, tenant_id);
-                    var tkn = await _ts.BuildAsymmetric_AccessToken(tt, code_challenge);
-                    string code = Guid.NewGuid().ToString();
-                    await _da.UpsertPkceCode(tkn.Item1, tt, code, code_challenge, code_challenge_method, state, scope, "", tkn.Item2, redirect_uri, response_type);
-                    return Redirect($"{cc.redirect_url}?code={code}&state={state}");
-                }
+                if (tt == null) throw new ApplicationException("invalid_tenant");
+                var cc = await _da.GetClient(tenant_id, client_id);
+                if (cc == null) throw new ApplicationException("invalid_client");
+                if (cc.redirect_url.ToLower().Trim() != redirect_uri.ToLower().Trim()) throw new ApplicationException("invalid_redirect_uri");
+                var usr = await _da.ValidateUserCreds(Username, Password, client_id, tenant_id);
+                var tkn = await _ts.BuildAsymmetric_AccessToken(tt, code_challenge);
+                string code = Guid.NewGuid().ToString();
+                await _da.UpsertPkceCode(tkn.Item1, tt, code, code_challenge, code_challenge_method, state, scope, "", tkn.Item2, redirect_uri, response_type);
+                return Redirect($"{cc.redirect_url}?code={code}&state={state}");
             }
             catch (Exception ex)
             {
@@ -157,7 +147,8 @@ namespace Ark.oAuth.Oidc.Controllers
                 var tt = await _da.GetTenant(tenant_id);
                 _da.Log("v1_token", $"{tenant_id}/v1/token", $"step-2", "", "verbose");
                 if (tt == null) throw new ApplicationException("invalid_tenant");
-                var cc = await _da.GetClient(client_id);
+                var cc = await _da.GetClient(tenant_id, client_id);
+                if (cc == null) throw new ApplicationException("invalid_client");
                 _da.Log("v1_token", $"{tenant_id}/v1/token", $"step-3", "", "verbose");
                 if (cc == null) throw new ApplicationException("unauthorized_client");
                 if (cc.redirect_url.ToLower().Trim() != redirect_uri.ToLower().Trim()) throw new ApplicationException("invalid_request");
@@ -200,13 +191,14 @@ namespace Ark.oAuth.Oidc.Controllers
         {
             var tt = await _da.GetTenant(tenant_id);
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
-            var cc = await _da.GetClient(client_id);
+            var cc = await _da.GetClient(tenant_id, client_id);
+            if (cc == null) throw new ApplicationException("invalid_client");
             return new
             {
                 code_challenge_methods_supported = new List<string>() { "S256" },
                 grant_types_supported = new List<string>() { "authorization_code", "client_credentials", "refresh_token" },
                 response_types_supported = new List<string>() { "code" },
-                ark_oauth_client = new 
+                ark_oauth_client = new
                 {
                     Issuer = tt.issuer,
                     Audience = tt.audience,
