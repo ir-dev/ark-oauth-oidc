@@ -103,17 +103,6 @@ namespace Ark.oAuth.Oidc
         {
             return await _ctx.users.ToListAsync();
         }
-        public async Task<List<ArkUser>> GetUsersByClient(string client_id)
-        {
-            return await _ctx.users.Where(t =>
-                _ctx.user_client_claims.Where(t1 =>
-                    (t.email ?? "").ToLower() == (t1.email ?? "").ToLower() && t1.client_id.ToLower() == (client_id ?? "").ToLower()).Any()).ToListAsync();
-        }
-        public async Task<List<ArkUserClientClaim>> GetUsersClientClaims(string email)
-        {
-            return await _ctx.user_client_claims.Where(t1 =>
-                    (email ?? "").ToLower() == (t1.email ?? "").ToLower()).ToListAsync();
-        }
         public async Task<List<ArkUserClientClaim>> GetUsersClientClaims(string email, string tenatn_id)
         {
             return await _ctx.user_client_claims.Where(t1 =>
@@ -121,7 +110,12 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<ArkUserClientClaim> UpsertUsersClientClaims(ArkUserClientClaim us_cl)
         {
-            var tt = await _ctx.user_client_claims.FirstOrDefaultAsync(t => t.id == us_cl.id);
+            if (string.IsNullOrEmpty((us_cl?.id ?? "").Trim())) us_cl.id = null;
+            var tt = (await _ctx.user_client_claims.FirstOrDefaultAsync(t => (t.id ?? "").ToLower().Trim() == (us_cl.id ?? "").ToLower().Trim())) 
+                ?? (await _ctx.user_client_claims.FirstOrDefaultAsync(t => 
+                                (t.tenant_id ?? "").ToLower().Trim() == (us_cl.tenant_id ?? "").ToLower().Trim() 
+                            &&  (t.client_id ?? "").ToLower().Trim() == (us_cl.client_id ?? "").ToLower().Trim() 
+                            &&  (t.email ?? "").ToLower().Trim() == (us_cl.email ?? "").ToLower().Trim()));
             if (tt == null)
             {
                 us_cl.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
@@ -130,6 +124,7 @@ namespace Ark.oAuth.Oidc
             else
             {
                 _ctx.ChangeTracker.Clear();
+                us_cl.id = tt.id;
                 us_cl.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.user_client_claims.Update(us_cl);
             }
