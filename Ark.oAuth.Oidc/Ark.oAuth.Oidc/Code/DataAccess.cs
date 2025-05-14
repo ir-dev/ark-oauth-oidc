@@ -152,11 +152,14 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<ArkUser> UpsertUser(ArkUser user)
         {
+            if (string.IsNullOrEmpty(user?.email)) throw new ApplicationException("empty email");
+            user.email = user.email.ToLower().Trim();
+            if (!ark.net.util.EmailUtil.IsValidFormat(user.email)) throw new ApplicationException("invalid email format");
             var tt = await _ctx.users.FirstOrDefaultAsync(t => t.email == user.email);
             if (tt == null)
             {
                 var usr_cl = await _ctx.user_client_claims.FirstOrDefaultAsync(t => t.email.ToLower() == user.email.ToLower());
-                user.hash_pw = string.IsNullOrEmpty(user.hash_pw) ? _util.HashPasswordPBKDF2("ark@123") : user.hash_pw; //default pw
+                user.hash_pw = string.IsNullOrEmpty(user.hash_pw) ? _util.HashPasswordPBKDF2(_util.ServerConfig.DefaultPw) : user.hash_pw; //default pw
                 user.reset_mode = true;
                 user.ref_uid = Guid.NewGuid().ToString();
                 string email_content = await _util.GetActivationEmail( _util.ServerConfig.TenantId, user.ref_uid);
@@ -210,11 +213,13 @@ namespace Ark.oAuth.Oidc
             else throw new ApplicationException("reset request expired, pls contact support.");
             return true;
         }
-        public async Task<ArkUser> ValidateUserCreds(string un, string pw, string client)
+        public async Task<ArkUser> ValidateUserCreds(string un, string pw, string client, string tenant_id)
         {
-            var usr = _ctx.users.FirstOrDefault(t => t.email == un);
+            var usr = _ctx.users.FirstOrDefault(t => t.email.ToLower() == un.ToLower());
             if (usr == null) throw new ApplicationException("invalid creds");
-            var usr_cl_cl = _ctx.user_client_claims.FirstOrDefault(t => t.email == un && (t.client_id ?? "").ToLower() == (client ?? "").ToLower());
+            var clnt = _ctx.clients.FirstOrDefault(t => (t.client_id ?? "").ToLower() == (client ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
+            if (clnt == null) throw new ApplicationException("invalid creds client");
+            var usr_cl_cl = _ctx.user_client_claims.FirstOrDefault(t => t.email == un && (t.client_id ?? "").ToLower() == (clnt.id ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
             if (usr_cl_cl == null) throw new ApplicationException("invalid creds client.");
             if (!_util.VerifyPasswordPBKDF2(pw, usr.hash_pw)) throw new ApplicationException("invalid creds.");
             return usr;

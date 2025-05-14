@@ -123,7 +123,7 @@ namespace Ark.oAuth.Oidc.Controllers
                     if (tt == null) throw new ApplicationException("invalid_tenant");
                     var cc = await _da.GetClient(client_id);
                     if (cc.redirect_url.ToLower().Trim() != redirect_uri.ToLower().Trim()) throw new ApplicationException("invalid_redirect_uri");
-                    var usr = await _da.ValidateUserCreds(Username, Password, client_id);
+                    var usr = await _da.ValidateUserCreds(Username, Password, client_id, tenant_id);
                     var tkn = await _ts.BuildAsymmetric_AccessToken(tt, code_challenge);
                     string code = Guid.NewGuid().ToString();
                     await _da.UpsertPkceCode(tkn.Item1, tt, code, code_challenge, code_challenge_method, state, scope, "", tkn.Item2, redirect_uri, response_type);
