@@ -35,6 +35,21 @@ namespace Ark.oAuth
                 public_key = jo["public_key"]?.GetValue<string>()
             };
         }
+        //public async Task<string> GetActivationEmail(ArkTenantConfig tc, string uid)
+        //{
+        //    string email_content = System.IO.File.ReadAllText(System.IO.Path.Combine(Environment.CurrentDirectory, "wwwroot", "email", "user_activation_.html"));
+        //    email_content = email_content.Replace("{{host_logo}}", tc.host_logo);
+        //    email_content = email_content.Replace("{{client_logo}}", tc.client_logo);
+        //    email_content = email_content.Replace("{{client_website_url}}", tc.client_website_url);
+        //    email_content = email_content.Replace("{{host_website_url}}", tc.host_website_url);
+        //    var reg_link = string.Format(tc.activation_link, tc.tenant_id, uid);
+        //    email_content = email_content.Replace("{{registration_link}}", reg_link);
+        //    email_content = email_content.Replace("{{registration_link}}", reg_link);
+        //    email_content = email_content.Replace("{{privacy_policy_url}}", tc.privacy_policy_url);
+        //    email_content = email_content.Replace("{{terms_url}}", tc.terms_url);
+        //    email_content = email_content.Replace("{{host_company_name}}", tc.host_company_name);
+        //    return email_content;
+        //}
         public async Task<string> GetActivationEmail(string tenant_id, string uid)
         {
             string email_content = System.IO.File.ReadAllText(System.IO.Path.Combine(Environment.CurrentDirectory, "wwwroot", "email", "user_activation_.html"));

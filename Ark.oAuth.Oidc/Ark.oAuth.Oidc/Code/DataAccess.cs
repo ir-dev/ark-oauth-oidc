@@ -49,7 +49,7 @@ namespace Ark.oAuth.Oidc
         public async Task<ArkClient> UpsertClient(ArkClient client)
         {
             if (string.IsNullOrEmpty((client?.id ?? "").Trim())) client.id = null;
-            var tt = await _ctx.clients.FirstOrDefaultAsync(t => t.id.ToLower() == (client.id ?? "").ToLower());
+            var tt = (await _ctx.clients.FirstOrDefaultAsync(t => t.id.ToLower() == (client.id ?? "").ToLower())) ?? (await _ctx.clients.FirstOrDefaultAsync(t => t.tenant_id.ToLower() == (client.tenant_id ?? "").ToLower() && t.client_id.ToLower() == (client.client_id ?? "").ToLower()));
             if (tt == null)
             {
                 client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");

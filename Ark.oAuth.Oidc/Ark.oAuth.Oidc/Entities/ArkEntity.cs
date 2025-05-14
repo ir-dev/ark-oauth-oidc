@@ -19,6 +19,23 @@ namespace Ark.oAuth
         public int expire_mins { get; set; } = 480; // durations
         public string at { get; set; }
     }
+    [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    public class ArkTenantConfig
+    {
+        [Key]
+        public string tenant_id { get; set; }
+        [ForeignKey(nameof(tenant_id))]
+        public ArkTenant tenant { get; set; }
+        public string host_company_name { get; set; }
+        public string client_logo { get; set; }
+        public string host_logo { get; set; }
+        public string activation_link { get; set; }
+        public string privacy_policy_url { get; set; }
+        public string host_website_url { get; set; }
+        public string client_website_url { get; set; }
+        public string terms_url { get; set; }
+        public string at { get; set; }
+    }
     [Index(nameof(tenant_id), nameof(client_id), IsUnique = true)]
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     public class ArkClient
