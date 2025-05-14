@@ -21,6 +21,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.oAuth.Client", "Ark.oAuth.Client\Ark.oAuth.Client.csproj", "{5CB2A48F-101D-4C21-A206-A2E122BC4574}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.Auth.Client.Web", "Ark.Auth.Client.Web\Ark.Auth.Client.Web.csproj", "{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +45,10 @@ Global
 		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
