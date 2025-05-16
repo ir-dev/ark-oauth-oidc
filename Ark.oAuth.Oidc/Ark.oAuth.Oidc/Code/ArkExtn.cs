@@ -128,7 +128,7 @@ namespace Ark.oAuth.Oidc
                                 domain = $"{domain}",
                                 expire_mins = 480,
                                 name = $"{ser.TenantId} name",
-                                redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/manage",
+                                redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/{ser.TenantId}_client/manage",
                                 redirect_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
                                 logout_url = $"{baseurl}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/")}oauth/{ser.TenantId}/v1/client/logoff",
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
