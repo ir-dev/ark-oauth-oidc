@@ -183,7 +183,7 @@ namespace Ark.oAuth.Oidc
                                 //client_id = $"{ser.TenantId}_client",
                                 email = $"service_account_{ser.TenantId}",
                                 emailed = false,
-                                hash_pw = (await ts.BuildAsymmetric_AccessToken(tt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role") })).Item1, // secret
+                                hash_pw = (await ts.BuildAsymmetric_AccessToken(tt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role") }, 525600)).Item1, // secret
                                 reset_mode = false,
                                 type = "service",
                                 name = "Service Account (Default)"
