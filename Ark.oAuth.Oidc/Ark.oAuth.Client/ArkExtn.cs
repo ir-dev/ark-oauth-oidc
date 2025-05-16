@@ -11,6 +11,7 @@ namespace Ark.oAuth
         public string Issuer { get; set; }
         public string Audience { get; set; }
         public string RsaPublic { get; set; }
+        public string LogoutUri { get; set; }
         public string RedirectUri { get; set; }
         public string RedirectRelative { get; set; }
         public string AuthServerUrl { get; set; }
@@ -18,16 +19,15 @@ namespace Ark.oAuth
         public List<string> RouteKey { get; set; } // client route or querystring key eg: client_id, 
         public string TenantId { get; set; }
         public string Domain { get; set; }
-        public Dictionary<string, ArkApp> Clients { get; set; } //single client // mutiple app
         public int ExpireMins { get; set; } = 480;
     }
-    public class ArkApp
-    {
-        public string LogoutUri { get; set; }
-        public string RedirectUri { get; set; }
-        public string RedirectRelative { get; set; }
-        public string ClientId { get; set; }
-    }
+    //public class ArkApp
+    //{
+    //    public string LogoutUri { get; set; }
+    //    public string RedirectUri { get; set; }
+    //    public string RedirectRelative { get; set; }
+    //    public string ClientId { get; set; }
+    //}
     public static class ArkExtn
     {
         static ArkAuthConfig LoadConfig(IConfiguration configuration)
@@ -142,19 +142,10 @@ namespace Ark.oAuth
                     //Valid token (should trigger OnMessageReceived → OnTokenValidated)
                     OnAuthenticationFailed = ctx =>
                     {
-                        //https://localhost:5001/connect/authorize?response_type=code
-                        //&client_id=webapp
-                        //&redirect_uri=https://localhost:5002/signin-oidc
-                        //&scope=openid profile email api1
-                        //&state=random_state_value
-                        //&code_challenge=your_code_challenge
-                        //&code_challenge_method=S256
                         var client_id = ctx.Request.ReadRoute(ccc.RouteKey) ?? ccc.ClientId;
-                        KeyValuePair<string, ArkApp> capp = ccc.Clients.FirstOrDefault(t2 => t2.Key.ToLower() == client_id.ToLower());
-                        capp = capp.Key == null ? new KeyValuePair<string, ArkApp>(client_id, new ArkApp() { ClientId = client_id, RedirectRelative = ccc.RedirectRelative, RedirectUri = ccc.RedirectUri }) : capp;
                         var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
                         var code_challenge = ctx.Request.Query.ContainsKey("code_challenge") ? ctx.Request.Query["code_challenge"][0] : "";
-                        var ff = $"{ccc.AuthServerUrl}/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={capp.Value.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=invalid_token";
+                        var ff = $"{ccc.AuthServerUrl}/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={string.Format(ccc.RedirectUri, client_id)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=invalid_token";
                         ctx.Response.Redirect($"{ff}");
                         return Task.CompletedTask;
                     },
@@ -171,20 +162,14 @@ namespace Ark.oAuth
                     },
                     OnChallenge = ctx =>
                     {
-                        //if (ctx.AuthenticateFailure != null || ctx.Error != null || ctx.ErrorUri != null)
-                        //{
-                        //its no tken, so inititate auth process
                         ctx.HandleResponse();
                         var client_id = ctx.Request.ReadRoute(ccc.RouteKey) ?? ccc.ClientId;
-                        KeyValuePair<string, ArkApp> capp = ccc.Clients.FirstOrDefault(t2 => t2.Key.ToLower() == client_id.ToLower());
-                        capp = capp.Key == null ? new KeyValuePair<string, ArkApp>(client_id, new ArkApp() { ClientId = client_id, RedirectRelative = ccc.RedirectRelative, RedirectUri = ccc.RedirectUri }) : capp;
                         var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
                         var code_verifier = $"JESUSmyLORD_{ark.net.util.DateUtil.CurrentTimeStamp()}";
                         var code_challenge = PkceHelper.GenerateCodeChallenge(code_verifier);
-                        var ff = $"{ccc.AuthServerUrl}/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={capp.Value.RedirectUri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
+                        var ff = $"{ccc.AuthServerUrl}/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={string.Format(ccc.RedirectUri, client_id)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
                         ctx.Response.StoreCookie($"ark_oauth_cv_{client_id}", code_verifier, ccc.ExpireMins, ccc.Domain);
                         ctx.Response.Redirect($"{ff}");
-                        //}
                         return Task.CompletedTask;
                     },
                     OnMessageReceived = msg =>
@@ -210,8 +195,8 @@ namespace Ark.oAuth
                     var config = builder.ApplicationServices.GetRequiredService<IConfiguration>();
                     var ccc = LoadConfig(config);
                     var client_id = context.Request.ReadRoute(ccc.RouteKey) ?? ccc.ClientId;
-                    KeyValuePair<string, ArkApp> capp = ccc.Clients.FirstOrDefault(t2 => t2.Key.ToLower() == client_id.ToLower());
-                    capp = capp.Key == null ? new KeyValuePair<string, ArkApp>(client_id, new ArkApp() { ClientId = client_id, RedirectRelative = ccc.RedirectRelative, RedirectUri = ccc.RedirectUri }) : capp;
+                    //KeyValuePair<string, ArkApp> capp = ccc.Clients.FirstOrDefault(t2 => t2.Key.ToLower() == client_id.ToLower());
+                    //capp = capp.Key == null ? new KeyValuePair<string, ArkApp>(client_id, new ArkApp() { ClientId = client_id, RedirectRelative = ccc.RedirectRelative, RedirectUri = ccc.RedirectUri }) : capp;
                     if (context.Request.Query.ContainsKey("err") && !string.IsNullOrEmpty(context.Request.Query["err"]) && (context.Request.Query["err"] == "access_denied" || context.Request.Query["err"] == "invalid_token" || context.Request.Query["err"] == "token_error"))
                     {
                         context.Response.DeleteCookie($"ark_oauth_tkn_{client_id}", ccc.Domain);

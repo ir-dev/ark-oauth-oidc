@@ -171,8 +171,8 @@ namespace Ark.oAuth.Oidc.Controllers
             }
         }
         [Authorize]
-        [Route("{tenant_id}/v1/server/manage")]
-        public async Task<IActionResult> Manage([FromRoute] string tenant_id)
+        [Route("{tenant_id}/v1/server/{client_id}/manage")]
+        public async Task<IActionResult> Manage([FromRoute] string tenant_id, [FromRoute] string client_id)
         {
             //allowed only for server app (app_server)
             var tt = await _da.GetTenant(tenant_id);
@@ -204,25 +204,14 @@ namespace Ark.oAuth.Oidc.Controllers
                     Audience = tt.audience,
                     RsaPublic = tt.rsa_public,
                     RedirectUri = cc.redirect_url,
-                    //RedirectRelative = cc.redirect_relative,// "/auth/oauth/ark_server/v1/server/manage",
+                    RedirectRelative = cc.redirect_relative,// "/auth/oauth/ark_server/v1/server/manage",
+                    LogoutUri = cc.logout_url,
                     AuthServerUrl = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/oauth")}",
                     ClientId = client_id,
                     RouteKey = new List<string>() { "client_id", "company" },
                     TenantId = tt.tenant_id,
                     Domain = cc.domain,
-                    ExpireMins = tt.expire_mins,
-                    Clients = new Dictionary<string, dynamic>()
-                    {
-                        {
-                            client_id, new
-                            {
-                                RedirectRelative = cc.redirect_relative,
-                                RedirectUri = cc.redirect_url,
-                                ClientId = client_id,
-                                LogoutUri = cc.logout_url
-                            }
-                        }
-                    }
+                    ExpireMins = tt.expire_mins
                 }
             };
         }
