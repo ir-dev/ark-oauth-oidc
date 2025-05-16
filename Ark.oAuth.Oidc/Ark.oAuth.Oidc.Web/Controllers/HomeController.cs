@@ -13,6 +13,7 @@ namespace Ark.oAuth.Oidc.Web.Controllers
 
         public IActionResult Index()
         {
+            //var tt = string.Format("sdsdsdsdooo", "erer");
             return View();
         }
         public IActionResult Login()

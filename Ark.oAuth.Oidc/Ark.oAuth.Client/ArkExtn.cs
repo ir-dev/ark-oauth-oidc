@@ -81,16 +81,10 @@ namespace Ark.oAuth
             var acceptHeader = request.Headers["Accept"].ToString();
             return request.Path.StartsWithSegments("/api") || acceptHeader.Contains("application/json", StringComparison.OrdinalIgnoreCase);
         }
-        //All client config is taken from app settings
         public static void AddArkOidcClient(this IServiceCollection services, IConfiguration configuration)
         {
             services
                 .AddAuthentication(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme)
-            //    .AddAuthentication(options =>
-            //{
-            //    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-            //    //options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            //})
             .AddJwtBearer(options =>
             {
                 options.RequireHttpsMetadata = false; // Set to true in production
@@ -108,8 +102,6 @@ namespace Ark.oAuth
                     IssuerSigningKeyResolver = (string token, SecurityToken securityToken, string kid, TokenValidationParameters validationParameters) =>
                     {
                         List<SecurityKey> keys = new List<SecurityKey>();
-                        //if (!config.app_list.ContainsKey(kid)) throw new SecurityTokenInvalidSignatureException("Unable to validate signature, invalid token with 'kid' value.");
-                        //var app = config.app_list[kid];
                         var pub_conf_key = ccc.RsaPublic;
                         var publicKey = Convert.FromBase64String(pub_conf_key);
                         RSA rsa = RSA.Create();

@@ -104,7 +104,8 @@ namespace Ark.oAuth.Oidc.Controllers
         {
             ViewBag.IsError = false;
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
-            ViewBag.client_url = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}/oauth/{tenant_id}/v1/.well-known/{client_id}/openid-configuration";
+            var baseurl = !string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}";
+            ViewBag.client_url = $"{baseurl}/oauth/{tenant_id}/v1/.well-known/{client_id}/openid-configuration";
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
             ViewBag.client_logo = ser.EmailConfig?.client_logo ?? $"";
             try
@@ -204,7 +205,7 @@ namespace Ark.oAuth.Oidc.Controllers
                     Audience = tt.audience,
                     RsaPublic = tt.rsa_public,
                     RedirectUri = cc.redirect_url,
-                    RedirectRelative = cc.redirect_relative,// "/auth/oauth/ark_server/v1/server/manage",
+                    RedirectRelative = cc.redirect_relative,// "/auth/oauth/ark_server/v1/server/{0}/manage", client_id (for saas)
                     LogoutUri = cc.logout_url,
                     AuthServerUrl = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/oauth")}",
                     ClientId = client_id,
