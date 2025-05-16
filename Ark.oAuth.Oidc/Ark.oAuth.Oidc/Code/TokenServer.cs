@@ -23,6 +23,11 @@ namespace Ark.oAuth.Oidc
             if (string.IsNullOrEmpty(tenant.rsa_private)) throw new ApplicationException("tenant_cert_missing.");
             return BuildToken(tenant, 300, new Claim[] { new Claim("code", code) });
         }
+        internal async System.Threading.Tasks.Task<(string, DateTime)> BuildAsymmetric_AccessToken(ArkTenant tenant, Claim[] claims)
+        {
+            if (string.IsNullOrEmpty(tenant.rsa_private)) throw new ApplicationException("tenant_cert_missing.");
+            return BuildToken(tenant, 300, claims);
+        }
         (string, DateTime) BuildToken(ArkTenant tenant, int exiration_mins, Claim[] claims)
         {
             var privateKey = tenant.rsa_private.ToByteArray();

@@ -1,8 +1,4 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using System.ComponentModel.DataAnnotations;
-using System.Configuration;
 using System.Reflection;
 
 namespace Ark.oAuth.Oidc
@@ -108,7 +104,7 @@ namespace Ark.oAuth.Oidc
                             var baseurl = !string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}";
                             var domain = new Uri(baseurl).Host;
                             //1st time -> create client for server to manage users
-                            dbContext.tenants.Add(new ArkTenant()
+                            var tt = new ArkTenant()
                             {
                                 tenant_id = ser.TenantId,
                                 name = ser.TenantId,
@@ -119,7 +115,8 @@ namespace Ark.oAuth.Oidc
                                 rsa_private = dd.private_key,
                                 rsa_public = dd.public_key,
                                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
-                            });
+                            };
+                            dbContext.tenants.Add(tt);
                             var cll = new ArkClient()
                             {
                                 tenant_id = ser.TenantId,
@@ -156,6 +153,7 @@ namespace Ark.oAuth.Oidc
                             {
                                 dbContext.claims.Add(new ArkClaim() { key = item, display = item });
                             }
+                            //admin user
                             dbContext.users.Add(new ArkUser()
                             {
                                 //claims = lls,
@@ -175,6 +173,28 @@ namespace Ark.oAuth.Oidc
                                 client_id = $"{cll.id}",
                                 tenant_id = $"{ser.TenantId}",
                                 email = "admin"
+                            });
+                            var ts = scope.ServiceProvider.GetRequiredService<TokenServer>();
+                            //service user service_user
+                            dbContext.users.Add(new ArkUser()
+                            {
+                                //claims = lls,
+                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+                                //client_id = $"{ser.TenantId}_client",
+                                email = $"service_account_{ser.TenantId}",
+                                emailed = false,
+                                hash_pw = (await ts.BuildAsymmetric_AccessToken(tt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role") })).Item1, // secret
+                                reset_mode = false,
+                                type = "service",
+                                name = "Service Account (Default)"
+                            });
+                            dbContext.user_client_claims.Add(new ArkUserClientClaim()
+                            {
+                                claims = new List<string>() { "service_role" },
+                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+                                client_id = $"{cll.id}",
+                                tenant_id = $"{ser.TenantId}",
+                                email = $"service_account_{ser.TenantId}"
                             });
                             dbContext.SaveChanges();
                         }
@@ -198,6 +218,7 @@ namespace Ark.oAuth.Oidc
             services.AddScoped<DataAccess>();
             services.AddScoped<TokenServer>();
             services.AddSingleton<ArkUtil>();
+            services.AddScoped<Onboard>();
         }
     }
     public static class ExtnUtil

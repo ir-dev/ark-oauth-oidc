@@ -33,7 +33,7 @@ namespace Ark.oAuth.Client
                 { "client_id", client_id },
                 { "code_verifier", Request.ReadCookie($"ark_oauth_cv_{client_id}") }
             };
-                var ff = $"{ccc.AuthServerUrl}/{tenant_id}/v1/token";
+                var ff = $"{ccc.AuthServerUrl}/oauth/{tenant_id}/v1/token";
                 var resp = await httpClient.PostAsync($"{ff}", new FormUrlEncodedContent(dic));
                 var rr = await resp.Content.ReadAsStringAsync();
                 resp.EnsureSuccessStatusCode();

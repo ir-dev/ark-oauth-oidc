@@ -137,7 +137,7 @@ namespace Ark.oAuth
                         var client_id = ctx.Request.ReadRoute(ccc.RouteKey) ?? ccc.ClientId;
                         var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
                         var code_challenge = ctx.Request.Query.ContainsKey("code_challenge") ? ctx.Request.Query["code_challenge"][0] : "";
-                        var ff = $"{ccc.AuthServerUrl}/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={string.Format(ccc.RedirectUri, client_id)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=invalid_token";
+                        var ff = $"{ccc.AuthServerUrl}/oauth/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={string.Format(ccc.RedirectUri, client_id)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=invalid_token";
                         ctx.Response.Redirect($"{ff}");
                         return Task.CompletedTask;
                     },
@@ -159,7 +159,7 @@ namespace Ark.oAuth
                         var state = ctx.Request.Query.ContainsKey("state") ? ctx.Request.Query["state"][0] : "";
                         var code_verifier = $"JESUSmyLORD_{ark.net.util.DateUtil.CurrentTimeStamp()}";
                         var code_challenge = PkceHelper.GenerateCodeChallenge(code_verifier);
-                        var ff = $"{ccc.AuthServerUrl}/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={string.Format(ccc.RedirectUri, client_id)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
+                        var ff = $"{ccc.AuthServerUrl}/oauth/{ccc.TenantId}/v1/connect/authorize?response_type=code&client_id={client_id}&redirect_uri={string.Format(ccc.RedirectUri, client_id)}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256&err=token_error";
                         ctx.Response.StoreCookie($"ark_oauth_cv_{client_id}", code_verifier, ccc.ExpireMins, ccc.Domain);
                         ctx.Response.Redirect($"{ff}");
                         return Task.CompletedTask;

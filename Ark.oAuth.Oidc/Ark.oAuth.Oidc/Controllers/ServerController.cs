@@ -194,6 +194,7 @@ namespace Ark.oAuth.Oidc.Controllers
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             var cc = await _da.GetClient(tenant_id, client_id);
             if (cc == null) throw new ApplicationException("invalid_client");
+            var baseurl = !string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}";
             return new
             {
                 code_challenge_methods_supported = new List<string>() { "S256" },
@@ -207,7 +208,7 @@ namespace Ark.oAuth.Oidc.Controllers
                     RedirectUri = cc.redirect_url,
                     RedirectRelative = cc.redirect_relative,// "/auth/oauth/ark_server/v1/server/{0}/manage", client_id (for saas)
                     LogoutUri = cc.logout_url,
-                    AuthServerUrl = $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}/oauth")}",
+                    AuthServerUrl = baseurl,
                     ClientId = client_id,
                     RouteKey = new List<string>() { "client_id", "company" },
                     TenantId = tt.tenant_id,

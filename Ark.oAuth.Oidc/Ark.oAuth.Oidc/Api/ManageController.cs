@@ -12,10 +12,10 @@ namespace Ark.oAuth.Oidc
         public async Task<dynamic> TenantList([FromServices] DataAccess da)
         {
             return new
-            { 
+            {
                 error = false,
                 msg = "tenatns list loaded.",
-                data = await da.GetTenants() 
+                data = await da.GetTenants()
             };
         }
         [HttpPost]
@@ -211,7 +211,7 @@ namespace Ark.oAuth.Oidc
             try
             {
                 await da.UpsertUser(user);
-                da.Log("user_upsert", "v1/user/upsert", "user updated" , $"deails : e: {user?.email}, name: {user?.name}, rm: {user?.reset_mode}");
+                da.Log("user_upsert", "v1/user/upsert", "user updated", $"deails : e: {user?.email}, name: {user?.name}, rm: {user?.reset_mode}");
                 return new
                 {
                     error = false,
@@ -251,6 +251,42 @@ namespace Ark.oAuth.Oidc
                     error = true,
                     msg = $"{ex.Message}",
                     data = user
+                };
+            }
+        }
+        [Route("onboard/full")]
+        public async Task<dynamic> OnboardFull([FromServices] Onboard onb,
+            [FromQuery] string ten_id,
+            [FromQuery] string client_id,
+            [FromQuery] string suffix,
+            [FromQuery] string client_base_url,
+            [FromQuery] string claim_keys, //"claim1, claim2"
+            [FromQuery] string user_email,
+            [FromQuery] string user_suffix,
+            [FromQuery] string user_type)
+        {
+            try
+            {
+                await onb.FullSet(ten_id,
+                    client_id,
+                    suffix,
+                    client_base_url,
+                    (claim_keys ?? "").Split(',').Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).ToList(),
+                    user_email,
+                    user_suffix,
+                    user_type);
+                return new
+                {
+                    error = false,
+                    msg = $"onboarded client {client_id} to tenant {ten_id}"
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}"
                 };
             }
         }

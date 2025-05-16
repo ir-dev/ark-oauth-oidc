@@ -84,6 +84,10 @@ namespace Ark.oAuth.Oidc
         {
             return await _ctx.claims.ToListAsync();
         }
+        public async Task<ArkClaim?> GetClaim(string key)
+        {
+            return await _ctx.claims.FirstOrDefaultAsync(t => t.key.ToLower().Trim() == key.ToLower().Trim());
+        }
         public async Task<ArkClaim> UpsertClaim(ArkClaim claim)
         {
             var tt = await _ctx.claims.FirstOrDefaultAsync(t => t.key == claim.key);
