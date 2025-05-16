@@ -194,7 +194,7 @@ namespace Ark.oAuth.Oidc.Controllers
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             var cc = await _da.GetClient(tenant_id, client_id);
             if (cc == null) throw new ApplicationException("invalid_client");
-            var baseurl = !string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}";
+            var baseurl = $"{(!string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{Request.Scheme}://{Request.Host}")}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : ser.BasePath)}";
             return new
             {
                 code_challenge_methods_supported = new List<string>() { "S256" },

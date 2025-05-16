@@ -34,6 +34,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <None Remove="Controllers\ServerController.cs~RF171f052a.TMP" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<EmbeddedResource Include="wwwroot\email\user_activation_.html" />
 		<EmbeddedResource Include="wwwroot\img\profile.png" />
 	</ItemGroup>
