@@ -213,6 +213,7 @@ namespace Ark.oAuth.Oidc.Controllers
                     RouteKey = new List<string>() { "client_id", "company" },
                     TenantId = tt.tenant_id,
                     Domain = cc.domain,
+                    Suffix = "",
                     ExpireMins = tt.expire_mins
                 }
             };

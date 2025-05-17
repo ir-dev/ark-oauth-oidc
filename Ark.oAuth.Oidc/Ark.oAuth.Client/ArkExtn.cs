@@ -19,6 +19,7 @@ namespace Ark.oAuth
         public List<string> RouteKey { get; set; } // client route or querystring key eg: client_id, 
         public string TenantId { get; set; }
         public string Domain { get; set; }
+        public string Suffix { get; set; } // suffix after client : lh - localhost, azd - azuredev
         public int ExpireMins { get; set; } = 480;
     }
     //public class ArkApp

@@ -15,6 +15,8 @@ Auth setup :
 	- Step 3:
 		From: "RedirectUri": "<<client base url >>/oauth/ark_server/v1/client/ark_server_client/callback",
 		To: "RedirectUri": "<<client base url >>/oauth/ark_server/v1/client/{0}/callback",
+	- Step 4:
+		Sufffix -> Property to value taht will suffix the client name - to differenciate from diff tenant 
 4. Onbaording full set from tenant, client, claims, to user mapping to client using below api
 	https://<< base auth server url>>/auth/api/oauth/onboard/full?ten_id=ntt_cad_ir_idp_server&client_id=play&suffix=ir&client_base_url=https://ntt-planner-oidc.immanuel.co/planner&claim_keys=ntt-is-fa&user_email=raj@immanuel.co&user_suffix= [Admin]&user_type=user
 
