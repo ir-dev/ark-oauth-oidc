@@ -1,167 +1,195 @@
+# 🚀 Custom OAuth2 & OpenID Connect Identity Server
 
-TODO: update the md file
+Welcome to the official documentation for the **ARK Identity Server**, a lightweight OAuth 2.0 and OpenID Connect (OIDC) compliant authorization server designed for secure authentication and token issuance.
 
-# ASP.NET Core IdentityServer - Authorization Code & Client Credentials Flow
-
-This project is an implementation of oAuth2 oidc's **Authorization Code Flow with PKCE** and **Client Credentials Flow** using an ASP.NET Core application.
-
-Customized in such a way that, its very felixible for develpers to to just start uinsg wiht out any hurdles.
-
-Very much useful for SAAS based oauth enablement. considered most scenarios for tenant & client approach.
-
-TO DO: soon to update a video file explaining this identity enablement with very few steps.
+This project provides the core components required for building secure authentication flows for web, mobile, and desktop applications.
 
 ---
 
-## 🔧 Prerequisites
+## 🌐 OIDC Discovery Endpoint
 
-- [.NET8 SDK](https://dotnet.microsoft.com/download)
-- Basic knowledge of OAuth2 and OpenID Connect
+All configuration and metadata for this identity server is exposed via the **Well-Known Configuration URL**:
+
+```
+https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/.well-known/ark_server_client/openid-configuration
+```
+
+You can use this to dynamically configure any compatible OIDC client (e.g., OpenID libraries, Postman, or OAuth2-aware tools).
 
 ---
 
-## 📌 Authorization Code Flow with PKCE
+## 📦 Features
 
-### 🔹 When to Use
+- OAuth2 Authorization Code Flow with PKCE
+- OpenID Connect (OIDC) Core support
+- Token endpoint with JWT access tokens
+- Refresh token support
+- Dynamic metadata via discovery endpoint
+- Configurable client and scope management
+- Extensible authentication and user management
 
-Use this flow for applications that require user authentication (like web apps or mobile apps).
+---
 
-### 🔹 Flow Steps
+## ⚙️ Getting Started
 
-1. Client app redirects user to IdentityServer's `/authorize` endpoint.
-2. User authenticates and consents.
-3. IdentityServer returns an **authorization code**.
-4. Client app sends code to `/token` endpoint with `code_verifier`.
-5. IdentityServer validates and returns **access token** (and optionally **ID token**).
+### 1. Clone the Repository
 
-### 🔹 IdentityServer Configuration (in `Config.cs`)
+```bash
+git clone https://your-git-url/ark-identity-server.git
+cd ark-identity-server
+```
 
-```csharp
-new Client
+### 2. Build and Run
+
+Ensure you have [.NET 6 or later](https://dotnet.microsoft.com/en-us/download) installed.
+
+```bash
+dotnet restore
+dotnet build
+dotnet run
+```
+
+The Identity Server will be available at:
+
+```
+https://localhost:5001/
+```
+
+---
+
+## 🛠️ Configuration
+
+### 🔑 Registering a Client
+
+To integrate a client with this server, you must register it in the configuration:
+
+```json
 {
-    ClientId = "web_client",
-    ClientName = "Web Client",
-    AllowedGrantTypes = GrantTypes.Code,
-    RequirePkce = true,
-    RequireClientSecret = false,
-    RedirectUris = { "https://localhost:5002/signin-oidc" },
-    PostLogoutRedirectUris = { "https://localhost:5002/signout-callback-oidc" },
-    AllowedScopes = { "openid", "profile", "api1" },
-    AllowAccessTokensViaBrowser = true
+  "client_id": "my-client-id",
+  "client_secret": "my-client-secret",
+  "redirect_uris": ["https://myapp.com/signin-oidc"],
+  "grant_types": ["authorization_code"],
+  "scope": ["openid", "profile", "email"]
 }
 ```
 
----
-
-## 📌 Client Credentials Flow
-
-### 🔹 When to Use
-
-Use this flow for **machine-to-machine (M2M)** communication where no user is involved.
-
-### 🔹 Flow Steps
-
-1. The client authenticates directly with IdentityServer using its `client_id` and `client_secret`.
-2. The client receives an **access token** to access protected APIs.
-
-### 🔹 IdentityServer Configuration (in `Config.cs`)
-
-```csharp
-new Client
-{
-    ClientId = "m2m_client",
-    ClientName = "Machine to Machine Client",
-    AllowedGrantTypes = GrantTypes.ClientCredentials,
-    ClientSecrets = { new Secret("super_secret".Sha256()) },
-    AllowedScopes = { "api1" }
-}
-```
+> This can be done via a configuration file, database, or an admin API (depending on your implementation).
 
 ---
 
-## 🧪 Sample API Resource Configuration
+## 🔐 Authentication Flow (Authorization Code + PKCE)
 
-```csharp
-new ApiScope("api1", "My API")
-```
-
----
-
-## 🧑‍💻 Sample Token Request (Client Credentials)
-
-```bash
-curl -X POST https://localhost:5001/connect/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "client_id=m2m_client" \
-  -d "client_secret=super_secret" \
-  -d "grant_type=client_credentials" \
-  -d "scope=api1"
-```
-
----
-
-## 🔐 Sample Token Request (Authorization Code - PKCE)
-
-Frontend app initiates login:
-
-```js
-const url = "https://localhost:5001/connect/authorize?client_id=web_client&redirect_uri=https://localhost:5002/signin-oidc&response_type=code&scope=openid profile api1&code_challenge=xyz123&code_challenge_method=S256";
-window.location.href = url;
-```
-
-Backend (after redirect):
-
-```csharp
-var tokenResponse = await httpClient.RequestAuthorizationCodeTokenAsync(new AuthorizationCodeTokenRequest
-{
-    Address = "https://localhost:5001/connect/token",
-    ClientId = "web_client",
-    Code = receivedCode,
-    RedirectUri = "https://localhost:5002/signin-oidc",
-    CodeVerifier = "original_code_verifier"
-});
-```
-
----
-
-## 🛡️ Security Best Practices
-
-- Use HTTPS everywhere.
-- Keep client secrets secure.
-- Use short-lived access tokens and refresh tokens if needed.
-- Validate tokens on the API side using middleware.
-
----
-
-## 📚 References
-
-- [IdentityServer4 Documentation](https://identityserver4.readthedocs.io/)
-- [OAuth 2.0 RFC](https://datatracker.ietf.org/doc/html/rfc6749)
-- [OpenID Connect Core](https://openid.net/specs/openid-connect-core-1_0.html)
-
----
-
-## 📁 Project Structure
+### 1. Authorize Endpoint
 
 ```
-/IdentityServerDemo
-  /Config
-    - Clients.cs
-    - ApiScopes.cs
-  /Controllers
-  /wwwroot
-  Program.cs
-  Startup.cs
+GET https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/authorize
 ```
+
+#### Parameters:
+
+| Name            | Description                              |
+|-----------------|------------------------------------------|
+| `client_id`     | Your registered client ID                |
+| `response_type` | `code`                                   |
+| `redirect_uri`  | Must match the registered redirect URI   |
+| `scope`         | e.g., `openid profile email`             |
+| `state`         | Random state to validate callback        |
+| `code_challenge`| PKCE challenge (Base64-encoded SHA256)   |
+| `code_challenge_method` | Usually `S256`                   |
 
 ---
 
-## 🚀 Run the Project
+### 2. Token Endpoint
 
-```bash
-dotnet run --project IdentityServerDemo
+```
+POST https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/token
 ```
 
-Visit: `https://localhost:5001`
+#### Parameters:
+
+| Name             | Description                          |
+|------------------|--------------------------------------|
+| `grant_type`     | `authorization_code`                 |
+| `code`           | The code received from authorization |
+| `redirect_uri`   | Must match the original redirect URI |
+| `client_id`      | Registered client ID                 |
+| `client_secret`  | (if applicable)                      |
+| `code_verifier`  | Original PKCE verifier string        |
 
 ---
+
+### 3. UserInfo Endpoint
+
+```
+GET https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/userinfo
+```
+
+Use the access token in the `Authorization: Bearer` header.
+
+---
+
+### 4. Logout Endpoint
+
+```
+GET https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/logout
+```
+
+Parameters:
+
+- `id_token_hint`: (optional) previously issued ID Token
+- `post_logout_redirect_uri`: where to redirect after logout
+
+---
+
+## 🔍 Useful Endpoints Summary
+
+| Purpose         | URL                                                                 |
+|----------------|----------------------------------------------------------------------|
+| Discovery       | `/.well-known/ark_server_client/openid-configuration`              |
+| Authorize       | `/authorize`                                                        |
+| Token           | `/token`                                                            |
+| UserInfo        | `/userinfo`                                                         |
+| Logout          | `/logout`                                                           |
+| JWKS            | `/jwks` (if supported for public key validation)                   |
+
+---
+
+## 🧪 Testing with Postman
+
+1. Go to **Authorization > OAuth 2.0**
+2. Fill in the following:
+   - Auth URL: `https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/authorize`
+   - Token URL: `https://ark-oidc-server.immanuel.co/auth/oauth/ark_server/v1/token`
+   - Client ID & Secret
+   - Scope: `openid profile`
+   - Callback URL: `https://oauth.pstmn.io/v1/callback`
+
+3. Click **Get New Access Token**.
+
+---
+
+## 👨‍💻 For Developers
+
+- All core logic (e.g., token issuance, authorization, user handling) is written in C# using ASP.NET Core.
+- Authentication is modular — you can plug in your own user store (e.g., database, LDAP).
+- JWT tokens are signed using an RSA key pair; keys can be rotated and exposed via the JWKS endpoint.
+
+---
+
+## 🧰 Libraries and Tools
+
+- [.NET 6](https://dotnet.microsoft.com/en-us/)
+- [Microsoft.AspNetCore.Authentication](https://docs.microsoft.com/en-us/aspnet/core/security/authentication/)
+- [System.IdentityModel.Tokens.Jwt](https://www.nuget.org/packages/System.IdentityModel.Tokens.Jwt)
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 📫 Need Help?
+
+If you're stuck or need help integrating your application with ARK Identity Server, please open an issue or contact the development team.
