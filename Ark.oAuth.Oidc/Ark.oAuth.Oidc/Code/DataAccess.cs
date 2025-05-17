@@ -163,7 +163,7 @@ namespace Ark.oAuth.Oidc
                 user.reset_mode = true;
                 user.ref_uid = Guid.NewGuid().ToString();
                 string email_content = await _util.GetActivationEmail( _util.ServerConfig.TenantId, user.ref_uid);
-                user.emailed = await _util.SendMail(user.email, email_content, $"{_util.ServerConfig.EmailConfig?.subject} Activation Link");
+                user.emailed = await _util.SendMail(user.email, email_content, $"{_util.ServerConfig.EmailConfig?.subject} Activation Link", this);
                 user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Add(user);
             }
@@ -191,7 +191,7 @@ namespace Ark.oAuth.Oidc
                 uu.reset_mode = true;
                 uu.ref_uid = Guid.NewGuid().ToString();
                 string email_content = await _util.GetActivationEmail(tnt.tenant_id, uu.ref_uid);
-                uu.emailed = await _util.SendMail(uu.email, email_content, $"{_util.ServerConfig.EmailConfig?.subject} Reset Password");
+                uu.emailed = await _util.SendMail(uu.email, email_content, $"{_util.ServerConfig.EmailConfig?.subject} Reset Password", this);
                 uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Update(uu);
             }

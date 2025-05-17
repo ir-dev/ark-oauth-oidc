@@ -63,9 +63,10 @@ namespace Ark.oAuth
             email_content = email_content.Replace("{{privacy_policy_url}}", _ser.EmailConfig.privacy_policy_url);
             email_content = email_content.Replace("{{terms_url}}", _ser.EmailConfig.terms_url);
             email_content = email_content.Replace("{{host_company_name}}", _ser.EmailConfig.host_company_name);
+            email_content = email_content.Replace("{{host_company_display}}", _ser.EmailConfig.host_company_display);
             return email_content;
         }
-        public async Task<bool> SendMail(string to, string html, string subject)
+        public async Task<bool> SendMail(string to, string html, string subject, DataAccess da)
         {
             try
             {
@@ -74,6 +75,7 @@ namespace Ark.oAuth
             }
             catch (Exception ex)
             {
+                da.LogError(ex, "send_email", $"{to}", $"sending email failed");
                 return false;
             }
         }

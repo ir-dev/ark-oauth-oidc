@@ -69,5 +69,6 @@
         public string privacy_policy_url { set; get; }
         public string terms_url { set; get; }
         public string host_company_name { set; get; }
+        public string host_company_display { set; get; }
     }
 }
