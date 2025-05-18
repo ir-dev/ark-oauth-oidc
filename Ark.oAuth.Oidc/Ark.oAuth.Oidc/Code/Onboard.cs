@@ -92,7 +92,7 @@ namespace Ark.oAuth
                     //redirect_relative = $"/planner/{client_id}/schedule/landing", //move to parameter
                     redirect_relative = client_relative_url,
                     redirect_url = $"{client_base_url}/oauth/{ten_id}/v1/client/{client_id}/callback",
-                    logout_url = $"{client_base_url}/oauth/{ten_id}/v1/client/logoff",
+                    logout_url = $"{client_base_url}/oauth/{ten_id}/v1/client/{client_id}/logoff",
                     at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
                 });
             }

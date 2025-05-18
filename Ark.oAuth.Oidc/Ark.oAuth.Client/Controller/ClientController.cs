@@ -50,14 +50,14 @@ namespace Ark.oAuth.Client
             return View();
         }
         [Authorize]
-        [Route("{tenant_id}/v1/client/config")]
+        [Route("{tenant_id}/v1/client/{client_id}/config")]
         public dynamic Config([FromQuery] string token)
         {
             var cc = LoadConfig();
             return cc;
         }
         [Authorize]
-        [Route("{tenant_id}/v1/client/logoff")]
+        [Route("{tenant_id}/v1/client{client_id}/logoff")]
         public dynamic Logoff()
         {
             var cc = LoadConfig();
