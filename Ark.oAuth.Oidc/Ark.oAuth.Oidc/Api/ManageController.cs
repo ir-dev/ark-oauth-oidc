@@ -260,6 +260,7 @@ namespace Ark.oAuth.Oidc
             [FromQuery] string client_id,
             [FromQuery] string suffix,
             [FromQuery] string client_base_url,
+            [FromQuery] string client_relative_url,
             [FromQuery] string claim_keys, //"claim1, claim2"
             [FromQuery] string user_email,
             [FromQuery] string user_suffix,
@@ -271,6 +272,7 @@ namespace Ark.oAuth.Oidc
                     client_id,
                     suffix,
                     client_base_url,
+                    client_relative_url,
                     (claim_keys ?? "").Split(',').Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).ToList(),
                     user_email,
                     user_suffix,

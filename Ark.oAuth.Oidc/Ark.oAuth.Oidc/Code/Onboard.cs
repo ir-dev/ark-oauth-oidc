@@ -18,13 +18,14 @@ namespace Ark.oAuth
             string client_id,
             string suffix,
             string client_base_url,
+            string client_relative_url,
             List<string> claim_keys,
             string user_email,
             string user_suffix,
             string user_type)
         {
             await PopulateTenant(ten_id);
-            await PopulateClient(ten_id, client_id, client_base_url, suffix);
+            await PopulateClient(ten_id, client_id, client_base_url, client_relative_url, suffix);
             await PopulateClaim(claim_keys);
             await PopulateUser(ten_id, client_id, user_email, _util.ServerConfig.DefaultPw, user_suffix ?? "", string.IsNullOrEmpty((user_type ?? "").Trim()) ? "user" : user_type);
             await PopulateUserClaims(ten_id, client_id, user_email, claim_keys);
@@ -74,7 +75,7 @@ namespace Ark.oAuth
                     _error.AppendLine($"claim: {claim_key} already exists in the list.");
             }
         }
-        async Task PopulateClient(string ten_id, string client_id, string client_base_url, string suffix)
+        async Task PopulateClient(string ten_id, string client_id, string client_base_url, string suffix, string client_relative_url)
         {
             var cll = await _da.GetClient(ten_id, client_id);
             if (cll == null)
@@ -88,7 +89,8 @@ namespace Ark.oAuth
                     domain = $"{domain}",
                     expire_mins = 480,
                     name = $"{client_id} [{suffix}-Name]",
-                    redirect_relative = $"/planner/{client_id}/schedule/landing",
+                    //redirect_relative = $"/planner/{client_id}/schedule/landing", //move to parameter
+                    redirect_relative = client_relative_url,
                     redirect_url = $"{client_base_url}/oauth/{ten_id}/v1/client/{client_id}/callback",
                     logout_url = $"{client_base_url}/oauth/{ten_id}/v1/client/logoff",
                     at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
