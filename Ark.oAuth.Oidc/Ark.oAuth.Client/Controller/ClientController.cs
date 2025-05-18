@@ -57,7 +57,7 @@ namespace Ark.oAuth.Client
             return cc;
         }
         [Authorize]
-        [Route("{tenant_id}/v1/client{client_id}/logoff")]
+        [Route("{tenant_id}/v1/client/{client_id}/logoff")]
         public dynamic Logoff()
         {
             var cc = LoadConfig();
