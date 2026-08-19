@@ -407,3 +407,21 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# ---------------------------------------------------------------------------
+# Runtime databases — never commit these.
+# The IdP stores tenant RSA signing keys and user credential hashes in its
+# SQLite database, so a committed .db is a credential leak. Rules are broad
+# on purpose: provision a fresh database at deploy time instead.
+# ---------------------------------------------------------------------------
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Private key / certificate material
+*.pem
+*.key
+*.pfx
+*.p12
