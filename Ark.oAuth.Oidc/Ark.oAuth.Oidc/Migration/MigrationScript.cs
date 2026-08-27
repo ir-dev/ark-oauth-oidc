@@ -1,7 +1,6 @@
 ﻿using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Mysqlx.Expr;
 
 namespace Ark.oAuth.Oidc
 {

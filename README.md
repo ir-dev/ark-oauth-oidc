@@ -3,7 +3,7 @@
 A self-contained OAuth 2.1 and OpenID Connect provider for ASP.NET Core, distributed as two
 NuGet packages: `Ark.oAuth.Oidc` (the server) and `Ark.oAuth.Client` (the client).
 
-It is multi-tenant, runs on SQLite / MySQL / PostgreSQL / SQL Server, and ships its own sign-in,
+It is multi-tenant, runs on SQLite / MySQL / PostgreSQL, and ships its own sign-in,
 consent and admin UI. Point any standard OpenID Connect library at the issuer URL and it will
 configure itself.
 
@@ -107,7 +107,7 @@ app.Run();
     "TenantId": "my_idp",              // a client named "<TenantId>_client" is created for the admin console
     "BasePath": "",                    // set if the app is hosted under a sub-path
     "BaseUrl": "https://idp.example.com",
-    "Provider": "sqlite",              // sqlite (default) | mysql | postgres | sqlserver
+    "Provider": "sqlite",              // sqlite (default) | mysql | postgres
     "EnableLogTrace": true,
     "UploadPath": "./wwwroot/{0}/",
     "DefaultPw": "<initial password for new users>",

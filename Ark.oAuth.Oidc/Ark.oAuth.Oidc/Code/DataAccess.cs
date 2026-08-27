@@ -1,7 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Mysqlx.Expr;
-using MySqlX.XDevAPI;
 
 namespace Ark.oAuth.Oidc
 {

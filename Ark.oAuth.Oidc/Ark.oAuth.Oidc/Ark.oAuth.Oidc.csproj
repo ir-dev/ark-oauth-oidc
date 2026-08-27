@@ -41,7 +41,7 @@
 		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<PackageId>Ark.oAuth.Oidc</PackageId>
 		<Title>Ark Identity Server — OAuth 2.1 / OpenID Connect provider</Title>
-		<Description>A self-contained OAuth 2.1 and OpenID Connect provider for ASP.NET Core. Two lines in Program.cs give you authorization code + PKCE, refresh tokens, client credentials, the device grant, PAR, introspection, revocation, dynamic client registration, RP-initiated logout and a discovery document any standard OIDC library can configure itself from. Multi-tenant, runs on SQLite, MySQL, PostgreSQL or SQL Server, and ships its own sign-in, consent and admin UI. Pair it with Ark.oAuth.Client for the application side.</Description>
+		<Description>A self-contained OAuth 2.1 and OpenID Connect provider for ASP.NET Core. Two lines in Program.cs give you authorization code + PKCE, refresh tokens, client credentials, the device grant, PAR, introspection, revocation, dynamic client registration, RP-initiated logout and a discovery document any standard OIDC library can configure itself from. Multi-tenant, runs on SQLite, MySQL or PostgreSQL, and ships its own sign-in, consent and admin UI. Pair it with Ark.oAuth.Client for the application side.</Description>
 		<Authors>Immanuel R</Authors>
 		<Company>Immanuel</Company>
 		<Product>Ark Identity Server</Product>
@@ -237,14 +237,41 @@ projects, and now carries a readme, an SPDX license expression and a symbol pack
 		<EmbeddedResource Include="Migration\**\*.sql" />
 	</ItemGroup>
 
-	<!-- ============================== Dependencies ============================== -->
+	<!-- ==============================================================================
+		Dependencies.
+
+		Every EF Core package below used to arrive transitively, through a reference to
+		Ark.EfCore 0.0.1.3. Nothing in this project ever used a type from that package — its
+		public surface is one DbContext subclass, one settings POCO and one AddArkContext<T>()
+		extension, and this project has its own ArkDataContext and its own registration — so it
+		was acting purely as a carrier for the four EF provider packages it happened to depend on.
+		That is worth avoiding: the EF version this package built against was decided by somebody
+		else's release, it pinned EF at 8.0.x on a net9.0 target, and it dragged in a SQL Server
+		provider stack (Microsoft.Data.SqlClient plus its native SNI runtime) that
+		ArkDataContext.OnConfiguring has no branch to select. The providers are now named here.
+
+		Sqlite / MySQL / Postgres are the three OnConfiguring can actually switch on, so they are
+		the three that are referenced. SQL Server is deliberately absent: setting Provider to
+		"sqlserver" fell through every branch and left the context with no provider configured, so
+		it has never been a working option and shipping the client library implied otherwise.
+	     ============================================================================== -->
 	<ItemGroup>
-		<PackageReference Include="Ark.EfCore" Version="0.0.1.3" />
 		<PackageReference Include="ark.net.util" Version="1.0.4.14" />
-		<PackageReference Include="Azure.Identity" Version="1.13.2" />
-		<PackageReference Include="BouncyCastle.Cryptography" Version="2.5.1" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.19" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.19" />
+		<PackageReference Include="MySql.EntityFrameworkCore" Version="9.0.17" />
+		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
 		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.8.0" />
 		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.8.0" />
+		<!--
+			Not used by this assembly — pinned to keep the graph on one Microsoft.IdentityModel
+			version. MySql.Data (under MySql.EntityFrameworkCore) asks for
+			Microsoft.IdentityModel.Protocols.OpenIdConnect 7.5.0 while everything else here is on
+			8.8.0, and that split does not fail at restore or at build: it fails at the first OIDC
+			challenge, with a MethodAccessException or a missing-method error that names neither
+			package. Raising the floor to 8.8.0 keeps Protocols and Tokens on the same major.
+		-->
+		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.8.0" />
 	</ItemGroup>
 
 </Project>
