@@ -121,7 +121,8 @@ Your issuer is `{BaseUrl}/{TenantId}`, and discovery lives at
 | Device Grant (RFC 8628) | With `verification_uri_complete` |
 | PAR (RFC 9126) | Optional, can be made mandatory |
 | Dynamic Registration (RFC 7591/7592) | Optional, off by default |
-| RP-Initiated Logout 1.0 | `end_session_endpoint` |
+| RP-Initiated Logout 1.0 | `end_session_endpoint`, browser-wide by default |
+| Back-Channel Logout 1.0 | Signed `logout_token` POSTed to each client that took part |
 | Issuer Identification (RFC 9207) | `iss` in the authorization response |
 | Native Apps (RFC 8252) | Loopback redirect URIs with variable ports |
 

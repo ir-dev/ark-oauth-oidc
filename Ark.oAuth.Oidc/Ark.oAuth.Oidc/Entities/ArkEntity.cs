@@ -135,6 +135,26 @@ namespace Ark.oAuth
         /// <summary>Hash of the registration access token issued by dynamic client registration (RFC 7591).</summary>
         public string? registration_access_token_hash { get; set; }
 
+        /// <summary>
+        /// Where to POST a logout token when a session this client took part in ends
+        /// (OIDC Back-Channel Logout 1.0 §2.2). Empty means the client is not notified — its own
+        /// application cookie then outlives the IdP session, which is the whole problem
+        /// back-channel logout exists to solve.
+        /// </summary>
+        public string? backchannel_logout_uri { get; set; }
+
+        /// <summary>
+        /// Whether the logout token has to carry a <c>sid</c>. On by default, matching how this
+        /// server signs users in: every browser session has a session id and puts it in the
+        /// id_token, so a client can end exactly the session that was named rather than every
+        /// session it holds for that subject.
+        /// </summary>
+        public bool backchannel_logout_session_required { get; set; } = true;
+
+        /// <summary>True when this client has somewhere to receive a logout token.</summary>
+        [NotMapped]
+        public bool SupportsBackChannelLogout => !string.IsNullOrWhiteSpace(backchannel_logout_uri);
+
         // --- effective views: fall back to the legacy single-valued columns ---
 
         [NotMapped]

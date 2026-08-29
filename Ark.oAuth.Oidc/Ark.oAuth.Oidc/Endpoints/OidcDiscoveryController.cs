@@ -79,8 +79,16 @@ namespace Ark.oAuth.Oidc.Endpoints
                     ["request_uri_parameter_supported"] = opt.EnablePushedAuthorizationRequests,
                     ["require_request_uri_registration"] = false,
                     ["authorization_response_iss_parameter_supported"] = true, // RFC 9207
-                    ["frontchannel_logout_supported"] = true,
-                    ["frontchannel_logout_session_supported"] = true,
+                    // Back-channel logout is implemented: a client that registers a
+                    // backchannel_logout_uri is POSTed a logout token when a session it took part
+                    // in ends, and that token always carries sid.
+                    ["backchannel_logout_supported"] = true,
+                    ["backchannel_logout_session_supported"] = true,
+                    // Front-channel logout is not. These two advertised it anyway, which is worse
+                    // than saying nothing: a client that reads the document configures a logout
+                    // flow that this server has no endpoint for and no way to register.
+                    ["frontchannel_logout_supported"] = false,
+                    ["frontchannel_logout_session_supported"] = false,
 
                     ["service_documentation"] = $"{ep.BaseUrl}/oauth/docs",
                     ["ui_locales_supported"] = new[] { "en" },

@@ -497,14 +497,15 @@
 
     var TEXT_FIELDS = [
         "client_id", "client_name", "display", "name", "domain", "client_logo",
-        "client_uri", "policy_uri", "tos_uri", "jwks_uri",
+        "client_uri", "policy_uri", "tos_uri", "jwks_uri", "backchannel_logout_uri",
         "redirect_url", "logout_url", "redirect_relative"
     ];
     var NUMBER_FIELDS = [
         "access_token_lifetime_seconds", "id_token_lifetime_seconds",
         "refresh_token_lifetime_seconds", "authorization_code_lifetime_seconds", "expire_mins"
     ];
-    var FLAG_FIELDS = ["is_active", "require_pkce", "require_par", "require_consent", "refresh_token_rotation"];
+    var FLAG_FIELDS = ["is_active", "require_pkce", "require_par", "require_consent", "refresh_token_rotation",
+        "backchannel_logout_session_required"];
 
     function openClient(client) {
         editing = client ? Object.assign({}, client) : {
@@ -513,6 +514,7 @@
             is_active: true,
             require_pkce: true,
             refresh_token_rotation: true,
+            backchannel_logout_session_required: true,
             access_token_lifetime_seconds: 3600,
             id_token_lifetime_seconds: 3600,
             refresh_token_lifetime_seconds: 1209600,

@@ -1,4 +1,4 @@
-@model Ark.oAuth.Oidc.Endpoints.OidcErrorPageModel
+@model Ark.oAuth.Oidc.Endpoints.LoggedOutPageModel
 @{
     Layout = "~/Views/Oidc/_ArkLayout.cshtml";
     ViewBag.Brand = Model.Brand;
@@ -13,6 +13,22 @@
 
 <h1>You're signed out</h1>
 <p class="ark-sub">@(Model.Description ?? "Your session has ended.")</p>
+
+@if (Model.ClientsNotified > 0)
+{
+    <p class="ark-meta">
+        @Model.ClientsNotified application@(Model.ClientsNotified == 1 ? " was" : "s were") signed out with you.
+    </p>
+}
+@if (Model.ClientsFailed > 0)
+{
+    @* Named rather than hidden: an application that did not accept the notice still believes the
+       user is signed in, and closing the browser is the only thing they can do about it. *@
+    <p class="ark-meta">
+        @Model.ClientsFailed application@(Model.ClientsFailed == 1 ? "" : "s") could not be reached
+        and may still be open.
+    </p>
+}
 
 <p class="ark-meta">
     For extra safety on a shared computer, close the browser entirely.

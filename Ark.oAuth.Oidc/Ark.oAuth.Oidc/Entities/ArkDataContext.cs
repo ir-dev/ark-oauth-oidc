@@ -22,6 +22,7 @@ namespace Ark.oAuth.Oidc
         public virtual DbSet<ArkParRequest> par_requests { get; set; }
         public virtual DbSet<ArkConsent> consents { get; set; }
         public virtual DbSet<ArkSession> sessions { get; set; }
+        public virtual DbSet<ArkSessionClient> session_clients { get; set; }
         public virtual DbSet<ArkScope> scopes { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)

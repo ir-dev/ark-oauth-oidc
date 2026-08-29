@@ -56,6 +56,12 @@ namespace Ark.oAuth.Oidc
         public string? client_logo { get; set; }
         public List<string>? redirect_uris { get; set; }
         public List<string>? post_logout_redirect_uris { get; set; }
+        /// <summary>
+        /// Optional. Where to POST a logout token when a session this application took part in
+        /// ends (OIDC Back-Channel Logout 1.0). Leave it unset and the application is never
+        /// notified, so its own session outlives the one at the IdP.
+        /// </summary>
+        public string? backchannel_logout_uri { get; set; }
         /// <summary>Defaults to openid / profile / email / offline_access.</summary>
         public List<string>? scopes { get; set; }
         /// <summary>web | spa | native | service. Defaults to web.</summary>
@@ -225,7 +231,10 @@ namespace Ark.oAuth.Oidc
                 response_types = new List<string> { "code" },
                 scopes = scopes,
                 redirect_uris = redirects,
-                post_logout_redirect_uris = logouts
+                post_logout_redirect_uris = logouts,
+                backchannel_logout_uri = string.IsNullOrWhiteSpace(req.backchannel_logout_uri)
+                    ? null : req.backchannel_logout_uri!.Trim(),
+                backchannel_logout_session_required = true
             });
 
             // The account is looked up before the upsert so the response can say whether this call

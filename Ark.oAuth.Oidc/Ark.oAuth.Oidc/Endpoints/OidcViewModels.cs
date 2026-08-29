@@ -65,6 +65,18 @@ namespace Ark.oAuth.Oidc.Endpoints
         public string? Description { get; set; }
     }
 
+    /// <summary>
+    /// The signed-out page. Carries what the sign-out actually did, because on a shared browser
+    /// "you have been signed out" understates it — several people may have been.
+    /// </summary>
+    public class LoggedOutPageModel : OidcErrorPageModel
+    {
+        public int SessionsEnded { get; set; }
+        public int SubjectsEnded { get; set; }
+        public int ClientsNotified { get; set; }
+        public int ClientsFailed { get; set; }
+    }
+
     /// <summary>The device grant's user-code entry and confirmation page.</summary>
     public class DevicePageModel
     {

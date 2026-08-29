@@ -528,6 +528,7 @@ namespace Ark.oAuth.Oidc
             services.AddScoped<Protocol.ArkTokenService>();
             services.AddScoped<Protocol.ArkGrantStore>();
             services.AddScoped<Protocol.ArkClientAuthenticator>();
+            services.AddScoped<Protocol.ArkBackChannelLogout>();
 
             // browser clients (SPAs) redeem their code from the page itself, so the token and
             // userinfo endpoints need a CORS policy — see ark_oauth_server:Oidc:CorsOrigins

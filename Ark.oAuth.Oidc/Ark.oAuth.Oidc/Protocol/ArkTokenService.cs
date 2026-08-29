@@ -107,6 +107,46 @@ namespace Ark.oAuth.Oidc.Protocol
             return Sign(payload, key, "JWT");
         }
 
+        /// <summary>
+        /// A logout token (OIDC Back-Channel Logout 1.0 §2.4) — the artefact POSTed to a client's
+        /// backchannel_logout_uri to tell it a session has ended.
+        ///
+        /// It deliberately looks almost, but not quite, like an ID token, and the differences are
+        /// the security-relevant part. <c>typ: logout+jwt</c> in the header and the <c>events</c>
+        /// claim identify it positively, and there is no <c>nonce</c> — the spec forbids one, so
+        /// that a client which validates logout tokens through its ID token path cannot be handed
+        /// a logout token where an ID token was expected, or the reverse.
+        /// </summary>
+        public async Task<string> IssueLogoutTokenAsync(ArkTenant tenant, ArkClient client, string issuer,
+            string subject, string? sessionId, int lifetimeSeconds)
+        {
+            var key = await _keys.GetActiveKeyAsync(tenant.tenant_id);
+            var now = DateTime.UtcNow;
+
+            var payload = new Dictionary<string, object>
+            {
+                ["iss"] = issuer,
+                ["aud"] = client.client_id,
+                ["iat"] = ToUnix(now),
+                ["exp"] = ToUnix(now.AddSeconds(lifetimeSeconds > 0 ? lifetimeSeconds : 120)),
+                ["jti"] = ArkCrypto.RandomToken(16),
+                // The literal URN from §2.4. Its presence, and the empty object as its value, is
+                // how a client tells a logout token from any other JWT this server signs.
+                ["events"] = new Dictionary<string, object>
+                {
+                    ["http://schemas.openid.net/event/backchannel-logout"] = new Dictionary<string, object>()
+                }
+            };
+
+            // §2.4 requires at least one of sub and sid. Both are sent when both are known: sid
+            // lets the client end exactly the session that ended here, and sub lets a client that
+            // never stored the sid fall back to ending every session it holds for that user.
+            if (!string.IsNullOrEmpty(subject)) payload["sub"] = subject;
+            if (!string.IsNullOrEmpty(sessionId)) payload["sid"] = sessionId!;
+
+            return Sign(payload, key, "logout+jwt");
+        }
+
         private static string Sign(Dictionary<string, object> payload, ArkSigningKey key, string typ)
         {
             var rsa = ArkCrypto.ImportPrivateKey(key.private_key);

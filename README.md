@@ -42,7 +42,8 @@ configure itself.
 | Device Authorization Grant (RFC 8628) | With `verification_uri_complete` |
 | Pushed Authorization Requests (RFC 9126) | Optional, can be made mandatory |
 | Dynamic Client Registration (RFC 7591/7592) | Optional, off by default |
-| RP-Initiated Logout 1.0 | `end_session_endpoint` |
+| RP-Initiated Logout 1.0 | `end_session_endpoint`, browser-wide by default |
+| Back-Channel Logout 1.0 | Signed `logout_token` POSTed to each client that took part |
 | Authorization Server Issuer Identification (RFC 9207) | `iss` in the authorization response |
 | Native Apps (RFC 8252) | Loopback redirect URIs with variable ports |
 
@@ -293,6 +294,61 @@ All paths are relative to the issuer, `{BaseUrl}/{TenantId}`.
 | Pushed authorization request | `/oauth2/par` |
 | Dynamic registration | `/oauth2/register` |
 | Client setup page | `/oauth2/integrate/{client_id}` |
+
+---
+
+## Signing out
+
+`end_session_endpoint` is `/{tenant_id}/oauth2/logout`. Two things about it are worth knowing
+before you point a client at it.
+
+### It signs out the whole browser, not one session
+
+The IdP session cookie holds a single `sid`, but a browser accumulates sessions: each sign-in
+creates one and overwrites the cookie, so every earlier session stays live — with its refresh
+tokens — while becoming unreachable from the browser. On a shared machine that is a different
+person. Ending only the session the cookie names is a sign-out that leaves the previous user signed
+in everywhere they had been, and it looks like it worked.
+
+So a second cookie, `ark_idp_bid`, identifies the **browser** rather than the sign-in, every
+session records the browser it was created in, and `end_session_endpoint` ends all of them. The
+signed-out page says how many, and for how many accounts, because "you have been signed out"
+understates it when it was three people.
+
+`ark_idp_bid` is a random value that means nothing on its own, it is kept across sign-out — it
+identifies the user agent, not the user — and dropping it would only leave the next sign-out unable
+to find the sessions before it.
+
+### Clients are told, if they ask to be
+
+Register a `backchannel_logout_uri` on a client and it is POSTed a signed `logout_token` whenever a
+session it took part in ends — `application/x-www-form-urlencoded`, one `logout_token` parameter,
+answer 200 or 204. The token is `typ: logout+jwt`, carries the
+`http://schemas.openid.net/event/backchannel-logout` event and, unless the client turns
+`backchannel_logout_session_required` off, the `sid` to end. It never carries a `nonce`, so it
+cannot be replayed into an ID token validator. Verify it against the same JWKS as an ID token.
+
+Set it in the client editor, at `/oauth2/register` (RFC 7591), or in the provisioning call. A
+client with no URI registered is simply never contacted, which is where every existing client
+starts.
+
+The clients to notify are the ones that were logged in under the session — recorded when the
+authorization code is issued, not derived from live refresh tokens, which would miss every client
+that never asked for `offline_access`. Sessions are revoked before the first notification goes out
+and each delivery has its own timeout, so **a client that is down cannot stop a user signing out**;
+the failure is logged as a warning and named on the signed-out page.
+
+| Setting | Default | |
+|---|---|---|
+| `Oidc:EnableBackChannelLogout` | `true` | Notifies nobody until a client registers a URI |
+| `Oidc:BackChannelLogoutTimeoutSeconds` | `5` | Per client; deliveries run in parallel |
+| `Oidc:LogoutTokenLifetimeSeconds` | `120` | |
+| `Oidc:SignOutAllBrowserSessions` | `true` | Off ends only the session the cookie names |
+| `Oidc:SignOutAcrossTenants` | `true` | Off keeps a sign-out inside the tenant it was asked of |
+
+Front-channel logout is **not** implemented. Discovery previously advertised
+`frontchannel_logout_supported: true` anyway; it now reports `false`, which is what the server can
+actually back.
 
 ---
 

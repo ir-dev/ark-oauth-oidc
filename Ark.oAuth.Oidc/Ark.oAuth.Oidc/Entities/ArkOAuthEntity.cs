@@ -167,16 +167,60 @@ namespace Ark.oAuth
     /// </summary>
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     [Index(nameof(subject))]
+    [Index(nameof(browser_id))]
     public class ArkSession
     {
         [Key]
         public string session_id { get; set; } = default!;
         public string tenant_id { get; set; } = default!;
         public string subject { get; set; } = default!;
+        /// <summary>
+        /// The browser this session was created in, from the long-lived ark_idp_bid cookie.
+        ///
+        /// A session id identifies one sign-in; this identifies the user agent all of them
+        /// happened in. Without it there is no way to answer "who else is signed in here": the
+        /// session cookie only ever holds the most recent sid, so a second person signing in on
+        /// the same machine leaves the first session live in the database with its refresh
+        /// tokens intact, and signing out only ends the one the cookie happens to name. Grouping
+        /// by browser is what lets end_session close all of them at once.
+        ///
+        /// Nullable, because sessions created before this column existed have no browser to
+        /// name, and because a session may be created outside a browser flow.
+        /// </summary>
+        public string? browser_id { get; set; }
         public DateTime auth_time { get; set; } = DateTime.UtcNow;
         public DateTime created_at { get; set; } = DateTime.UtcNow;
         public DateTime expires_at { get; set; }
         public bool revoked { get; set; }
+    }
+
+    /// <summary>
+    /// A client that took part in a session — one row the first time a session issues that
+    /// client an authorization code or approves a device request.
+    ///
+    /// This is the audience list for back-channel logout (OIDC Back-Channel Logout 1.0 §2.6):
+    /// when a session ends, the clients to notify are exactly those that were logged in under
+    /// it. The alternative — deriving the list from live refresh tokens — misses every client
+    /// that never asked for offline_access, which is most of them, and misses any client whose
+    /// tokens have already expired while its own application cookie is still valid.
+    /// </summary>
+    [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    [Index(nameof(session_id))]
+    public class ArkSessionClient
+    {
+        /// <summary>
+        /// "{session_id}.{client_id}" — derived rather than generated, so recording the same
+        /// pair twice is a primary-key lookup and not a scan plus a duplicate row.
+        /// </summary>
+        [Key]
+        public string id { get; set; } = default!;
+        public string tenant_id { get; set; } = default!;
+        public string session_id { get; set; } = default!;
+        public string client_id { get; set; } = default!;
+        public string subject { get; set; } = default!;
+        public DateTime created_at { get; set; } = DateTime.UtcNow;
+
+        public static string KeyFor(string sessionId, string clientId) => $"{sessionId}.{clientId}";
     }
 
     /// <summary>

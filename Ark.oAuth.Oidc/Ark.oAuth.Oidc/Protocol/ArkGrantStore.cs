@@ -462,13 +462,15 @@ namespace Ark.oAuth.Oidc.Protocol
         // Sessions
         // -----------------------------------------------------------------
 
-        public async Task<ArkSession> CreateSessionAsync(string tenantId, string subject, int lifetimeMinutes)
+        public async Task<ArkSession> CreateSessionAsync(string tenantId, string subject, int lifetimeMinutes,
+            string? browserId = null)
         {
             var session = new ArkSession
             {
                 session_id = ArkCrypto.RandomToken(16),
                 tenant_id = tenantId,
                 subject = subject,
+                browser_id = string.IsNullOrWhiteSpace(browserId) ? null : browserId,
                 auth_time = DateTime.UtcNow,
                 created_at = DateTime.UtcNow,
                 expires_at = DateTime.UtcNow.AddMinutes(lifetimeMinutes)
@@ -499,6 +501,100 @@ namespace Ark.oAuth.Oidc.Protocol
             await _ctx.SaveChangesAsync();
         }
 
+        /// <summary>
+        /// Every live session that belongs to one browser, newest first.
+        ///
+        /// This is the set signing out has to close. A browser holds one session cookie but can
+        /// have accumulated any number of live sessions behind it — each sign-in creates one and
+        /// replaces the cookie, so the earlier ones become unreachable from the browser while
+        /// staying perfectly valid at the token endpoint.
+        /// </summary>
+        public async Task<List<ArkSession>> GetBrowserSessionsAsync(string? browserId, string? tenantId = null)
+        {
+            if (string.IsNullOrEmpty(browserId)) return new List<ArkSession>();
+            var now = DateTime.UtcNow;
+            var query = _ctx.sessions.AsNoTracking()
+                .Where(s => s.browser_id == browserId && !s.revoked && s.expires_at > now);
+            if (!string.IsNullOrEmpty(tenantId))
+                query = query.Where(s => s.tenant_id.ToLower() == tenantId!.ToLower());
+            return await query.OrderByDescending(s => s.created_at).ToListAsync();
+        }
+
+        /// <summary>
+        /// Ends several sessions at once, returning the ones that were actually live.
+        ///
+        /// The return value is what back-channel logout notifies on: a session already revoked or
+        /// already expired must not produce a second round of logout tokens, so a double submit
+        /// of the logout form does not re-notify every client.
+        /// </summary>
+        public async Task<List<ArkSession>> RevokeSessionsAsync(IEnumerable<string> sessionIds)
+        {
+            var ids = sessionIds.Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
+            if (ids.Count == 0) return new List<ArkSession>();
+
+            var now = DateTime.UtcNow;
+            var sessions = await _ctx.sessions
+                .Where(s => ids.Contains(s.session_id) && !s.revoked && s.expires_at > now)
+                .ToListAsync();
+
+            foreach (var session in sessions)
+            {
+                session.revoked = true;
+                await RevokeTokensForSessionAsync(session.session_id);
+            }
+            if (sessions.Count > 0)
+            {
+                _ctx.sessions.UpdateRange(sessions);
+                await _ctx.SaveChangesAsync();
+            }
+            return sessions;
+        }
+
+        /// <summary>
+        /// Records that a client was logged in under a session, so it can be told when that
+        /// session ends. Called the first time a session hands the client a code or approves its
+        /// device request; recording the same pair again is a no-op.
+        /// </summary>
+        public async Task TrackSessionClientAsync(string tenantId, string? sessionId, string clientId, string subject)
+        {
+            if (string.IsNullOrEmpty(sessionId) || string.IsNullOrEmpty(clientId)) return;
+
+            var id = ArkSessionClient.KeyFor(sessionId!, clientId);
+            if (await _ctx.session_clients.AsNoTracking().AnyAsync(sc => sc.id == id)) return;
+
+            _ctx.session_clients.Add(new ArkSessionClient
+            {
+                id = id,
+                tenant_id = tenantId,
+                session_id = sessionId!,
+                client_id = clientId,
+                subject = subject,
+                created_at = DateTime.UtcNow
+            });
+            try
+            {
+                await _ctx.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // Two tabs finishing the same authorization at once both pass the check above and
+                // both insert the same key. Losing that race costs nothing — the row the winner
+                // wrote is the row this call wanted — but letting it surface would fail an
+                // authorization that had otherwise succeeded.
+                _ctx.ChangeTracker.Clear();
+            }
+        }
+
+        /// <summary>The client ids that were logged in under the given sessions, per session.</summary>
+        public async Task<List<ArkSessionClient>> GetSessionClientsAsync(IEnumerable<string> sessionIds)
+        {
+            var ids = sessionIds.Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
+            if (ids.Count == 0) return new List<ArkSessionClient>();
+            return await _ctx.session_clients.AsNoTracking()
+                .Where(sc => ids.Contains(sc.session_id))
+                .ToListAsync();
+        }
+
         // -----------------------------------------------------------------
         // Housekeeping
         // -----------------------------------------------------------------
@@ -523,6 +619,17 @@ namespace Ark.oAuth.Oidc.Protocol
 
             var sessions = await _ctx.sessions.Where(s => s.expires_at <= now).ToListAsync();
             _ctx.sessions.RemoveRange(sessions); removed += sessions.Count;
+
+            // The participation rows outlive nothing: once the session is gone there is nobody
+            // left to notify, and leaving them behind is what turns this table into the largest
+            // one in the database.
+            var expiredSessionIds = sessions.Select(s => s.session_id).ToList();
+            if (expiredSessionIds.Count > 0)
+            {
+                var orphaned = await _ctx.session_clients
+                    .Where(sc => expiredSessionIds.Contains(sc.session_id)).ToListAsync();
+                _ctx.session_clients.RemoveRange(orphaned); removed += orphaned.Count;
+            }
 
             if (removed > 0) await _ctx.SaveChangesAsync();
             return removed;

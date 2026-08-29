@@ -17,15 +17,26 @@ namespace Ark.oAuth.Oidc.Endpoints
     {
         private readonly ArkGrantStore _grants;
         private readonly ArkClaimsService _claims;
+        private readonly ArkBackChannelLogout _backchannel;
         private readonly DataAccess _da;
 
         public const string SessionCookie = "ark_idp_sid";
 
+        /// <summary>
+        /// Identifies the browser rather than the sign-in. Long-lived and re-used across sessions,
+        /// so every session created in this user agent can be found again — see
+        /// <see cref="ArkSession.browser_id"/>. Carries no identity of its own: it is a random
+        /// value that means nothing without the session rows that point at it.
+        /// </summary>
+        public const string BrowserCookie = "ark_idp_bid";
+
         public OidcAuthorizeController(ArkDataContext ctx, IConfiguration config,
-            ArkGrantStore grants, ArkClaimsService claims, DataAccess da) : base(ctx, config)
+            ArkGrantStore grants, ArkClaimsService claims, ArkBackChannelLogout backchannel, DataAccess da)
+            : base(ctx, config)
         {
             _grants = grants;
             _claims = claims;
+            _backchannel = backchannel;
             _da = da;
         }
 
@@ -178,7 +189,11 @@ namespace Ark.oAuth.Oidc.Endpoints
                         .FirstOrDefaultAsync(u => u.email.ToLower() == session.subject.ToLower());
                     if (holder != null && !holder.is_active)
                     {
-                        await _grants.RevokeSessionAsync(session.session_id);
+                        var dropped = await _grants.RevokeSessionsAsync(new[] { session.session_id });
+                        // The applications this session had opened are still showing the user as
+                        // signed in. Dropping the session here without telling them is what leaves
+                        // a deactivated account working everywhere except the sign-in page.
+                        await _backchannel.NotifyAsync(dropped, tid => Endpoints(tid).Issuer, "user_deactivated");
                         var inactive = new ArkAccountInactiveException(ArkActivationLevel.User, holder.name ?? holder.email);
                         _da.Log("signin_inactive", tenant.tenant_id, "session dropped: user deactivated",
                             $"user: {session.subject}, client: {client.client_id}", "warn");
@@ -197,7 +212,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                     {
                         var username = form?["username"].ToString() ?? "";
                         var password = form?["password"].ToString() ?? "";
-                        var signIn = await TrySignInAsync(tenant, client, username, password);
+                        var signIn = await TrySignInAsync(tenant, client, username, password, EnsureBrowserId());
                         if (signIn.error != null)
                             return LoginPage(brand, client, signIn.error, username, tenant);
                         session = signIn.session!;
@@ -249,6 +264,12 @@ namespace Ark.oAuth.Oidc.Endpoints
                 var code = await _grants.CreateAuthCodeAsync(client, tenant.tenant_id, session.subject,
                     redirectUri!, scopes, codeChallenge, codeChallengeMethod, nonce, session.session_id, session.auth_time);
 
+                // From here the client is logged in under this session, so it has to be told when
+                // the session ends. Recorded at the code rather than at the token exchange: a code
+                // that is never redeemed costs one row, whereas a client missed here is a client
+                // that silently keeps its own session alive after logout.
+                await _grants.TrackSessionClientAsync(tenant.tenant_id, session.session_id, client.client_id, session.subject);
+
                 var response = new Dictionary<string, string> { ["code"] = code };
                 if (!string.IsNullOrEmpty(state)) response["state"] = state!;
                 response["iss"] = ep.Issuer; // RFC 9207 mix-up defence
@@ -279,7 +300,7 @@ namespace Ark.oAuth.Oidc.Endpoints
         // -----------------------------------------------------------------
 
         private async Task<(ArkSession? session, string? error)> TrySignInAsync(
-            ArkTenant tenant, ArkClient client, string username, string password)
+            ArkTenant tenant, ArkClient client, string username, string password, string browserId)
         {
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
                 return (null, "Enter your username and password.");
@@ -303,7 +324,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                 if (user.reset_mode ?? false)
                     return (null, "This account needs its password set. Check your email for the activation link.");
 
-                var session = await _grants.CreateSessionAsync(tenant.tenant_id, user.email, opt.SessionLifetimeMinutes);
+                var session = await _grants.CreateSessionAsync(
+                    tenant.tenant_id, user.email, opt.SessionLifetimeMinutes, browserId);
                 _da.Log("signin", tenant.tenant_id, "sign-in succeeded", $"user: {username}, client: {client.client_id}");
                 return (session, null);
             }
@@ -324,6 +346,38 @@ namespace Ark.oAuth.Oidc.Endpoints
                 return (null, "That username and password combination was not recognised.");
             }
         }
+
+        /// <summary>
+        /// Reads the browser id, minting and setting one when this user agent has not been here
+        /// before. Called at sign-in, so a browser that only ever gets redirected away is not
+        /// given a cookie it has no use for.
+        ///
+        /// The cookie deliberately outlives any single session — it is what a later sign-out uses
+        /// to find every session created here, including ones whose sid the session cookie has
+        /// long since overwritten.
+        /// </summary>
+        private string EnsureBrowserId()
+        {
+            var existing = Request.Cookies[BrowserCookie];
+            if (!string.IsNullOrWhiteSpace(existing)) return existing!;
+            // The request cookie collection is read-only, so a value minted here would be
+            // unreadable for the rest of this request; hold it instead.
+            if (!string.IsNullOrEmpty(_mintedBrowserId)) return _mintedBrowserId!;
+
+            var browserId = ArkCrypto.RandomToken(16);
+            Response.Cookies.Append(BrowserCookie, browserId, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Lax,
+                Expires = DateTimeOffset.UtcNow.AddYears(1),
+                Path = string.IsNullOrEmpty(Request.PathBase) ? "/" : Request.PathBase.Value!
+            });
+            _mintedBrowserId = browserId;
+            return browserId;
+        }
+
+        private string? _mintedBrowserId;
 
         private void AppendSessionCookie(ArkSession session)
         {

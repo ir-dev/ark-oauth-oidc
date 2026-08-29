@@ -31,6 +31,49 @@ namespace Ark.oAuth.Oidc.Protocol
         public bool AlwaysRequireConsent { get; set; } = false;
 
         /// <summary>
+        /// POST a signed logout token to every client that took part in a session that is ending
+        /// (OIDC Back-Channel Logout 1.0). Only clients with a <c>backchannel_logout_uri</c>
+        /// registered are contacted, so turning this on notifies nobody until a client asks to be
+        /// notified.
+        /// </summary>
+        public bool EnableBackChannelLogout { get; set; } = true;
+
+        /// <summary>
+        /// How long to wait for one client's logout endpoint. Delivery is attempted to every
+        /// client in parallel and a failure is logged rather than raised — a client that is down
+        /// must not be able to stop the user signing out.
+        /// </summary>
+        public int BackChannelLogoutTimeoutSeconds { get; set; } = 5;
+
+        /// <summary>Lifetime of a logout token. Short: it is delivered immediately or not at all.</summary>
+        public int LogoutTokenLifetimeSeconds { get; set; } = 120;
+
+        /// <summary>
+        /// End every session that belongs to the same browser, not only the one the session
+        /// cookie names.
+        ///
+        /// This is what makes signing out mean what people expect it to mean on a shared machine.
+        /// The session cookie holds a single sid, so a second person signing in replaces it and
+        /// leaves the first session live in the database — with its refresh tokens, and with the
+        /// first person still signed in at every application they had opened. Signing out then
+        /// ends the newer session and silently leaves the older one running.
+        ///
+        /// Turn it off only where separate sessions in one browser are deliberate and are meant
+        /// to survive each other's logout.
+        /// </summary>
+        public bool SignOutAllBrowserSessions { get; set; } = true;
+
+        /// <summary>
+        /// Whether <see cref="SignOutAllBrowserSessions"/> crosses tenant boundaries.
+        ///
+        /// The browser cookie is one per deployment, not one per tenant, so by default signing
+        /// out really does sign out everybody signed in on that browser — which is the point on a
+        /// shared machine. Set this false where one browser is expected to hold sessions in
+        /// several tenants at once and signing out of one should leave the others alone.
+        /// </summary>
+        public bool SignOutAcrossTenants { get; set; } = true;
+
+        /// <summary>
         /// Browser origins allowed to call the token, userinfo, discovery and JWKS endpoints with
         /// fetch/XHR — the origins of your single-page applications, e.g.
         /// <c>https://localhost:7255</c>.

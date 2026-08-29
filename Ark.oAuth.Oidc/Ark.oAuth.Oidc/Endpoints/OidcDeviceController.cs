@@ -111,6 +111,9 @@ namespace Ark.oAuth.Oidc.Endpoints
                 var scopes = (entry.scope ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
                 await _grants.SaveConsentAsync(tenant.tenant_id, entry.client_id, session.subject, scopes);
                 await _grants.SetDeviceCodeStatusAsync(entry, "approved", session.subject, session.session_id);
+                // The device is now logged in under this session, so it is part of the audience
+                // for back-channel logout when the session ends.
+                await _grants.TrackSessionClientAsync(tenant.tenant_id, session.session_id, entry.client_id, session.subject);
                 _da.Log("device_approved", tenant.tenant_id, "device authorization approved",
                     $"client: {entry.client_id}, sub: {session.subject}");
                 return DevicePage(tenant, "done", null, entry.user_code,

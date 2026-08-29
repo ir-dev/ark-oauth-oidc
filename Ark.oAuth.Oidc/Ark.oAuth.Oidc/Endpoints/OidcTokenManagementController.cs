@@ -15,15 +15,18 @@ namespace Ark.oAuth.Oidc.Endpoints
         private readonly ArkClientAuthenticator _clientAuth;
         private readonly ArkGrantStore _grants;
         private readonly ArkTokenService _tokens;
+        private readonly ArkBackChannelLogout _backchannel;
         private readonly DataAccess _da;
 
         public OidcTokenManagementController(ArkDataContext ctx, IConfiguration config,
-            ArkClientAuthenticator clientAuth, ArkGrantStore grants, ArkTokenService tokens, DataAccess da)
+            ArkClientAuthenticator clientAuth, ArkGrantStore grants, ArkTokenService tokens,
+            ArkBackChannelLogout backchannel, DataAccess da)
             : base(ctx, config)
         {
             _clientAuth = clientAuth;
             _grants = grants;
             _tokens = tokens;
+            _backchannel = backchannel;
             _da = da;
         }
 
@@ -134,7 +137,11 @@ namespace Ark.oAuth.Oidc.Endpoints
                     if (result.IsValid)
                     {
                         var sid = result.ClaimsIdentity?.FindFirst("sid")?.Value;
-                        if (!string.IsNullOrEmpty(sid)) await _grants.RevokeSessionAsync(sid!);
+                        if (!string.IsNullOrEmpty(sid))
+                        {
+                            var ended = await _grants.RevokeSessionsAsync(new[] { sid! });
+                            await _backchannel.NotifyAsync(ended, tid => Endpoints(tid).Issuer, "token_revocation");
+                        }
                     }
                 }
 
@@ -147,7 +154,8 @@ namespace Ark.oAuth.Oidc.Endpoints
         }
 
         // -----------------------------------------------------------------
-        // RP-initiated logout
+        // RP-initiated logout (OIDC RP-Initiated Logout 1.0) and back-channel logout
+        // (OIDC Back-Channel Logout 1.0)
         // -----------------------------------------------------------------
 
         [HttpGet("logout")]
@@ -156,6 +164,7 @@ namespace Ark.oAuth.Oidc.Endpoints
         {
             NoStore();
             var tenant = await ResolveTenantAsync(tenant_id);
+            var opt = Options;
 
             string? Param(string name) =>
                 Request.Query[name].FirstOrDefault()
@@ -177,18 +186,43 @@ namespace Ark.oAuth.Oidc.Endpoints
                 catch { /* an unreadable hint simply yields no client */ }
             }
 
-            // End the session first, so logout still happens even if the redirect is rejected.
+            // --- decide what is being signed out ---
+            //
+            // The cookie names one session, but a browser accumulates them: each sign-in creates a
+            // session and overwrites the cookie, so every earlier session stays live and becomes
+            // unreachable from the browser while remaining perfectly valid at the token endpoint.
+            // On a shared machine that is two different people, and ending only the newest is a
+            // sign-out that leaves the previous user signed in everywhere they had been.
             var sessionId = Request.Cookies[OidcAuthorizeController.SessionCookie];
-            if (!string.IsNullOrEmpty(sessionId))
+            var browserId = Request.Cookies[OidcAuthorizeController.BrowserCookie];
+
+            var targets = new List<string>();
+            if (!string.IsNullOrEmpty(sessionId)) targets.Add(sessionId!);
+
+            if (opt.SignOutAllBrowserSessions && !string.IsNullOrEmpty(browserId))
             {
-                await _grants.RevokeSessionAsync(sessionId!);
-                Response.Cookies.Delete(OidcAuthorizeController.SessionCookie, new CookieOptions
-                {
-                    Path = string.IsNullOrEmpty(Request.PathBase) ? "/" : Request.PathBase.Value!
-                });
+                // Scoped to the tenant unless the deployment says otherwise. The browser cookie is
+                // one per deployment, not one per tenant, so crossing that boundary is a choice.
+                var scope = opt.SignOutAcrossTenants ? null : tenant.tenant_id;
+                foreach (var session in await _grants.GetBrowserSessionsAsync(browserId, scope))
+                    targets.Add(session.session_id);
             }
 
-            _da.Log("logout", $"{tenant.tenant_id}/oauth2/logout", "session ended", $"client: {clientId}");
+            // Revoked first, and before any redirect is validated, so the sign-out has already
+            // happened even if the rest of this request fails. RevokeSessionsAsync returns only
+            // the sessions that were actually live, so a resubmitted logout does not re-notify.
+            var ended = await _grants.RevokeSessionsAsync(targets);
+
+            ClearCookie(OidcAuthorizeController.SessionCookie);
+            // The browser id is deliberately kept: it identifies the user agent, not the user, and
+            // dropping it would leave the next sign-in unable to find sessions created before it.
+
+            var report = await _backchannel.NotifyAsync(ended, tid => Endpoints(tid).Issuer, "rp_logout");
+
+            _da.Log("logout", $"{tenant.tenant_id}/oauth2/logout",
+                $"{report.SessionsEnded} session(s) ended for {report.SubjectsEnded} user(s)",
+                $"client: {clientId}, notified: {report.Notified}, failed: {report.Failed}, " +
+                $"not registered: {report.NotRegistered}");
 
             if (!string.IsNullOrEmpty(postLogoutRedirectUri))
             {
@@ -206,7 +240,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 }
             }
 
-            return View("~/Views/Oidc/LoggedOut.cshtml", new OidcErrorPageModel
+            return View("~/Views/Oidc/LoggedOut.cshtml", new LoggedOutPageModel
             {
                 Brand = new OidcBrandModel
                 {
@@ -216,7 +250,34 @@ namespace Ark.oAuth.Oidc.Endpoints
                     TermsUrl = ServerConfig.EmailConfig?.terms_url
                 },
                 Error = "signed_out",
-                Description = "You have been signed out."
+                Description = Describe(report),
+                SessionsEnded = report.SessionsEnded,
+                SubjectsEnded = report.SubjectsEnded,
+                ClientsNotified = report.Notified,
+                ClientsFailed = report.Failed
+            });
+        }
+
+        /// <summary>
+        /// What the signed-out page says. It names the scale of the sign-out when more than one
+        /// session ended, because on a shared browser that is the fact the person needs — "you
+        /// have been signed out" is misleading when it was three people.
+        /// </summary>
+        private static string Describe(BackChannelLogoutReport report)
+        {
+            if (report.SessionsEnded == 0) return "You were not signed in.";
+            if (report.SubjectsEnded > 1)
+                return $"All {report.SubjectsEnded} accounts signed in on this browser have been signed out.";
+            if (report.SessionsEnded > 1)
+                return $"All {report.SessionsEnded} of your sessions on this browser have been signed out.";
+            return "You have been signed out.";
+        }
+
+        private void ClearCookie(string name)
+        {
+            Response.Cookies.Delete(name, new CookieOptions
+            {
+                Path = string.IsNullOrEmpty(Request.PathBase) ? "/" : Request.PathBase.Value!
             });
         }
     }

@@ -169,6 +169,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 return new List<string>();
             }
             string? Str(string name) => metadata[name] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+            bool? Bool(string name) => metadata[name] is JsonValue v && v.TryGetValue<bool>(out var b) ? b : null;
 
             var redirectUris = Strings("redirect_uris");
             var grantTypes = Strings("grant_types");
@@ -228,6 +229,31 @@ namespace Ark.oAuth.Oidc.Endpoints
             client.require_pkce = true;
             client.is_active = true;
 
+            // OIDC Back-Channel Logout 1.0 §3.1 registration metadata. A URI here is what puts the
+            // client on the notification list when a session it took part in ends; without one it
+            // is simply never told, so this is optional and defaults to off.
+            var backchannel = Str("backchannel_logout_uri");
+            if (!string.IsNullOrWhiteSpace(backchannel))
+            {
+                if (!Uri.TryCreate(backchannel, UriKind.Absolute, out var logoutUri))
+                    throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                        $"'{backchannel}' is not an absolute URI.");
+                if (!string.IsNullOrEmpty(logoutUri.Fragment))
+                    throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                        "backchannel_logout_uri must not contain a fragment.");
+                // The logout token is a bearer assertion about who has just been signed out, and
+                // it is delivered server to server with no user present to notice a warning.
+                if (logoutUri.Scheme != "https" && !logoutUri.IsLoopback)
+                    throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                        "backchannel_logout_uri must use https (http is only permitted for loopback).");
+                client.backchannel_logout_uri = backchannel!.Trim();
+            }
+            else
+            {
+                client.backchannel_logout_uri = null;
+            }
+            client.backchannel_logout_session_required = Bool("backchannel_logout_session_required") ?? true;
+
             // legacy single-valued columns, kept in step for the v1 endpoints
             client.redirect_url = redirectUris.FirstOrDefault() ?? "";
             client.logout_url = client.post_logout_redirect_uris.FirstOrDefault() ?? "";
@@ -256,6 +282,11 @@ namespace Ark.oAuth.Oidc.Endpoints
             if (!string.IsNullOrEmpty(client.tos_uri)) body["tos_uri"] = client.tos_uri!;
             if (!string.IsNullOrEmpty(client.jwks_uri)) body["jwks_uri"] = client.jwks_uri!;
             if (client.contacts.Count > 0) body["contacts"] = client.contacts;
+            if (!string.IsNullOrEmpty(client.backchannel_logout_uri))
+            {
+                body["backchannel_logout_uri"] = client.backchannel_logout_uri!;
+                body["backchannel_logout_session_required"] = client.backchannel_logout_session_required;
+            }
             return body;
         }
     }
