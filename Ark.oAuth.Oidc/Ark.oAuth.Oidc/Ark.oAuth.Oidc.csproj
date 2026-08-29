@@ -30,9 +30,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.0.2</Version>
-		<AssemblyVersion>2.0.2.0</AssemblyVersion>
-		<FileVersion>2.0.2.0</FileVersion>
+		<Version>2.0.3</Version>
+		<AssemblyVersion>2.0.3.0</AssemblyVersion>
+		<FileVersion>2.0.3.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -54,6 +54,67 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.0.3 — back-channel logout, sign-out that covers the whole browser, and a dependency graph that
+is only what this package uses.
+
+* **Back-Channel Logout 1.0.** A client that registers a backchannel_logout_uri is now POSTed a
+  signed logout token when a session it took part in ends — an RP-initiated logout, a revoked
+  refresh token, or an account deactivated mid-session. The token is the §2.4 artefact: typ
+  "logout+jwt", the backchannel-logout event claim, sub and sid, and deliberately no nonce, so a
+  client cannot be handed one where an ID token was expected.
+* **A client that is down cannot stop a user signing out.** The sessions are revoked at this
+  server before the first notification goes out, every delivery runs in parallel behind its own
+  timeout, and a refusal is written to the audit trail as a warning rather than raised. The worst
+  outcome of an unreachable client is an application cookie that outlives the IdP session — which
+  is exactly the state every deployment was in before this existed.
+* **Clients are notified because they took part, not because they still hold a token.** A
+  session_clients row is written the first time a session issues a client an authorization code or
+  approves its device request. Deriving that list from live refresh tokens instead would miss
+  every client that never asked for offline_access — most of them — and every client whose tokens
+  have expired while its own application cookie is still valid.
+* **Registering for it.** backchannel_logout_uri and backchannel_logout_session_required are
+  accepted through dynamic client registration (§3.1 metadata: absolute, no fragment, https unless
+  loopback), on POST /api/oauth/v1/provision/client, and in the admin console's client editor. A
+  client with no URI is simply never notified, so nothing changes for clients that do not ask.
+* **Signing out now ends every session in the browser, not just the newest.** The session cookie
+  holds one sid and each sign-in overwrites it, so on a shared machine the previous person's
+  session stayed live in the database — with its refresh tokens, and with them still signed in at
+  every application they had opened — while /oauth2/logout ended only the session the cookie
+  happened to name. A long-lived ark_idp_bid cookie now identifies the user agent, sessions record
+  which browser they were created in, and logout ends all of them. It carries no identity of its
+  own: it is a random value that means nothing without the session rows pointing at it.
+* **Discovery now tells the truth about logout.** backchannel_logout_supported and
+  backchannel_logout_session_supported are advertised. frontchannel_logout_supported and
+  frontchannel_logout_session_supported, which were advertised as true against an endpoint this
+  server has never had, are now false — a client that reads the document no longer configures a
+  logout flow that cannot work.
+* **The signed-out page says what actually happened**: how many sessions and accounts were ended
+  when it was more than one, how many applications were signed out with you, and — named rather
+  than hidden — how many could not be reached and may still be open.
+* New settings under ark_oauth_server:Oidc, all defaulted to the behaviour above:
+  EnableBackChannelLogout (true), BackChannelLogoutTimeoutSeconds (5), LogoutTokenLifetimeSeconds
+  (120), SignOutAllBrowserSessions (true) and SignOutAcrossTenants (true). The last is worth a
+  look if one browser is expected to hold sessions in several tenants at once: the browser cookie
+  is one per deployment, not one per tenant.
+* **Dependencies are now what this package actually uses.** Ark.EfCore, Azure.Identity and
+  BouncyCastle are gone. Nothing here ever used a type from Ark.EfCore — it was acting purely as a
+  carrier for the EF packages it happened to depend on, which meant the EF version was decided by
+  somebody else's release, was pinned at 8.0.x on a net9.0 target, and dragged in a SQL Server
+  provider stack (Microsoft.Data.SqlClient and its native SNI runtime) that nothing in this
+  package can select. EF Core 9.0.x and the Sqlite, MySQL and PostgreSQL providers are now named
+  directly. SQL Server is deliberately absent: Provider "sqlserver" fell through every branch of
+  OnConfiguring and left the context with no provider configured, so it has never been a working
+  option and shipping the client library implied otherwise.
+
+Migration: existing databases need 00005, which adds clients.backchannel_logout_uri and
+clients.backchannel_logout_session_required, sessions.browser_id, and the session_clients table.
+Every change is additive and defaulted — existing clients register no logout URI and are not
+notified, and sessions that predate the column have no browser to name and are treated as their
+own. On SQLite it is applied on start-up and recorded in ark_schema_history, so there is nothing
+to run by hand. Only the SQLite scripts ship in this package: on MySQL or PostgreSQL the
+equivalent ALTER TABLE and CREATE TABLE are still yours to apply, and skipping them fails the same
+way a missing 00004 did — the entities carry columns the tables do not.
+
 2.0.2 — provisioning, activation, branding, and self-applying schema updates.
 
 * **Provisioning API.** POST /api/oauth/v1/provision/client registers an application, creates or

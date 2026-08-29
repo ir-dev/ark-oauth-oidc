@@ -26,9 +26,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.0.2</Version>
-		<AssemblyVersion>2.0.2.0</AssemblyVersion>
-		<FileVersion>2.0.2.0</FileVersion>
+		<Version>2.0.3</Version>
+		<AssemblyVersion>2.0.3.0</AssemblyVersion>
+		<FileVersion>2.0.3.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -50,6 +50,20 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.0.3 — version alignment.
+
+No API change over 2.0.2. Rebuilt and republished alongside Ark.oAuth.Oidc 2.0.3 so the two halves
+carry the same version. Consumers on 2.0.2 can upgrade with no code change; the notes for the
+earlier versions apply unchanged and are kept below.
+
+Worth knowing if you are upgrading the provider at the same time: 2.0.3 of Ark.oAuth.Oidc adds
+back-channel logout, and this package does not host the receiving endpoint. An application that
+wants its own cookie dropped when the IdP session ends registers a backchannel_logout_uri and
+implements that endpoint itself — validate the posted logout_token against the provider's JWKS
+(typ "logout+jwt", matching iss and aud, an events claim, no nonce), end the session it names, and
+answer 200 or 204. Applications that register no URI are unaffected and keep behaving exactly as
+they do on 2.0.2.
+
 2.0.2 — version alignment.
 
 No API change over 2.0.1. Rebuilt and republished alongside Ark.oAuth.Oidc 2.0.2 so the two halves

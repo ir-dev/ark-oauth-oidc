@@ -124,6 +124,14 @@ Scopes on a client record are a whitelist: an unregistered scope is rejected, no
 it shadows the handler. Sign out of both `ArkOidcClient.CookieScheme` and `ArkOidcClient.OidcScheme`,
 or the provider session survives and the next sign-in is silent.
 
+Optionally, register a `backchannel_logout_uri` as well. Ark.oAuth.Oidc 2.0.3 and later POSTs a
+signed `logout_token` there when a session this application took part in ends elsewhere — someone
+signing out at another application, or an account being deactivated. This package does not host
+that endpoint for you: write an action that validates the posted token against the provider's JWKS
+(`typ: logout+jwt`, matching `iss` and `aud`, an `events` claim, never a `nonce`), signs out the
+session it names, and answers 200 or 204. Register nothing and the application is simply never
+notified, which is how it behaved before.
+
 ## Legacy flow
 
 `ark_oauth_client:UseLegacyFlow` keeps the original cookie/bearer middleware for deployments

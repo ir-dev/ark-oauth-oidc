@@ -55,7 +55,7 @@ endpoint the authorization middleware cannot see the `[Authorize]` metadata it i
     "TenantId": "my_idp",              // a client named "<TenantId>_client" is seeded for the admin console
     "BasePath": "",                    // set only if the app is hosted under a sub-path
     "BaseUrl": "https://idp.example.com",
-    "Provider": "sqlite",              // sqlite (default) | mysql | postgres | sqlserver
+    "Provider": "sqlite",              // sqlite (default) | mysql | postgres
     "UploadPath": "./wwwroot/{0}/",
     "DefaultPw": "<initial password for new users>",
     "AdminUser": {                     // the account seeded when the database is first created
@@ -76,6 +76,11 @@ endpoint the authorization middleware cannot see the `[Authorize]` metadata it i
       "SessionLifetimeMinutes": 480,
       "MaxFailedSignIns": 10,
       "LockoutMinutes": 15,
+      "EnableBackChannelLogout": true,       // see "Signing out"
+      "BackChannelLogoutTimeoutSeconds": 5,
+      "LogoutTokenLifetimeSeconds": 120,
+      "SignOutAllBrowserSessions": true,     // sign-out covers every session in the browser
+      "SignOutAcrossTenants": true,
       "CorsOrigins": []                // exact origins of any single-page-application clients
     }
   },
@@ -161,6 +166,46 @@ application makes — and the verifier is shown alongside the `curl` that redeem
 the fastest way to prove PKCE end to end before writing any client code. The frame ends up on the
 application's own origin, so if the application refuses to be framed, *Open in a new tab* runs the
 identical flow.
+
+## Signing out
+
+`end_session_endpoint` is `/{tenant_id}/oauth2/logout`, and two things about it are worth knowing
+before pointing a client at it.
+
+**It signs out the whole browser, not one session.** The session cookie holds a single `sid`, but a
+browser accumulates sessions: each sign-in creates one and overwrites the cookie, so every earlier
+session stays live — with its refresh tokens — while becoming unreachable from the browser. On a
+shared machine that is a different person, and ending only the session the cookie names leaves them
+signed in everywhere they had been. A second cookie, `ark_idp_bid`, identifies the **browser**
+rather than the sign-in; every session records the browser it was created in, and logout ends all
+of them. It is a random value that means nothing without those session rows, and it is deliberately
+kept across sign-out — it identifies the user agent, not the user.
+
+**Clients are told, if they ask to be.** Register a `backchannel_logout_uri` and the client is
+POSTed a signed `logout_token` whenever a session it took part in ends —
+`application/x-www-form-urlencoded`, one `logout_token` parameter, answer 200 or 204. The token is
+`typ: logout+jwt`, carries the `http://schemas.openid.net/event/backchannel-logout` event and,
+unless the client turns `backchannel_logout_session_required` off, the `sid` to end. It never
+carries a `nonce`, so it cannot be replayed into an ID token validator. Verify it against the same
+JWKS as an ID token. Set the URI in the console's client editor, at `/oauth2/register` (RFC 7591)
+or in the provisioning call; a client without one is simply never contacted, which is where every
+existing client starts.
+
+The clients notified are the ones that were logged in under the session — recorded when the
+authorization code is issued, rather than derived from live refresh tokens, which would miss every
+client that never asked for `offline_access`. Sessions are revoked before the first notification
+goes out and each delivery has its own timeout, so **a client that is down cannot stop a user
+signing out**; the failure is logged as a warning and named on the signed-out page.
+
+| Setting | Default | |
+|---|---|---|
+| `Oidc:EnableBackChannelLogout` | `true` | Notifies nobody until a client registers a URI |
+| `Oidc:BackChannelLogoutTimeoutSeconds` | `5` | Per client; deliveries run in parallel |
+| `Oidc:LogoutTokenLifetimeSeconds` | `120` | |
+| `Oidc:SignOutAllBrowserSessions` | `true` | Off ends only the session the cookie names |
+| `Oidc:SignOutAcrossTenants` | `true` | Off keeps a sign-out inside the tenant it was asked of |
+
+Front-channel logout is **not** implemented, and discovery no longer claims otherwise.
 
 ## Provisioning API
 
@@ -294,6 +339,7 @@ applies every script the database has not had yet and records it in `ark_schema_
 ```
 00003_sql.sql   # 2.0.0 - protocol tables, RFC 7591 metadata
 00004_sql.sql   # 2.0.2 - users.is_active
+00005_sql.sql   # 2.0.3 - back-channel logout metadata, sessions.browser_id, session_clients
 ```
 
 Nothing is ever replayed. A database that predates the history table is measured rather than
@@ -305,9 +351,9 @@ Skipping this used to be silent and specific: without 00004 the entity carried `
 and the table did not, so `/api/oauth/v1/user/list` answered a bare 500 and the console's Users
 grid came up empty with nothing saying why.
 
-Only the SQLite scripts ship in this package. On MySQL, PostgreSQL or SQL Server there is nothing
-to run automatically and the `ALTER TABLE` is still yours to apply. `GET
-/api/migration/v1/sql?action=up|down&name=00004_sql.sql` is still there to run or roll back one by
+Only the SQLite scripts ship in this package. On MySQL or PostgreSQL there is nothing to run
+automatically and the `ALTER TABLE` is still yours to apply. `GET
+/api/migration/v1/sql?action=up|down&name=00005_sql.sql` is still there to run or roll back one by
 hand, and now reports whether it actually worked instead of always answering "executed".
 
 ## Before production

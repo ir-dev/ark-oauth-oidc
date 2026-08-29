@@ -22,4 +22,4 @@ Debugging — these hit the traps section
 "NullReferenceException in ArkUtil's constructor." → missing EmailConfig
 "Console shows an empty grid and /api/oauth/v1/user/list 500s." → the non-SQLite schema-updater no-op
 
-One caveat worth stating: the recipe is written against 2.0.2 and verified on this repo's SQLite path. If you reuse it after a package upgrade, the wiring order and traps are the parts most likely to need re-checking — the internals note records how to decompile the packages when the docs run out.
+One caveat worth stating: the recipe is written against 2.0.3 and verified on this repo's SQLite path. If you reuse it after a package upgrade, the wiring order and traps are the parts most likely to need re-checking — the internals note records how to decompile the packages when the docs run out.
