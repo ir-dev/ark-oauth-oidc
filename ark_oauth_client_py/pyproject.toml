@@ -1,0 +1,90 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ark-oauth-client"
+version = "2.0.4"
+description = "The OAuth 2.1 / OpenID Connect client for Python applications, built for Ark.oAuth.Oidc. Authorization code + PKCE with state, nonce, iss and at_hash checks, JWKS rotation, silent refresh, client credentials, the device grant, PAR, introspection, revocation, dynamic client registration and RP-initiated logout - plus a Flask integration for interactive sign-in, for protecting an API, and for account switching on a shared browser."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Immanuel R" }]
+maintainers = [{ name = "Immanuel R" }]
+keywords = [
+    "oauth",
+    "oauth2",
+    "oauth2.1",
+    "oidc",
+    "openid",
+    "openid-connect",
+    "oauth2-client",
+    "oidc-client",
+    "identity",
+    "authentication",
+    "authorization",
+    "jwt",
+    "jwks",
+    "pkce",
+    "sso",
+    "single-sign-on",
+    "flask",
+    "security",
+    "ark",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Framework :: Flask",
+    "Topic :: Internet :: WWW/HTTP :: Session",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
+# Signature verification is the one thing the standard library cannot do. Everything else -- the
+# HTTP layer, the random values, the digests -- is stdlib, so the dependency surface of a security
+# package stays at one well-maintained, widely-audited library.
+dependencies = ["cryptography>=41.0"]
+
+[project.optional-dependencies]
+flask = ["flask>=2.2"]
+dev = [
+    "flask>=2.2",
+    "pytest>=7.4",
+    "build>=1.0",
+    "twine>=5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_py#readme"
+Documentation = "https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_py#readme"
+Repository = "https://github.com/ir-dev/ark-oauth-oidc"
+Issues = "https://github.com/ir-dev/ark-oauth-oidc/issues"
+Changelog = "https://github.com/ir-dev/ark-oauth-oidc/blob/main/ark_oauth_client_py/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ark_oauth_client"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/examples",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning:ark_oauth_client.*"]
