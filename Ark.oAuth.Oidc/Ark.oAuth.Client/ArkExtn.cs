@@ -1,6 +1,7 @@
 ﻿using ark.net.util;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Cryptography;
@@ -59,6 +60,12 @@ namespace Ark.oAuth
 
         /// <summary>Only turn this off for local development against a plain-http provider.</summary>
         public bool RequireHttpsMetadata { get; set; } = true;
+
+        /// <summary>
+        /// Account switching on a shared browser, and the page shown to a user who is signed in
+        /// as somebody without access to this application. See <see cref="ArkAccountSwitchOptions"/>.
+        /// </summary>
+        public ArkAccountSwitchOptions AccountSwitch { get; set; } = new();
 
         /// <summary>
         /// Opt back in to the original cookie/bearer middleware. Provided for deployments that
@@ -165,8 +172,40 @@ namespace Ark.oAuth
         /// true to keep the original cookie/bearer middleware while migrating.
         /// </summary>
         public static void AddArkOidcClient(this IServiceCollection services, IConfiguration configuration)
+            => services.AddArkOidcClient(configuration, null);
+
+        /// <summary>
+        /// As above, with a callback that can adjust the bound configuration in code and attach
+        /// the <see cref="ArkClientEvents"/> hooks — a custom entitlement rule, or an
+        /// access-denied page of your own.
+        /// </summary>
+        /// <example>
+        /// <code>
+        /// builder.Services.AddArkOidcClient(builder.Configuration, o =&gt;
+        /// {
+        ///     o.Config.AccountSwitch.RequireArkClaims = true;
+        ///     o.Events.OnAccessDenied = ctx =&gt; { logger.LogWarning("no access: {User}", ctx.Email); return Task.CompletedTask; };
+        /// });
+        /// </code>
+        /// </example>
+        public static void AddArkOidcClient(
+            this IServiceCollection services, IConfiguration configuration, Action<ArkClientOptions>? configure)
         {
             var ccc = LoadConfig(configuration);
+            ccc.AccountSwitch ??= new ArkAccountSwitchOptions();
+
+            var options = new ArkClientOptions(ccc);
+            configure?.Invoke(options);
+            services.AddSingleton(options.Events);
+
+            // The access-denied page and the switch-user post, registered without the host having
+            // to add a Use… call — the applications that need them are the ones whose Program.cs
+            // was written before they existed.
+            // Not under the legacy flow: it registers no cookie scheme, so there is no local
+            // session for a switch to drop and nothing for the page to sign out of.
+            if (!ccc.UseLegacyFlow && ccc.AccountSwitch is { Enabled: true, AutoRegisterEndpoints: true })
+                services.AddTransient<IStartupFilter, ArkAccountStartupFilter>();
+
             services.AddHttpContextAccessor();
             services.AddHttpClient("ark-oidc-client", c => c.Timeout = TimeSpan.FromSeconds(15));
             services.AddSingleton<ArkAuthConfig>(t => ccc);
@@ -182,7 +221,7 @@ namespace Ark.oAuth
 
             if (!ccc.UseLegacyFlow)
             {
-                services.AddArkOidcInteractive(ccc);
+                services.AddArkOidcInteractive(ccc, options.Events);
                 return;
             }
 
@@ -316,6 +355,12 @@ namespace Ark.oAuth
         /// </summary>
         public static void UseArkOidcClient(this IApplicationBuilder builder)
         {
+            // Serves the access-denied page and the switch-user / sign-out posts. Registered
+            // ahead of the legacy check because it belongs to both flows, and ahead of
+            // UseAuthorization because a page explaining why authorization failed must not
+            // itself require authorization.
+            builder.UseArkAccountEndpoints();
+
             var startupConfig = builder.ApplicationServices.GetRequiredService<IConfiguration>();
             if (!LoadConfig(startupConfig).UseLegacyFlow) return;
 

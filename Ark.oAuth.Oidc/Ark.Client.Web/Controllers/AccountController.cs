@@ -1,4 +1,4 @@
-using Ark.oAuth;
+﻿using Ark.oAuth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 
@@ -50,6 +50,23 @@ namespace Ark.Client.Web.Controllers
                 new AuthenticationProperties { RedirectUri = "/" },
                 ArkOidcClient.CookieScheme,
                 ArkOidcClient.OidcScheme);
+        }
+
+        /// <summary>
+        /// "Sign in as somebody else" from one of this application's own routes.
+        ///
+        /// The library serves the same thing at /ark/switch-user; this is here to show what that
+        /// endpoint does, and how to reach it when you want your own route, your own antiforgery
+        /// token or your own logging around it. The two calls in ArkSwitchUserAsync are the whole
+        /// mechanism: drop the local cookie, then challenge with prompt=login so the provider
+        /// cannot answer from the single sign-on session it already holds.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SwitchUser(string? returnUrl = null)
+        {
+            await HttpContext.ArkSwitchUserAsync(Url.IsLocalUrl(returnUrl) ? returnUrl : "/");
+            return new EmptyResult(); // the challenge has already written the redirect
         }
 
         /// <summary>Ends the local session only, leaving the provider session intact.</summary>

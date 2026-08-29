@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<!--
 		Ark.oAuth.Client — the OAuth 2.1 / OpenID Connect client, packaged for nuget.org.
@@ -26,9 +26,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.0.3</Version>
-		<AssemblyVersion>2.0.3.0</AssemblyVersion>
-		<FileVersion>2.0.3.0</FileVersion>
+		<Version>2.1.0</Version>
+		<AssemblyVersion>2.1.0.0</AssemblyVersion>
+		<FileVersion>2.1.0.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -50,6 +50,32 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.1.0 — account switching on a shared browser.
+
+Fixes the case where two people use one browser. Single sign-on is browser-wide, so once the first
+person has signed in anywhere, the provider's session answers the authorize request of every other
+client in that browser. The second person opens a different application, is silently signed in as
+the first, is told they do not have access — and has no way back, because the sign-in link returns
+to the same session and gives the same answer.
+
+* ark_oauth_client:AccountSwitch:RequireArkClaims moves the entitlement check to the callback. An
+  account with no ark_claims for this client is refused before the authentication cookie is
+  written, so the browser never holds a session for somebody who cannot use the application.
+* A built-in access-denied page at /ark/no-access names the account that is signed in and offers
+  "Sign in as a different user", which challenges with prompt=login so the provider draws its
+  sign-in form instead of answering from its session. It also replaces the framework's
+  /Account/AccessDenied default for ordinary [Authorize] 403s, which most applications never
+  create and which therefore renders as a 404.
+* HttpContext.ArkSwitchUserAsync / ArkSignOutEverywhereAsync / ArkSignOutLocallyAsync, and
+  ArkChallengeProperties.SwitchUser for a challenge you issue yourself — prompt, login_hint and
+  max_age now reach the authorize request through the authentication properties.
+* An AddArkOidcClient(configuration, options) overload carrying ArkClientEvents: OnEvaluateAccess
+  for an entitlement rule of your own, OnAccessDenied to log it or render your own page.
+
+The page and its two POST endpoints register themselves, so Program.cs needs no edit. Every part is
+off or unchanged by default: consumers on 2.0.3 who set nothing get identical behaviour except that
+an [Authorize] 403 now reaches an explanation instead of a 404.
+
 2.0.3 — version alignment.
 
 No API change over 2.0.2. Rebuilt and republished alongside Ark.oAuth.Oidc 2.0.3 so the two halves

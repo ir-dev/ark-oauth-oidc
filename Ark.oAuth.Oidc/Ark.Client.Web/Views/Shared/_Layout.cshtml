@@ -1,4 +1,4 @@
-@*
+﻿@*
     No third-party CSS or scripts. The styles are inlined so the app runs offline and under a
     strict Content-Security-Policy, matching the sign-in and consent pages it redirects to.
 *@
@@ -175,6 +175,14 @@
                 <span style="font-size:13.5px;color:var(--fg-muted)">
                     @(User.FindFirst("name")?.Value ?? User.FindFirst("email")?.Value ?? "signed in")
                 </span>
+                @* On a shared browser the name above may not belong to the person reading it.
+                   This posts to the client library's switch-user endpoint, which drops this
+                   application's cookie and challenges with prompt=login, so the provider draws
+                   its sign-in form instead of answering from the session it already has. *@
+                <form class="inline" method="post" action="/ark/switch-user">
+                    <input type="hidden" name="returnUrl" value="@(Context.Request.Path + Context.Request.QueryString)" />
+                    <button class="btn ghost" type="submit">Not you?</button>
+                </form>
                 <form class="inline" method="post" action="/account/logout">
                     @Html.AntiForgeryToken()
                     <button class="btn ghost" type="submit">Sign out</button>

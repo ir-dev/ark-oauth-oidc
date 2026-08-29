@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -36,8 +36,17 @@ namespace Ark.oAuth
         /// Wires up interactive sign-in with the authorization code flow and PKCE.
         /// </summary>
         public static AuthenticationBuilder AddArkOidcInteractive(
-            this IServiceCollection services, ArkAuthConfig config)
+            this IServiceCollection services, ArkAuthConfig config) =>
+            services.AddArkOidcInteractive(config, null);
+
+        /// <summary>
+        /// As above, plus the host's <see cref="ArkClientEvents"/> — the hooks that let an
+        /// application decide entitlement for itself and render its own access-denied page.
+        /// </summary>
+        public static AuthenticationBuilder AddArkOidcInteractive(
+            this IServiceCollection services, ArkAuthConfig config, ArkClientEvents? events)
         {
+            var switching = config.AccountSwitch ?? new ArkAccountSwitchOptions();
             var authority = config.ResolveAuthority();
             if (string.IsNullOrWhiteSpace(authority))
                 throw new ApplicationException(
@@ -64,6 +73,21 @@ namespace Ark.oAuth
                 // Refresh silently just before the access token expires, so a signed-in user is
                 // not bounced back to the IdP mid-session.
                 options.Events.OnValidatePrincipal = ArkTokenRefresher.ValidateAsync;
+
+                // Where an [Authorize] policy sends a user who is signed in but not permitted.
+                // The framework's default is /Account/AccessDenied, which most applications never
+                // create, so the user meets a 404 instead of an explanation.
+                options.AccessDeniedPath = switching.AccessDeniedPath;
+                options.Events.OnRedirectToAccessDenied = async ctx =>
+                {
+                    // Recorded before the redirect so the page can name the account that was
+                    // refused, and so a host handler sees the same event for a 403 as for a
+                    // refused callback.
+                    await ArkAccessGate.DenyAsync(ctx.HttpContext, config, events,
+                        ArkAccessDeniedReasons.Forbidden, ctx.HttpContext.User,
+                        ctx.HttpContext.User.FindAll(config.RoleClaimType ?? "role").Select(c => c.Value).ToList(),
+                        ctx.Request.Path + ctx.Request.QueryString);
+                };
             });
 
             builder.AddOpenIdConnect(OidcScheme, options =>
@@ -106,6 +130,43 @@ namespace Ark.oAuth
 
                 options.Events = new OpenIdConnectEvents
                 {
+                    // The only place a caller can influence the authorize request. The handler
+                    // builds it internally, so parameters like prompt travel as authentication
+                    // properties and are copied onto the message here — which is what makes
+                    // "sign in as a different user" possible at all: without prompt=login the
+                    // provider answers the challenge from the session it already has, and the
+                    // wrong person is signed in again.
+                    OnRedirectToIdentityProvider = ctx =>
+                    {
+                        var items = ctx.Properties.Items;
+                        if (items.TryGetValue(ArkChallengeProperties.PromptItem, out var prompt)
+                            && !string.IsNullOrWhiteSpace(prompt))
+                            ctx.ProtocolMessage.Prompt = prompt;
+                        if (items.TryGetValue(ArkChallengeProperties.LoginHintItem, out var hint)
+                            && !string.IsNullOrWhiteSpace(hint))
+                            ctx.ProtocolMessage.LoginHint = hint;
+                        if (items.TryGetValue(ArkChallengeProperties.MaxAgeItem, out var maxAge)
+                            && !string.IsNullOrWhiteSpace(maxAge))
+                            ctx.ProtocolMessage.MaxAge = maxAge;
+                        return Task.CompletedTask;
+                    },
+                    OnTicketReceived = async ctx =>
+                    {
+                        // Last point before the authentication cookie is written. Refusing here
+                        // rather than at the first protected page is the whole difference: the
+                        // browser never ends up holding a session for an account that cannot use
+                        // this application.
+                        if (!switching.RequireArkClaims && events?.OnEvaluateAccess == null) return;
+
+                        var claims = ArkAccessGate.ReadClaims(ctx.Properties?.GetTokenValue("access_token"));
+                        if (await ArkAccessGate.AllowedAsync(ctx.HttpContext, config, events, ctx.Principal, claims))
+                            return;
+
+                        ctx.HandleResponse(); // suppresses the sign-in
+                        await ArkAccessGate.DenyAsync(ctx.HttpContext, config, events,
+                            ArkAccessDeniedReasons.NoAppAccess, ctx.Principal, claims,
+                            ctx.Properties?.RedirectUri);
+                    },
                     OnRemoteFailure = ctx =>
                     {
                         // A failed callback should land somewhere useful rather than throwing a

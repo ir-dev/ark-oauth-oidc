@@ -132,6 +132,86 @@ that endpoint for you: write an action that validates the posted token against t
 session it names, and answers 200 or 204. Register nothing and the application is simply never
 notified, which is how it behaved before.
 
+## Shared browsers: the wrong account, and no way out
+
+Single sign-on is a property of the browser, not of the tab. Once one person signs in to
+*client-a*, the provider's session cookie answers the authorize request of every other client in
+that browser. So when a second person opens *client-b*, the challenge is satisfied silently by the
+first person's session: *client-b* receives a valid token for an account with no mapping to it,
+shows "you do not have access to this application", and offers nothing that helps — the sign-in
+link goes back to the same session and returns the same answer. The loop ends when somebody knows
+to clear cookies.
+
+Two settings break it.
+
+```jsonc
+"ark_oauth_client": {
+  "AccountSwitch": {
+    "RequireArkClaims": true,               // refuse the callback, do not write the cookie
+    "AppDisplayName": "Client B"            // how the page names this application
+  }
+}
+```
+
+`RequireArkClaims` moves the entitlement check to the callback, where it belongs. An account with
+no `ark_claims` for this client never gets a session here at all — instead of being signed in as
+the wrong person and meeting 403 on every page, the user lands on a page that names the account
+that is signed in and offers **Sign in as a different user**. That button challenges the provider
+with `prompt=login`, the one parameter it must honour by ignoring its session and drawing the
+sign-in form (OIDC Core §3.1.2.1), so the person at the keyboard can enter their own credentials.
+
+Nothing needs adding to `Program.cs`: the page and its two POST endpoints register themselves.
+Left at its default (`false`), `RequireArkClaims` changes no behaviour — but the page still serves
+the 403s that `[Authorize]` produces, in place of the framework's `/Account/AccessDenied`, which
+most applications never create.
+
+### From your own pages
+
+The same two operations, for a "Not you?" link in your header or an action of your own:
+
+```csharp
+await HttpContext.ArkSwitchUserAsync(returnUrl);        // drop the local cookie, prompt=login
+await HttpContext.ArkSignOutEverywhereAsync(returnUrl); // RP-initiated logout, ends the IdP session too
+var refused = HttpContext.ArkDeniedAccount();           // who was refused, for your own page
+```
+
+Or on any challenge you issue yourself:
+
+```csharp
+return Challenge(ArkChallengeProperties.SwitchUser("/", loginHint: "someone@example.com"),
+                 ArkOidcClient.OidcScheme);
+```
+
+### Everything else it takes
+
+| Setting | Default | |
+|---|---|---|
+| `Enabled` | `true` | Serve the endpoints. Off still leaves the extension methods usable. |
+| `AutoRegisterEndpoints` | `true` | Place them in the pipeline for you. Off to call `UseArkAccountEndpoints()` where you want it. |
+| `RequiredClaims` | — | Narrow the check: the user must hold at least one of these values. |
+| `AccessDeniedPath` | `/ark/no-access` | Point at your own route, with `ServeDefaultPage: false`, to render it yourself. |
+| `SwitchUserPath` / `SignOutPath` | `/ark/switch-user`, `/ark/sign-out` | POST, same-origin. |
+| `ShowSignedInAccount` | `true` | Naming the account is what makes the page make sense; off if you would rather not print somebody else's address. |
+| `EndProviderSessionOnSwitch` | `false` | `false` re-prompts and leaves the other person's other applications alone. `true` signs them out everywhere — right for a kiosk. |
+| `Prompt` | `login` | What the switch sends. `select_account` where the provider has a picker. |
+| `SupportUrl` / `SupportEmail` | — | A "request access" link on the page. |
+
+For rules the settings do not cover — a licence lookup, a group claim, your own denial page or an
+access-request ticket — use the events overload:
+
+```csharp
+builder.Services.AddArkOidcClient(builder.Configuration, o =>
+{
+    o.Events.OnEvaluateAccess = ctx => Task.FromResult(ctx.ArkClaims.Count > 0 && Licensed(ctx.Principal));
+    o.Events.OnAccessDenied  = ctx => { logger.LogWarning("no access: {Email}", ctx.Email); return Task.CompletedTask; };
+});
+```
+
+Worth knowing: switching accounts is a client-side remedy. The provider still issued a token for
+an account that has no mapping to this client — only the client refuses it. Ending that at the
+source means the authorization endpoint declining to satisfy an SSO session with no mapping for
+the client it is being used against.
+
 ## Legacy flow
 
 `ark_oauth_client:UseLegacyFlow` keeps the original cookie/bearer middleware for deployments
