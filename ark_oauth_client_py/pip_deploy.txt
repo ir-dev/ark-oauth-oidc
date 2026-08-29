@@ -1,0 +1,667 @@
+
+
+----------pip deploy steps
+
+
+step 1: pre installs:
+    > brew install uv
+    > cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/ark_oauth_client_py
+
+step 2: token is set:
+    > export UV_PUBLISH_TOKEN='....'
+
+step 3: Confirm the version in pyproject.toml
+
+step 4: build the package
+    > uv build
+        produce both artifacts, which is what you want -- the wheel is what almost everyone installs, the sdist is what lets anyone rebuild and audit it:
+            dist/ark_oauth_client-2.0.4-py3-none-any.whl
+            dist/ark_oauth_client-2.0.4.tar.gz
+
+step 5 (optional - future): Verify no valuables going out - check in details below sections
+    > tar -tzf dist/ark_oauth_client-2.0.4.tar.gz
+
+step 6 (optional - future): rehearse the upload - to prevalidate from uv
+    > uv publish --dry-run --publish-url https://test.pypi.org/legacy/ dist/*
+
+step 7 (optional - future): test publish using test token 
+    > uv publish --publish-url https://test.pypi.org/legacy/ \
+                   --token "$TEST_PYPI_TOKEN" dist/*    
+
+step 8: actual publish 
+    > uv publish --token "$UV_PUBLISH_TOKEN" dist/*
+
+================================================================================
+ ARK OAUTH / OIDC  —  PyPI RELEASE RUNBOOK
+ ark-oauth-client 2.0.4   ·   prepared 2026-08-29   ·   verified on this Mac (darwin 25.5.0)
+ FIRST PUBLICATION. There is no previous release of this package to compare against.
+================================================================================
+
+WHAT SHIPS IN THIS RELEASE
+--------------------------------------------------------------------------------
+  ark-oauth-client   (new)  ->  2.0.4    the Python OAuth 2.1 / OIDC client
+
+  The Python port of Ark.oAuth.Client, numbered to match the NuGet package it
+  mirrors (2.0.4) rather than starting at 0.1.0, so the three halves -- NuGet
+  Ark.oAuth.Client, npm ark-oauth-client, PyPI ark-oauth-client -- carry the
+  same number. That is a deliberate call and it has one consequence worth
+  knowing: PyPI will show this project's history as beginning at 2.0.4, and
+  nothing stops you publishing a 1.x later, but it would sort BELOW this and
+  would never be resolved as latest. If you want room underneath, renumber
+  before the first push -- after it, the number is permanent.
+
+  THE NAME IS AVAILABLE. Checked against the live PyPI JSON API on 2026-08-29:
+
+      https://pypi.org/pypi/ark-oauth-client/json      ->  404
+      https://test.pypi.org/pypi/ark-oauth-client/json ->  404
+
+  404 means unclaimed. The first successful upload claims it permanently for
+  this account. Re-check in STEP 1 before pushing -- names can be taken by
+  anyone at any time, and the failure mode if someone beat you to it is a 403
+  on upload after you have already built and tagged.
+
+  Not part of this release: Ark.oAuth.Oidc and Ark.oAuth.Client (nuget, see
+  nuget_deploy.txt) and ark_oauth_client_nodejs (npm, still 2.0.1). Publish
+  each on its own; they share a version number, not a pipeline.
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ READ THIS BEFORE YOU PASTE A TOKEN ANYWHERE
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  THIS FILE IS IN A PUBLIC GITHUB REPOSITORY. So is everything beside it.
+
+  A PyPI API token is a live credential that can publish code under your name
+  to a registry other people install from. Do not write one into this file, an
+  example, a test, a commit message, or a shell script in the tree. This repo
+  has already had one live key purged from its history (2026-08-19); a second
+  incident costs the same day of work plus every downstream install that ran in
+  between.
+
+  Tokens belong in exactly one of:
+    - an environment variable set in your shell, not in a file that is tracked
+    - ~/.pypirc, which is OUTSIDE the repo (chmod 600)
+    - the macOS keychain, via keyring
+    - GitHub Actions Trusted Publishing, where there is no token at all
+      -- the best answer for a public repo, see APPENDIX B
+
+  If you ever paste one and think better of it: revoke it at
+  https://pypi.org/manage/account/token/ FIRST, then clean up. Revoking is
+  instant and free; rewriting history is neither.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+CHOOSING A PUBLISHER  --  twine is no longer the only option
+--------------------------------------------------------------------------------
+  Both paths below were run against this package on this machine. They produce
+  byte-for-byte equivalent artifacts (verified: identical 33-entry file lists
+  in the wheel, both PASS twine check), so this is a choice about ergonomics
+  and supply-chain features, not about output.
+
+  PATH A -- uv          RECOMMENDED HERE. Already installed: uv 0.9.26.
+    + One tool builds and publishes; no release venv to create at all.
+    + `uv build` took 0.9s here. `python -m build` takes ~10s, because it
+      creates an isolated venv and downloads hatchling into it every time.
+    + `uv publish --dry-run` rehearses the upload without sending anything.
+    + Uploads PEP 740 attestations by default under Trusted Publishing --
+      signed provenance tying the artifact to the workflow that built it.
+      twine does not do this.
+    + Reads the same pyproject.toml. No project change required; the build
+      backend stays hatchling either way.
+    - Newer, and one more thing to have installed. Not a problem here.
+
+  PATH B -- build + twine     The long-standing default.
+    + Universally documented; every PyPI answer online assumes it.
+    + `twine check` renders the README the way PyPI will, which uv has no
+      direct equivalent for. Worth keeping in the loop even on Path A.
+    - Two tools, a venv to hold them, and a slower build.
+
+  NOT USED HERE, and why: hatch, flit, poetry and pdm each bundle their own
+  publish command, but each also wants to own the project's build and
+  dependency configuration. This package uses plain hatchling through
+  pyproject.toml with no tool-specific sections, which keeps it buildable by
+  anything. Adopting one of those to get its `publish` verb would be a
+  project-wide commitment for a step that takes one command either way. None
+  of them is installed on this machine.
+
+  MIXING IS FINE and is what the steps below actually do: build with uv,
+  README-check with twine, upload with either.
+
+
+TOOLCHAIN ON THIS MACHINE
+--------------------------------------------------------------------------------
+  uv              0.9.26            /opt/homebrew/bin/uv        <- Path A, present
+  python3         3.9.6             /usr/bin/python3            (Apple system)
+  python3         (homebrew)        /opt/homebrew/bin/python3
+  pip3            25.3              /usr/bin/pip3
+  brew            5.1.15            /opt/homebrew/bin/brew
+
+  NOT INSTALLED: hatch, flit, poetry, pdm, pipx.
+
+  NEITHER `build` NOR `twine` IS INSTALLED against the system python, and you
+  should not install them there -- the Apple python is externally managed and
+  pip will either refuse or scribble into ~/Library/Python/3.9. Path B makes a
+  throwaway venv instead (STEP 2B). Versions used to verify this runbook:
+
+      uv 0.9.26      build 1.4.4      twine 6.2.0      keyring 25.7.0
+
+  Python 3.9 is fine to build with even though it is end-of-life: the package
+  is pure Python and pyproject.toml declares requires-python = ">=3.9", so the
+  wheel comes out as py3-none-any and installs on every later interpreter. The
+  interpreter you build WITH does not restrict who can install.
+
+  There is NO ~/.pypirc on this machine. STEP 3 sets one up, or use env vars.
+
+
+PATHS
+--------------------------------------------------------------------------------
+  REPO   /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc
+  PKG    $REPO/ark_oauth_client_py            <- run everything from here
+  PROJ   $PKG/pyproject.toml
+  DIST   $PKG/dist                            <- build output, gitignored
+
+  Everything below assumes:
+
+      cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/ark_oauth_client_py
+
+
+================================================================================
+ STEP 0  --  ONE-TIME ACCOUNT SETUP  (skip if already done)
+================================================================================
+
+  a. Create accounts. They are separate registries with separate logins:
+        https://pypi.org/account/register/
+        https://test.pypi.org/account/register/
+
+  b. Turn on 2FA on both. PyPI requires it to upload.
+        https://pypi.org/manage/account/#two-factor
+
+  c. Create an API token. For the FIRST upload the project does not exist yet,
+     so the token cannot be scoped to it -- create an account-scoped token:
+        https://pypi.org/manage/account/token/       ("Entire account")
+        https://test.pypi.org/manage/account/token/
+
+     AFTER the first successful upload, go back and create a project-scoped
+     token for ark-oauth-client, switch to it, and DELETE the account-scoped
+     one. An account token can publish to every project you own; a project
+     token cannot. Do not leave the wide one lying around.
+
+     The token is shown once. It starts with `pypi-`.
+
+  d. Better, for a public repo: skip tokens entirely and set up Trusted
+     Publishing, so releases come from a GitHub Actions workflow with a
+     short-lived OIDC identity and there is nothing to leak or rotate. It also
+     gets you signed PEP 740 attestations for free. See APPENDIX B.
+
+
+================================================================================
+ STEP 1  --  PRE-FLIGHT  (both paths)
+================================================================================
+
+  a. Confirm the name is still free (404 = free, 200 = taken by someone):
+
+        curl -s -o /dev/null -w "%{http_code}\n" https://pypi.org/pypi/ark-oauth-client/json
+
+  b. Confirm the version in pyproject.toml is what you mean to publish, and
+     that it does not already exist on PyPI. A version is IMMUTABLE: once
+     2.0.4 is uploaded, that number can never be reused, not even after a
+     delete. A mistake costs a version number, so look before you build.
+
+        grep -m1 '^version' pyproject.toml
+        grep -m1 '__version__' src/ark_oauth_client/__init__.py
+
+     Those two must agree. They are both 2.0.4 today.
+
+  c. Working tree clean, on the branch you mean to release from:
+
+        git -C .. status --short
+        git -C .. branch --show-current
+
+  d. Run the tests. 129 pass as of this writing.
+
+        uv run --extra dev pytest -q                  # Path A, no venv needed
+        ./.venv-release/bin/python -m pytest -q       # Path B, after STEP 2B
+
+
+================================================================================
+ STEP 2  --  BUILD ENVIRONMENT
+================================================================================
+
+  --- PATH A (uv) -------------------------------------------------------------
+
+  Nothing to do. uv creates and caches whatever it needs per command. If uv is
+  somehow missing:
+
+        brew install uv                     # or: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+  --- PATH B (build + twine) --------------------------------------------------
+
+  A venv beside the package, gitignored, thrown away whenever you like.
+
+        python3 -m venv .venv-release
+        ./.venv-release/bin/pip install --upgrade pip
+        ./.venv-release/bin/pip install --upgrade build twine
+        ./.venv-release/bin/pip install -e ".[dev]"        # to run the tests
+
+        ./.venv-release/bin/python -m build --version
+        ./.venv-release/bin/twine --version
+
+  Add the venv to .gitignore -- the existing `.venv/` and `venv/` entries do
+  NOT match this name:
+
+        echo '.venv-release/' >> .gitignore
+
+
+================================================================================
+ STEP 3  --  CREDENTIALS  (pick ONE; do not do both)
+================================================================================
+
+  Skip entirely if you are using Trusted Publishing (APPENDIX B).
+
+  OPTION A -- environment variables. Nothing on disk. Gone when the shell
+  closes, which is the point. Note the leading space on each line: with
+  HIST_IGNORE_SPACE / `setopt histignorespace` in zsh that keeps the token out
+  of ~/.zsh_history. Verify your shell honours it before relying on it.
+
+     For uv:
+         export UV_PUBLISH_TOKEN='pypi-AgEIcHlwaS5vcmc...'
+
+     For twine:
+         export TWINE_USERNAME=__token__
+         export TWINE_PASSWORD='pypi-AgEIcHlwaS5vcmc...'
+
+     TWINE_USERNAME is the literal string __token__ -- not your account name.
+     uv's --token flag handles that for you.
+
+  OPTION B -- ~/.pypirc. Outside the repo, so it is not a commit risk, but it
+  is plaintext on disk until you remove it. chmod 600 is not optional. Read by
+  twine; uv does not read it, so pair this with OPTION A or C for Path A.
+
+         cat > ~/.pypirc <<'EOF'
+         [distutils]
+         index-servers =
+             pypi
+             testpypi
+
+         [pypi]
+         username = __token__
+         password = pypi-REPLACE-ME
+
+         [testpypi]
+         repository = https://test.pypi.org/legacy/
+         username = __token__
+         password = pypi-REPLACE-ME-TEST
+         EOF
+         chmod 600 ~/.pypirc
+
+  OPTION C -- macOS keychain. Prompts once, stores in the keychain, nothing in
+  a file at all. Both tools can read it.
+
+         uvx keyring set https://upload.pypi.org/legacy/ __token__
+         uvx keyring set https://test.pypi.org/legacy/  __token__
+
+     Then: uv publish --keyring-provider subprocess -u __token__
+       or: twine upload -u __token__ dist/*
+
+
+================================================================================
+ STEP 4  --  BUILD
+================================================================================
+
+  Always from a clean dist/. Both tools upload everything they are given, and a
+  stale artifact from an earlier version sitting in dist/ is how the wrong file
+  gets pushed.
+
+        rm -rf dist build src/*.egg-info
+
+  --- PATH A ------------------------------------------------------------------
+
+        uv build
+
+  --- PATH B ------------------------------------------------------------------
+
+        ./.venv-release/bin/python -m build
+
+     Needs network: it creates an isolated environment and downloads hatchling
+     into it. Offline, with hatchling already installed:
+
+        ./.venv-release/bin/python -m build --no-isolation
+
+  --- either -------------------------------------------------------------------
+
+  Both produce both artifacts, which is what you want -- the wheel is what
+  almost everyone installs, the sdist is what lets anyone rebuild and audit it:
+
+        dist/ark_oauth_client-2.0.4-py3-none-any.whl
+        dist/ark_oauth_client-2.0.4.tar.gz
+
+
+================================================================================
+ STEP 5  --  VERIFY THE ARTIFACTS BEFORE ANYTHING LEAVES THIS MACHINE
+================================================================================
+
+  Everything here is cheap and local. The upload is the irreversible step, so
+  do all of it first.
+
+  a. Metadata and README rendering. A README that does not render leaves the
+     project page blank on PyPI and cannot be fixed without a new version.
+     This is twine's one irreplaceable job -- run it even on Path A, where
+     uvx fetches it on demand and leaves nothing installed:
+
+        uvx twine check dist/*                       # Path A
+        ./.venv-release/bin/twine check dist/*       # Path B
+
+     Expect: PASSED for both files.
+
+  b. What is actually inside the wheel -- 30 package files plus 3 dist-info
+     entries. Confirm py.typed is present and that no test, example, venv or
+     .env crept in.
+
+        python3 -m zipfile -l dist/ark_oauth_client-2.0.4-py3-none-any.whl
+
+  c. What is inside the sdist. Tests and examples ARE included here by design
+     (see [tool.hatch.build.targets.sdist] in pyproject.toml) so the package
+     can be rebuilt and re-tested from source.
+
+        tar -tzf dist/ark_oauth_client-2.0.4.tar.gz
+
+  d. Nothing secret shipped. Should print "clean":
+
+        tar -xzOf dist/ark_oauth_client-2.0.4.tar.gz \
+          | grep -nE 'pypi-Ag|BEGIN [A-Z ]*PRIVATE KEY|client_secret *= *"[^"]' \
+          || echo "clean"
+
+  e. Install the built wheel into a THROWAWAY environment and run the suite
+     against the INSTALLED package -- not the source tree. This is the check
+     that catches a packaging mistake an editable install hides: a module left
+     out of the wheel, a missing __init__.py, py.typed not shipped.
+
+     Path A, in one command, nothing left behind:
+
+        rm -rf /tmp/arkcheck && mkdir /tmp/arkcheck && cp -r tests /tmp/arkcheck/ \
+          && (cd /tmp/arkcheck && uv run --no-project \
+                --with "$OLDPWD/dist/ark_oauth_client-2.0.4-py3-none-any.whl[flask]" \
+                --with pytest -- pytest tests -q)
+
+     Path B:
+
+        rm -rf /tmp/ark-verify && python3 -m venv /tmp/ark-verify
+        /tmp/ark-verify/bin/pip install "dist/ark_oauth_client-2.0.4-py3-none-any.whl[flask]" pytest
+        rm -rf /tmp/arkcheck && mkdir /tmp/arkcheck && cp -r tests /tmp/arkcheck/ \
+          && (cd /tmp/arkcheck && /tmp/ark-verify/bin/python -m pytest tests -q)
+
+     Verified 2026-08-29: 129 passed against the installed wheel.
+
+  f. Rehearse the upload itself. Path A only, and genuinely worth it -- it
+     validates the files against the real endpoint and sends nothing:
+
+        uv publish --dry-run --publish-url https://test.pypi.org/legacy/ dist/*
+
+     Outside CI this also prints "Trusted publishing failed / No OIDC token
+     discovered". That is EXPECTED on a laptop -- it means uv looked for a CI
+     identity and did not find one. The dry run still exits 0.
+
+  g. Record the hashes, so you can prove later that what is on PyPI is what you
+     built here:
+
+        shasum -a 256 dist/*
+
+     2.0.4 as built on 2026-08-29:
+       48fd97cdc378db90a0c7328ddbc2461232eb9deef2958ea168e6ec849df9097d  ...-py3-none-any.whl
+       7aba82c66ff1a50de8d3732bda9687a02aa5e7104f3dd5ee2439a76e106bb2ac  ...tar.gz
+
+     These will NOT match if you rebuild -- the sdist embeds timestamps. Take
+     the hashes of the artifacts you are actually about to upload.
+
+
+================================================================================
+ STEP 6  --  PUBLISH TO TestPyPI FIRST
+================================================================================
+
+  TestPyPI is a real registry with real immutability, so it burns the version
+  number there too -- but it is the only way to see the project page and the
+  install path before the real thing.
+
+  --- PATH A ------------------------------------------------------------------
+
+        uv publish --publish-url https://test.pypi.org/legacy/ \
+                   --token "$TEST_PYPI_TOKEN" dist/*
+
+  --- PATH B ------------------------------------------------------------------
+
+        ./.venv-release/bin/twine upload --repository testpypi dist/*
+
+     Or without ~/.pypirc:
+
+        ./.venv-release/bin/twine upload \
+            --repository-url https://test.pypi.org/legacy/ \
+            -u __token__ dist/*
+
+  --- then look at it, and install from it --------------------------------------
+
+        open https://test.pypi.org/project/ark-oauth-client/
+
+        uv run --no-project \
+            --default-index https://test.pypi.org/simple/ \
+            --index https://pypi.org/simple/ \
+            --with "ark-oauth-client[flask]==2.0.4" \
+            -- python -c "import ark_oauth_client as a; print(a.__version__)"
+
+     The second index is required: cryptography and flask are not on TestPyPI,
+     so without it dependency resolution fails and tells you nothing about your
+     own package.
+
+     (uv 0.9 still accepts --index-url / --extra-index-url, but both are
+     deprecated in favour of --default-index / --index. The pip equivalent
+     keeps the old spelling:
+        pip install --index-url https://test.pypi.org/simple/ \
+                    --extra-index-url https://pypi.org/simple/ "ark-oauth-client[flask]==2.0.4")
+
+  Check on the page: the README renders, the description reads correctly, the
+  classifiers and the project links (Homepage / Repository / Issues /
+  Changelog) all resolve.
+
+
+================================================================================
+ STEP 7  --  PUBLISH TO PyPI
+================================================================================
+
+  THIS IS THE IRREVERSIBLE STEP. Version 2.0.4 of this name can never be
+  uploaded again, and the name is claimed for this account permanently.
+
+  --- PATH A ------------------------------------------------------------------
+
+        uv publish --token "$PYPI_TOKEN" dist/*
+        uv publish --token "$UV_PUBLISH_TOKEN" dist/*
+
+     Defaults to https://upload.pypi.org/legacy/. Useful flags:
+        --dry-run              rehearse; sends nothing
+        --check-url https://pypi.org/simple/ark-oauth-client/
+                               skip files already uploaded, for a safe re-run
+        --no-attestations      suppress PEP 740 provenance (leave it on)
+
+  --- PATH B ------------------------------------------------------------------
+
+        ./.venv-release/bin/twine upload dist/*
+
+     Explicitly, if you prefer not to depend on config ordering:
+
+        ./.venv-release/bin/twine upload \
+            --repository-url https://upload.pypi.org/legacy/ \
+            -u __token__ dist/*
+
+     Useful flags:
+        --verbose             show the request when something fails obscurely
+        --skip-existing       do not fail on files already uploaded
+        --non-interactive     never prompt; fail instead. For CI.
+
+
+================================================================================
+ STEP 8  --  CONFIRM IT IS LIVE
+================================================================================
+
+        curl -s https://pypi.org/pypi/ark-oauth-client/json \
+          | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['info']['name'], d['info']['version']); print(sorted(d['releases']))"
+
+        open https://pypi.org/project/ark-oauth-client/
+
+  Install from the real index, clean, as a user would:
+
+        uv run --no-project --with "ark-oauth-client[flask]" \
+            -- python -c "import ark_oauth_client as a; print(a.__version__)"
+
+  The CDN can lag a minute or two. If pip cannot see it yet, wait; do not
+  re-upload.
+
+
+================================================================================
+ STEP 9  --  TAG THE RELEASE
+================================================================================
+
+  Do this AFTER a successful upload, so a tag never points at something that
+  was never published.
+
+        cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc
+        git tag -a py-v2.0.4 -m "ark-oauth-client 2.0.4 (PyPI)"
+        git push origin py-v2.0.4
+
+  `py-` prefixed because this repo also tags NuGet and npm releases at the same
+  numbers; an unprefixed v2.0.4 would be ambiguous across the three.
+
+
+================================================================================
+ PUBLISHING A LATER VERSION
+================================================================================
+
+  1. Bump BOTH, they must agree:
+        pyproject.toml                      version = "2.0.5"
+        src/ark_oauth_client/__init__.py    __version__ = "2.0.5"
+  2. Add the entry to CHANGELOG.md.
+  3. STEP 1 (pre-flight) -> STEP 4 (build) -> STEP 5 (verify) -> STEP 7 (upload).
+  4. Tag py-v2.0.5.
+
+  You cannot re-upload a version. If 2.0.5 is broken, publish 2.0.6 -- deleting
+  2.0.5 does not free the number, and anyone who installed it already has it.
+
+
+================================================================================
+ IF SOMETHING GOES WRONG
+================================================================================
+
+  400  File already exists
+        That exact version is on PyPI already. Versions are immutable. Bump and
+        rebuild -- there is no overwrite. twine --skip-existing and uv
+        --check-url only make a re-run quiet; they do not replace anything.
+
+  403  Invalid or non-existent authentication information
+        With twine, TWINE_USERNAME must be the literal __token__, not your
+        account name. The token must be for the right registry -- a PyPI token
+        is rejected by TestPyPI and vice versa. Check it has not been revoked.
+
+  403  The user ... isn't allowed to upload to project ...
+        Somebody else owns the name now. Nothing to do but rename: change
+        `name` in pyproject.toml (the import package `ark_oauth_client` can
+        stay as it is) and rebuild.
+
+  400  The description failed to render
+        `twine check` catches this before upload -- run STEP 5a. README.md is
+        served as text/markdown via readme = "README.md" in pyproject.toml.
+
+  "Trusted publishing failed / No OIDC token discovered"  (uv, on a laptop)
+        Expected outside CI. Supply --token, or set UV_PUBLISH_TOKEN. To stop
+        uv probing at all: --trusted-publishing never
+
+  Invalid distribution metadata / unknown Metadata-Version
+        twine is older than the metadata the build backend emitted. Upgrade it:
+        pip install --upgrade twine   (or just use uvx twine, always current)
+
+  A wrong or broken release is already public
+        Yank rather than delete. Yanking leaves it installable for anyone who
+        pinned it exactly, but stops new resolutions picking it up -- deleting
+        breaks builds that already reference it and still does not free the
+        version number:
+        https://pypi.org/manage/project/ark-oauth-client/releases/
+
+  Token committed by accident
+        Revoke at https://pypi.org/manage/account/token/ FIRST. Then purge.
+        See the note at the top of this file -- it has happened here before.
+
+
+================================================================================
+ APPENDIX A  --  ONE-SHOT (once you trust it)
+================================================================================
+
+  cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/ark_oauth_client_py
+   export UV_PUBLISH_TOKEN='pypi-...'        # leading space; never commit this
+
+  rm -rf dist build src/*.egg-info \
+    && uv run --extra dev pytest -q \
+    && uv build \
+    && uvx twine check dist/* \
+    && uv publish --dry-run dist/* \
+    && uv publish dist/*
+
+  The && chain is deliberate: a failing test, a failed README check or a failed
+  dry run stops it before the upload, which is the only step that cannot be
+  undone.
+
+
+================================================================================
+ APPENDIX B  --  TRUSTED PUBLISHING  (no token at all -- best for a public repo)
+================================================================================
+
+  GitHub Actions authenticates to PyPI with a short-lived OIDC identity. There
+  is no token to store, leak, rotate or commit, and PyPI attaches signed PEP
+  740 attestations proving which workflow built the artifact. Given this repo
+  is public and has already had one credential incident, this is the option to
+  move to.
+
+  1. On PyPI: Your projects -> ark-oauth-client -> Publishing -> Add a new
+     pending/trusted publisher.
+        Owner:              ir-dev
+        Repository:         ark-oauth-oidc
+        Workflow filename:  publish-python.yml
+        Environment:        pypi
+     (Before the first release the project does not exist yet -- use "pending
+     publisher" under https://pypi.org/manage/account/publishing/ instead.)
+
+  2. Commit .github/workflows/publish-python.yml:
+
+        name: Publish ark-oauth-client to PyPI
+        on:
+          push:
+            tags: ["py-v*"]
+          workflow_dispatch:
+
+        jobs:
+          release:
+            runs-on: ubuntu-latest
+            environment: pypi
+            permissions:
+              id-token: write          # REQUIRED: mints the OIDC token
+            steps:
+              - uses: actions/checkout@v4
+              - uses: astral-sh/setup-uv@v5
+              - name: Test
+                working-directory: ark_oauth_client_py
+                run: uv run --extra dev pytest -q
+              - name: Build
+                working-directory: ark_oauth_client_py
+                run: uv build
+              - name: Check README renders
+                working-directory: ark_oauth_client_py
+                run: uvx twine check dist/*
+              - name: Publish
+                working-directory: ark_oauth_client_py
+                run: uv publish dist/*      # no token: OIDC does it
+
+  3. Release by tagging, which is STEP 9 doing double duty:
+
+        git tag -a py-v2.0.5 -m "ark-oauth-client 2.0.5" && git push origin py-v2.0.5
+
+  `permissions: id-token: write` is the line everyone forgets; without it the
+  workflow cannot mint the OIDC token and uv falls back to looking for a
+  password it does not have. The `environment:` also lets you require a manual
+  approval on the GitHub side before anything is published.
+
+  The equivalent with twine is `pypa/gh-action-pypi-publish@release/v1`, which
+  works the same way and needs the same `id-token: write`.

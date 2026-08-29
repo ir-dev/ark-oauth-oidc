@@ -432,3 +432,4 @@ FodyWeavers.xsd
 # Logs written by run.sh — one file per application, plus the build output.
 # ---------------------------------------------------------------------------
 .run-logs/
+ark_oauth_client_py/uv.lock
