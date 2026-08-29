@@ -427,3 +427,8 @@ FodyWeavers.xsd
 *.key
 *.pfx
 *.p12
+
+# ---------------------------------------------------------------------------
+# Logs written by run.sh — one file per application, plus the build output.
+# ---------------------------------------------------------------------------
+.run-logs/

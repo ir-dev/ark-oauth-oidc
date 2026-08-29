@@ -7,10 +7,18 @@ It is multi-tenant, runs on SQLite / MySQL / PostgreSQL, and ships its own sign-
 consent and admin UI. Point any standard OpenID Connect library at the issuer URL and it will
 configure itself.
 
+> **New here? Start with [GETTINGSTARTED.md](GETTINGSTARTED.md).** It takes a fresh clone to a
+> working sign-in with one command — `./run.sh` (macOS/Linux) or `run.bat` (Windows) — and then
+> explains every setting you passed on the way: the issuer formula, how a port turns into a
+> redirect URI, and the four registrations that make the end-to-end sample work.
+>
+> This README is the reference: what the server supports, every endpoint and every setting.
+
 ---
 
 ## Contents
 
+- [Getting started](GETTINGSTARTED.md) — the guided walkthrough, and `run.sh` / `run.bat`
 - [What's supported](#whats-supported)
 - [Quick start](#quick-start)
 - [Integrating an application](#integrating-an-application)
@@ -53,6 +61,10 @@ password credentials grant. All three are removed in OAuth 2.1.
 ---
 
 ## Quick start
+
+This builds a **new** host from the published packages. To run the sample already in this
+repository instead — provider, client and admin console, with readiness checks — use `./run.sh`
+or `run.bat` and follow [GETTINGSTARTED.md](GETTINGSTARTED.md).
 
 ### 1. Create a host project
 
