@@ -29,6 +29,9 @@ step 7 (optional - future): test publish using test token
                    --token "$TEST_PYPI_TOKEN" dist/*    
 
 step 8: actual publish 
+    #remove all items in dist folder
+    > rm -rf dist/*
+    # publish the libs
     > uv publish --token "$UV_PUBLISH_TOKEN" dist/*
 
 ================================================================================
@@ -209,7 +212,7 @@ PATHS
         grep -m1 '^version' pyproject.toml
         grep -m1 '__version__' src/ark_oauth_client/__init__.py
 
-     Those two must agree. They are both 2.0.4 today.
+     Those two must agree. They are both 2.0.5 today.
 
   c. Working tree clean, on the branch you mean to release from:
 

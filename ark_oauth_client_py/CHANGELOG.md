@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.5
+
+The built-in access-denied page now names the library that drew it — `ark-oauth-client <version>`,
+quietly at the foot of the card. On a shared browser that page is where a stuck user waits while
+somebody else works out why the account is wrong, and answering "which version of the client is
+this?" meant a `pip show` on a host the person asking cannot reach.
+
+Published alongside `Ark.oAuth.Oidc` 2.0.5, whose admin console gained the same line in its footer,
+and `Ark.oAuth.Client` 2.0.5, whose access-denied page gained it too. No API change: the string is
+`ark_oauth_client.__version__`, and an application serving its own page
+(`account_switch.serve_default_page = False`) is unaffected.
+
 ## 2.0.4
 
 First release of the Python client, published alongside `Ark.oAuth.Client` 2.0.4 and

@@ -38,6 +38,11 @@ _STYLE = (
     "button.secondary{background:transparent;color:var(--fg);border-color:var(--border)}"
     ".foot{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:13px;"
     "color:var(--muted)}.foot a{color:var(--accent)}"
+    ".ver{margin:18px 0 0;padding-top:14px;border-top:1px solid var(--border);font-size:12px;"
+    "color:var(--muted);text-align:center}"
+    # One rule above the fold, not two: when the support line is drawn it already carries the
+    # separator, so the version tucks under it instead of ruling the card twice.
+    ".foot+.ver{margin-top:8px;padding-top:0;border-top:0}"
 )
 
 
@@ -97,6 +102,17 @@ class ArkAccessDeniedPage:
                 address = escape(options.support_email or "")
                 parts.append(f'<a href="mailto:{address}">{address}</a>')
             parts.append("</p>")
+
+        # Which client library drew this page. It is the one screen a stuck user is looking at
+        # while somebody tries to work out why the account is wrong, and the version is otherwise
+        # a `pip show` on a host they cannot reach.
+        #
+        # Imported here rather than at module scope because the package __init__ imports this
+        # module on its way to defining __version__ — at module scope the name does not exist
+        # yet. By the time anything renders a page, it does.
+        from .. import __version__
+
+        parts.append(f'<p class="ver">ark-oauth-client {escape(__version__)}</p>')
 
         parts.append("</main></body></html>")
         return "".join(parts)
