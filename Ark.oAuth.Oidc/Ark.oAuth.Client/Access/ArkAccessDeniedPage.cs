@@ -81,6 +81,10 @@ namespace Ark.oAuth
             sb.Append("font:inherit;font-weight:560;cursor:pointer}button.secondary{background:transparent;color:var(--fg);border-color:var(--border)}");
             sb.Append(".foot{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)}");
             sb.Append(".foot a{color:var(--accent)}");
+            sb.Append(".ver{margin:18px 0 0;padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);text-align:center}");
+            // One rule above the fold, not two: when the support line is drawn it already carries
+            // the separator, so the version tucks under it instead of ruling the card twice.
+            sb.Append(".foot+.ver{margin-top:8px;padding-top:0;border-top:0}");
             sb.Append("</style></head><body><main class=\"card\">");
 
             sb.Append("<h1>You do not have access to ").Append(appName).Append("</h1>");
@@ -113,6 +117,11 @@ namespace Ark.oAuth
                       .Append(e.Encode(options.SupportEmail!)).Append("</a>");
                 sb.Append("</p>");
             }
+
+            // Which client library drew this page. It is the one screen a stuck user is looking
+            // at while somebody tries to work out why the account is wrong, and the version is
+            // otherwise a file property on a server they cannot reach.
+            sb.Append("<p class=\"ver\">Ark.oAuth.Client ").Append(e.Encode(ArkOidcClient.Version)).Append("</p>");
 
             sb.Append("</main></body></html>");
             return sb.ToString();

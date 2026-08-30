@@ -1,4 +1,5 @@
-﻿using Ark.oAuth.Oidc.Protocol;
+﻿using System.Reflection;
+using Ark.oAuth.Oidc.Protocol;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -123,6 +124,8 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.HostName = ser.EmailConfig?.host_company_display ?? ser.EmailConfig?.host_company_name ?? "Identity Provider";
             ViewBag.ConsoleCss = AssetUrl(appRoot, CssAsset);
             ViewBag.ConsoleJs = AssetUrl(appRoot, JsAsset);
+            // Named in the footer: which build of the server package is serving this console.
+            ViewBag.PackageVersion = PackageVersion;
 
             // The console's session is the host's authentication cookie, and only the host can
             // drop it. With no route configured, end_session at least ends the session at the IdP
@@ -201,6 +204,29 @@ namespace Ark.oAuth.Oidc.Controllers
         /// <summary>The package version, used to bust the cache of the URLs below on upgrade.</summary>
         private static readonly string AssetVersion =
             typeof(AdminController).Assembly.GetName().Version?.ToString() ?? "1";
+
+        /// <summary>
+        /// The version the console names in its footer.
+        ///
+        /// The informational version rather than <see cref="AssetVersion"/>: that one is the
+        /// four-part assembly version and exists only to bust a cache, while this is the version
+        /// as published to nuget.org — "2.0.4", the number a support conversation starts from.
+        /// Source Link appends "+{commit}" on a CI build, which is trimmed off.
+        /// </summary>
+        private static readonly string PackageVersion = ReadPackageVersion();
+
+        private static string ReadPackageVersion()
+        {
+            var assembly = typeof(AdminController).Assembly;
+            var informational = assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
+            if (string.IsNullOrWhiteSpace(informational))
+                return assembly.GetName().Version?.ToString() ?? "";
+
+            var plus = informational.IndexOf('+');
+            return plus < 0 ? informational : informational.Substring(0, plus);
+        }
 
         /// <summary>
         /// The console's stylesheet and script, at a stable path a host page can link to as well —

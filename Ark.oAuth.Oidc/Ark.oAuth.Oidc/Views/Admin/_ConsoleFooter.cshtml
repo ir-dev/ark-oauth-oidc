@@ -1,0 +1,15 @@
+@*
+    The console's footer.
+
+    A partial for the same reason _ConsoleHeader is one: both console pages set Layout = null, so
+    without this the one line naming the build would be two lines to keep in step.
+
+    It exists to answer "which version is this?" without a shell on the server. The console is
+    served out of the package, so the screen and the assembly are the same release — the number
+    here is the one to quote when a behaviour on this page does not match the documentation.
+*@
+<footer class="ark-console-foot">
+    <span>@ViewBag.HostName</span>
+    <span class="ark-console-foot-sep" aria-hidden="true"></span>
+    <span>Ark.oAuth.Oidc <code>@ViewBag.PackageVersion</code></span>
+</footer>

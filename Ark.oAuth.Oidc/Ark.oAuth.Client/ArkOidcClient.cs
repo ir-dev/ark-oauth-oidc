@@ -1,4 +1,5 @@
 ﻿using System.Net.Http.Headers;
+using System.Reflection;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -31,6 +32,31 @@ namespace Ark.oAuth
     {
         public const string CookieScheme = "ArkCookie";
         public const string OidcScheme = "ArkOidc";
+
+        /// <summary>
+        /// This package's version, as published to nuget.org.
+        ///
+        /// Read off the assembly rather than kept as a literal, so it cannot drift from the
+        /// csproj. Source Link appends "+{commit}" on a CI build; that is trimmed, because the
+        /// number worth quoting is the release. Public because the built-in access-denied page
+        /// prints it, and a host that replaces that page with its own wants the same string —
+        /// on a shared browser it is the one screen where knowing which client is talking to
+        /// the provider settles the question.
+        /// </summary>
+        public static readonly string Version = ReadVersion();
+
+        private static string ReadVersion()
+        {
+            var assembly = typeof(ArkOidcClient).Assembly;
+            var informational = assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
+            if (string.IsNullOrWhiteSpace(informational))
+                return assembly.GetName().Version?.ToString() ?? "";
+
+            var plus = informational.IndexOf('+');
+            return plus < 0 ? informational : informational.Substring(0, plus);
+        }
 
         /// <summary>
         /// Wires up interactive sign-in with the authorization code flow and PKCE.
