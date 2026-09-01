@@ -418,6 +418,24 @@ namespace Ark.oAuth.Oidc
             else throw new ApplicationException("reset request expired, pls contact support.");
             return true;
         }
+        public async Task<ArkUser> SetUserPassword(string email, string pw)
+        {
+            var login_id = (email ?? "").ToLower().Trim();
+            if (string.IsNullOrWhiteSpace(login_id)) throw new ApplicationException("a username or email is required.");
+            if (string.IsNullOrWhiteSpace(pw)) throw new ApplicationException("empty password.");
+
+            var uu = await _ctx.users.FirstOrDefaultAsync(t => (t.email ?? "") == login_id)
+                ?? throw new ApplicationException($"unknown user '{login_id}'.");
+
+            _ctx.ChangeTracker.Clear();
+            uu.hash_pw = _util.HashPasswordPBKDF2(pw);
+            uu.reset_mode = false;
+            uu.emailed = false;
+            uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+            _ctx.users.Update(uu);
+            await _ctx.SaveChangesAsync();
+            return uu;
+        }
         /// <summary>
         /// Verifies a sign-in and, separately, that both the account and the application it is
         /// signing in to are still active.
@@ -439,20 +457,21 @@ namespace Ark.oAuth.Oidc
         /// </summary>
         public async Task<ArkUser> ValidateUserCreds(string un, string pw, string client, string tenant_id)
         {
-            var usr = _ctx.users.FirstOrDefault(t => t.email.ToLower() == un.ToLower());
+            var login_id = (un ?? "").ToLower().Trim();
+            var usr = _ctx.users.FirstOrDefault(t => (t.email ?? "").ToLower() == login_id);
             if (usr == null) throw new ApplicationException("invalid creds");
             var clnt = _ctx.clients.FirstOrDefault(t => (t.client_id ?? "").ToLower() == (client ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
             if (clnt == null) throw new ApplicationException("invalid creds client");
-            var usr_cl_cl = _ctx.user_client_claims.FirstOrDefault(t => t.email == un && (t.client_id ?? "").ToLower() == (clnt.id ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
+            var usr_cl_cl = _ctx.user_client_claims.FirstOrDefault(t => (t.email ?? "").ToLower() == login_id && (t.client_id ?? "").ToLower() == (clnt.id ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
             if (usr_cl_cl == null) throw new ApplicationException("invalid creds client.");
             if (!_util.VerifyPasswordPBKDF2(pw, usr.hash_pw))
             {
-                await UpdateStatus(un, retry: "increment");
+                await UpdateStatus(login_id, retry: "increment");
                 throw new ApplicationException("invalid creds.");
             }
             else
             {
-                await UpdateStatus(un, retry: "reset");
+                await UpdateStatus(login_id, retry: "reset");
             }
             if (!clnt.is_active)
                 throw new ArkAccountInactiveException(ArkActivationLevel.Client,

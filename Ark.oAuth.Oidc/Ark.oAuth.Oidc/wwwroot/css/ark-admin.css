@@ -345,6 +345,57 @@ legend {
 .ark-logo-cell img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 .ark-logo-cell[data-empty="true"] { border: 1px dashed var(--ark-border-strong); }
 
+/* ---------- modal ---------- */
+.ark-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 14, 24, .46);
+    backdrop-filter: blur(2px);
+    z-index: 60;
+}
+.ark-modal {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, calc(100vw - 28px));
+    max-height: calc(100vh - 28px);
+    overflow: auto;
+    background: var(--ark-surface);
+    border: 1px solid var(--ark-border);
+    border-radius: var(--ark-radius);
+    box-shadow: var(--ark-shadow);
+    z-index: 61;
+}
+.ark-modal-head,
+.ark-modal-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+}
+.ark-modal-head {
+    border-bottom: 1px solid var(--ark-border);
+}
+.ark-modal-head h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 650;
+}
+.ark-modal-head > :first-child,
+.ark-modal-foot > :first-child { margin-right: auto; }
+.ark-modal-body {
+    padding: 16px 18px 6px;
+}
+.ark-modal-foot {
+    border-top: 1px solid var(--ark-border);
+    justify-content: flex-end;
+}
+#user-password-status {
+    min-height: 20px;
+    margin-top: 6px;
+}
+
 /* ---------- provisioning ---------- */
 .ark-provision { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
 .ark-provision-form { flex: 1 1 520px; min-width: 320px; }

@@ -268,6 +268,7 @@
 
     var state = { tenants: [], clients: [], users: [], claims: [], scopes: [] };
     var tables = {};
+    var passwordDialog = null;
 
     function tenantOptions() {
         return state.tenants.reduce(function (acc, t) {
@@ -298,6 +299,88 @@
                 handler(cell);
             }
         };
+    }
+
+    function bindUserPasswordDialog() {
+        var modal = byId("user-password-modal");
+        var backdrop = byId("user-password-modal-backdrop");
+        var login = byId("user-password-login");
+        var value = byId("user-password-value");
+        var confirmValue = byId("user-password-confirm");
+        var status = byId("user-password-status");
+        var saveButton = byId("user-password-save");
+        if (!modal || !backdrop || !login || !value || !confirmValue || !status || !saveButton) return;
+
+        var current = null;
+
+        function setStatus(message, kind) {
+            status.textContent = message || "";
+            status.style.color = kind === "error"
+                ? "var(--ark-danger)"
+                : kind === "success"
+                    ? "var(--ark-success)"
+                    : "var(--ark-fg-muted)";
+        }
+
+        function close() {
+            current = null;
+            modal.hidden = true;
+            backdrop.hidden = true;
+            login.value = "";
+            value.value = "";
+            confirmValue.value = "";
+            saveButton.disabled = false;
+            setStatus("");
+        }
+
+        function open(user) {
+            current = user;
+            login.value = user.email || "";
+            value.value = "";
+            confirmValue.value = "";
+            saveButton.disabled = false;
+            setStatus("Set a new sign-in password for this account.");
+            modal.hidden = false;
+            backdrop.hidden = false;
+            setTimeout(function () { value.focus(); }, 0);
+        }
+
+        saveButton.addEventListener("click", function () {
+            if (!current) return;
+            var pw1 = value.value || "";
+            var pw2 = confirmValue.value || "";
+            if (!pw1.trim()) {
+                setStatus("Enter a new password.", "error");
+                value.focus();
+                return;
+            }
+            if (pw1 !== pw2) {
+                setStatus("The two password fields do not match.", "error");
+                confirmValue.focus();
+                return;
+            }
+
+            saveButton.disabled = true;
+            setStatus("Updating password…");
+            save(API + "/user/pw/set", { email: current.email, password: pw1 }, "password updated")
+                .then(function () { return loadUsers(); })
+                .then(function () { close(); })
+                .catch(function () {
+                    saveButton.disabled = false;
+                    setStatus("The password could not be updated. See the message above.", "error");
+                });
+        });
+
+        ["user-password-cancel", "user-password-cancel-top"].forEach(function (id) {
+            var button = byId(id);
+            if (button) button.addEventListener("click", close);
+        });
+        backdrop.addEventListener("click", close);
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape" && !modal.hidden) close();
+        });
+
+        passwordDialog = { open: open, close: close };
     }
 
     function loadTenants() {
@@ -697,6 +780,12 @@
                             if (!row.email) { toast("w", "a username or email is required", 4000); return; }
                             save(API + "/user/upsert", row, "user saved").then(loadUsers).catch(function () { });
                         }),
+                        actionColumn("Set password", "", function (cell) {
+                            var row = cell.getRow().getData();
+                            if (!row.email) { toast("w", "a username or email is required", 4000); return; }
+                            if (!passwordDialog) { toast("f", "password dialog unavailable", 4000); return; }
+                            passwordDialog.open(row);
+                        }, 135, function (row) { return (row.type || "user") !== "service"; }),
                         // A reset link needs a mailbox, so this only applies to accounts whose
                         // login id is an address. The server refuses the rest with a message; not
                         // drawing the button avoids inviting the error in the first place.
@@ -1366,6 +1455,8 @@
 
     // Each page loads what it draws. The provisioning page needs the three lists its selects and
     // activation rows are built from, and none of the catalogue the console's editors use.
+    bindUserPasswordDialog();
+
     var boot = PAGE === "provisioning"
         ? loadTenants().then(loadClients).then(loadUsers).then(renderCurl)
         : Promise.all([loadTenants(), loadScopes(), loadClaims()])

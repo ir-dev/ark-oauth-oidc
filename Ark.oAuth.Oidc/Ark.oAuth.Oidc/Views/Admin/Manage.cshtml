@@ -351,6 +351,36 @@
     </div>
 </aside>
 
+<div class="ark-modal-backdrop" id="user-password-modal-backdrop" hidden></div>
+<section class="ark-modal" id="user-password-modal" aria-labelledby="user-password-title" hidden>
+    <div class="ark-modal-head">
+        <h3 id="user-password-title">Set password</h3>
+        <button type="button" class="ark-btn-ghost ark-btn-sm" id="user-password-cancel-top">Close</button>
+    </div>
+    <div class="ark-modal-body">
+        <div class="ark-field">
+            <label for="user-password-login">User</label>
+            <input type="text" id="user-password-login" readonly />
+            <div class="ark-note">This updates the password immediately and clears any pending email reset state.</div>
+        </div>
+        <div class="ark-grid-2">
+            <div class="ark-field">
+                <label for="user-password-value">New password</label>
+                <input type="password" id="user-password-value" autocomplete="new-password" />
+            </div>
+            <div class="ark-field">
+                <label for="user-password-confirm">Confirm password</label>
+                <input type="password" id="user-password-confirm" autocomplete="new-password" />
+            </div>
+        </div>
+        <div class="ark-note" id="user-password-status"></div>
+    </div>
+    <div class="ark-modal-foot">
+        <button type="button" id="user-password-save">Update password</button>
+        <button type="button" class="ark-btn-ghost" id="user-password-cancel">Cancel</button>
+    </div>
+</section>
+
 <div class="ark-toasts" id="ark-toasts" aria-live="polite"></div>
 
 <script src="https://unpkg.com/tabulator-tables@@5.5.2/dist/js/tabulator.min.js"></script>

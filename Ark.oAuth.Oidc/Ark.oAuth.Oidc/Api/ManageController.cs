@@ -4,6 +4,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Ark.oAuth.Oidc
 {
+    public class ArkPasswordChangeRequest
+    {
+        public string? email { get; set; }
+        public string? password { get; set; }
+    }
+
     [Authorize]
     [Route("api/oauth")]
     [ApiController]
@@ -525,6 +531,32 @@ namespace Ark.oAuth.Oidc
                     error = true,
                     msg = $"{ex.Message}",
                     data = user
+                };
+            }
+        }
+        [HttpPost]
+        [Route("v1/user/pw/set")]
+        public async Task<dynamic> UserPasswordSet([FromServices] DataAccess da, [FromBody] ArkPasswordChangeRequest request)
+        {
+            try
+            {
+                var saved = await da.SetUserPassword(request?.email, request?.password);
+                da.Log("user_password_set", "v1/user/pw/set", "user password updated", $"details : e: {saved?.email}");
+                return new
+                {
+                    error = false,
+                    msg = "password updated.",
+                    data = new { saved.email, saved.at }
+                };
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "user_password_set", "v1/user/pw/set", $"details : e: {request?.email}");
+                return new
+                {
+                    error = true,
+                    msg = $"{ex.Message}",
+                    data = request
                 };
             }
         }
