@@ -58,6 +58,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 };
 
                 ApplyMetadata(client, metadata, ep);
+                await EnforceUniqueClientNameAsync(client);
 
                 // Public clients get no secret; everything else does.
                 string? secret = null;
@@ -258,6 +259,18 @@ namespace Ark.oAuth.Oidc.Endpoints
             client.redirect_url = redirectUris.FirstOrDefault() ?? "";
             client.logout_url = client.post_logout_redirect_uris.FirstOrDefault() ?? "";
             client.domain = redirectUris.Count > 0 && Uri.TryCreate(redirectUris[0], UriKind.Absolute, out var d) ? d.Host : "";
+        }
+
+        private async Task EnforceUniqueClientNameAsync(ArkClient client)
+        {
+            try
+            {
+                await _da.EnsureUniqueClientName(client.tenant_id, client.client_name ?? client.client_id, client.id);
+            }
+            catch (ArkClientValidationException ex)
+            {
+                throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata, ex.Message, ex.StatusCode);
+            }
         }
 
         private static Dictionary<string, object> BuildClientResponse(ArkClient client, ArkOidcEndpoints ep)

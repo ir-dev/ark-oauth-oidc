@@ -3,6 +3,21 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Ark.oAuth.Oidc
 {
+    public class ArkClientValidationException : ApplicationException
+    {
+        public string Code { get; }
+        public int StatusCode { get; }
+        public object? DataPayload { get; }
+
+        public ArkClientValidationException(string code, string message, int statusCode = 400, object? data = null)
+            : base(message)
+        {
+            Code = code;
+            StatusCode = statusCode;
+            DataPayload = data;
+        }
+    }
+
     public class DataAccess
     {
         ArkDataContext _ctx;
@@ -86,6 +101,7 @@ namespace Ark.oAuth.Oidc
             if (string.IsNullOrEmpty((client?.id ?? "").Trim())) client.id = null;
             await NormaliseClient(client);
             var tt = (await _ctx.clients.FirstOrDefaultAsync(t => t.id.ToLower() == (client.id ?? "").ToLower())) ?? (await _ctx.clients.FirstOrDefaultAsync(t => t.tenant_id.ToLower() == (client.tenant_id ?? "").ToLower() && t.client_id.ToLower() == (client.client_id ?? "").ToLower()));
+            await EnsureUniqueClientName(client.tenant_id, client.client_name ?? client.display ?? client.name ?? client.client_id, tt?.id);
             if (tt == null)
             {
                 client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
@@ -150,6 +166,38 @@ namespace Ark.oAuth.Oidc
             }
 
             if (client.expire_mins <= 0) client.expire_mins = 480;
+        }
+        public async Task<ArkClient?> FindClientByName(string tenant_id, string client_name, string? excludeClientRowId = null)
+        {
+            var tenantId = (tenant_id ?? "").Trim().ToLower();
+            var clientName = (client_name ?? "").Trim().ToLower();
+            if (string.IsNullOrWhiteSpace(tenantId) || string.IsNullOrWhiteSpace(clientName))
+                return null;
+
+            var rowId = (excludeClientRowId ?? "").Trim().ToLower();
+            return await _ctx.clients.FirstOrDefaultAsync(c =>
+                c.tenant_id.ToLower().Trim() == tenantId
+                && (rowId == "" || c.id.ToLower() != rowId)
+                && ((c.client_name ?? c.display ?? c.name ?? "").ToLower().Trim() == clientName));
+        }
+        public async Task EnsureUniqueClientName(string tenant_id, string client_name, string? excludeClientRowId = null)
+        {
+            var normalisedName = (client_name ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(normalisedName)) return;
+
+            var existing = await FindClientByName(tenant_id, normalisedName, excludeClientRowId);
+            if (existing == null) return;
+
+            throw new ArkClientValidationException(
+                "client_exists",
+                $"an application named '{existing.client_name ?? existing.display ?? existing.client_id}' is already registered in tenant '{existing.tenant_id}'. Choose a different client name.",
+                409,
+                new
+                {
+                    tenant_id = existing.tenant_id,
+                    client_id = existing.client_id,
+                    client_name = existing.client_name ?? existing.display ?? existing.name ?? existing.client_id
+                });
         }
         public async Task<ArkClient> DeleteClient(ArkClient client)
         {

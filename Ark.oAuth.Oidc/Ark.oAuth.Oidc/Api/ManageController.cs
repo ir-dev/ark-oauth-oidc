@@ -126,28 +126,40 @@ namespace Ark.oAuth.Oidc
         }
         [HttpPost]
         [Route("v1/client/upsert")]
-        public async Task<dynamic> ClientUpdate([FromServices] DataAccess da, [FromBody] ArkClient client)
+        public async Task<IActionResult> ClientUpdate([FromServices] DataAccess da, [FromBody] ArkClient client)
         {
             try
             {
                 await da.UpsertClient(client);
                 da.Log("client_upsert", $"{client.client_id}", "Client updated success", $"deails : d: {client.display}, ci: {client.client_id}, name: {client.name}, do: {client.domain}, ru: {client.redirect_url}, em: {client.expire_mins}");
-                return new
+                return Ok(new
                 {
                     error = false,
                     msg = "clients updated.",
                     data = client
-                };
+                });
+            }
+            catch (ArkClientValidationException ex)
+            {
+                da.Log("client_upsert_refused", $"{client?.tenant_id}/{client?.client_id}", ex.Code, ex.Message, "warn");
+                return StatusCode(ex.StatusCode, new
+                {
+                    error = true,
+                    code = ex.Code,
+                    msg = ex.Message,
+                    data = ex.DataPayload
+                });
             }
             catch (Exception ex)
             {
                 da.LogError(ex, "v1/client/upsert", $"{client?.client_id}/client/upsert", $"deails : d: {client?.display}, ci: {client?.client_id}, name: {client?.name}, do: {client?.domain}, ru: {client?.redirect_url}, em: {client?.expire_mins}");
-                return new
+                return StatusCode(400, new
                 {
                     error = true,
+                    code = "client_upsert_failed",
                     msg = $"{ex.Message}",
                     data = client
-                };
+                });
             }
         }
         [HttpPost]
