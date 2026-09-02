@@ -47,6 +47,19 @@
         public string UploadPath { get; set; }
         public string Provider { get; set; }
         public string DefaultPw { get; set; }
+        /// <summary>
+        /// How newly created user passwords are onboarded.
+        ///
+        /// Supported values are:
+        ///
+        ///   * <c>admin_managed</c> — always create the account on <see cref="DefaultPw"/> and let
+        ///     an operator set or communicate the password out of band;
+        ///   * <c>email_based</c> — create email-address accounts in <c>reset_mode</c> and send an
+        ///     activation link; plain usernames still fall back to <see cref="DefaultPw"/>;
+        ///   * <c>auto</c> (or unset) — legacy behaviour: respect the caller's request, which is
+        ///     what the existing console and provisioning API already do.
+        /// </summary>
+        public string UserPasswordMode { get; set; }
         public bool EnableLogTrace { get; set; }
         public string BaseUrl { get; set; }
         public string CcList { get; set; }
@@ -58,6 +71,40 @@
         public ArkAdminUserConfig AdminUser { get; set; } = new ArkAdminUserConfig();
         /// <summary>The bundled v2 admin console. Optional — every value has a working default.</summary>
         public ArkAdminConsoleConfig Admin { get; set; } = new ArkAdminConsoleConfig();
+
+        /// <summary>The parsed onboarding mode, defaulting to the legacy auto behaviour.</summary>
+        public ArkUserPasswordMode EffectiveUserPasswordMode =>
+            (UserPasswordMode ?? "").Trim().ToLowerInvariant() switch
+            {
+                "admin" or "admin_managed" or "admin-managed" or "default_password" or "default-password"
+                    => ArkUserPasswordMode.AdminManaged,
+                "email" or "email_based" or "email-based" or "activation_email" or "activation-email"
+                    => ArkUserPasswordMode.EmailBased,
+                _ => ArkUserPasswordMode.Auto
+            };
+
+        /// <summary>
+        /// Whether a user with this login identifier should be sent through the email activation
+        /// flow when the caller asked for it.
+        /// </summary>
+        public bool ShouldUseEmailPasswordFlow(string loginId, bool requestedByCaller = true)
+        {
+            if (!ark.net.util.EmailUtil.IsValidFormat(loginId)) return false;
+
+            return EffectiveUserPasswordMode switch
+            {
+                ArkUserPasswordMode.AdminManaged => false,
+                ArkUserPasswordMode.EmailBased => true,
+                _ => requestedByCaller
+            };
+        }
+    }
+
+    public enum ArkUserPasswordMode
+    {
+        Auto,
+        AdminManaged,
+        EmailBased
     }
 
     /// <summary>

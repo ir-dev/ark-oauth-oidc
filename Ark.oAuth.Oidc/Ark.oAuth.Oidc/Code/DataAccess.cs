@@ -363,8 +363,9 @@ namespace Ark.oAuth.Oidc
 
         /// <param name="user">The account to create or update. <c>email</c> is the login identifier.</param>
         /// <param name="sendActivationEmail">
-        /// Whether a brand-new account whose login id is an email address should be parked in
-        /// <c>reset_mode</c> and sent an activation link, which is what the console does.
+        /// Whether the caller is asking for the email activation flow for a brand-new account.
+        /// The host configuration (<c>ark_oauth_server:UserPasswordMode</c>) can still force the
+        /// decision either way so the deployment behaves consistently.
         ///
         /// Provisioning passes false: it is driven by another system that has just told somebody
         /// "your account is ready", and an account in reset_mode cannot sign in at all — it
@@ -387,10 +388,11 @@ namespace Ark.oAuth.Oidc
                 user.ref_uid = Guid.NewGuid().ToString();
                 user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
 
-                // Only an address can be sent an activation link. A username account has no
-                // mailbox, so it starts on the configured default password instead of being
-                // parked in reset_mode waiting for a mail that can never arrive.
-                if (sendActivationEmail && ark.net.util.EmailUtil.IsValidFormat(user.email))
+                // The host decides whether this deployment uses email activation or an
+                // admin-managed/default-password flow. An email-shaped login id no longer forces
+                // one on its own, which is what trapped accounts in reset_mode when SMTP had not
+                // been configured.
+                if (_util.ServerConfig.ShouldUseEmailPasswordFlow(user.email, sendActivationEmail))
                 {
                     user.reset_mode = true;
                     // Creating the account is the operation being asked for; a template that
@@ -435,6 +437,9 @@ namespace Ark.oAuth.Oidc
             var login_id = (user?.email ?? "").ToLower().Trim();
             var uu = await _ctx.users.FirstOrDefaultAsync(t => t.email == login_id)
                 ?? throw new ApplicationException($"unknown user '{login_id}'.");
+            if (_util.ServerConfig.EffectiveUserPasswordMode == ArkUserPasswordMode.AdminManaged)
+                throw new ApplicationException(
+                    "password-reset emails are disabled by ark_oauth_server:UserPasswordMode; set a new password directly instead.");
             // A reset link can only be delivered to an address; a username account has no mailbox.
             if (!ark.net.util.EmailUtil.IsValidFormat(uu.email))
                 throw new ApplicationException($"'{uu.email}' is a username, not an email address - it has no mailbox to send a reset link to. Set a new password directly instead.");

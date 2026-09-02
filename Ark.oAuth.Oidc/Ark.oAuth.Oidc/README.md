@@ -58,6 +58,7 @@ endpoint the authorization middleware cannot see the `[Authorize]` metadata it i
     "Provider": "sqlite",              // sqlite (default) | mysql | postgres
     "UploadPath": "./wwwroot/{0}/",
     "DefaultPw": "<initial password for new users>",
+    "UserPasswordMode": "admin_managed", // admin_managed | email_based | auto (legacy behaviour)
     "AdminUser": {                     // the account seeded when the database is first created
       "Username": "admin",             // optional, defaults to "admin"; need not be an email address
       "Password": "<required>",        // no default - see below
@@ -106,6 +107,11 @@ export ark_oauth_server__AdminUser__Password="…"                    # environm
 
 The section is only read while the database is being created. Changing it afterwards renames
 nothing and resets no password — use the console.
+
+`UserPasswordMode` lets the host choose one password-onboarding flow for newly created accounts.
+Use `admin_managed` when operators set or communicate passwords out of band, or `email_based`
+when email-address accounts should be parked in reset mode and sent an activation link. `auto`
+keeps the older mixed behaviour, where the caller decides.
 
 Your issuer is `{BaseUrl}/{TenantId}`, and discovery lives at
 `{BaseUrl}/{TenantId}/.well-known/openid-configuration`.
@@ -249,8 +255,10 @@ onboarding script into a way to redirect somebody else's authorization codes. An
 is reused and mapped to the new client, because that is exactly what happens when a person is
 given their second application.
 
-A user this call creates gets `ark_oauth_server:DefaultPw` and can sign in immediately. Set
-`send_activation_email` to email a link instead; the account then cannot sign in until it is used.
+A user this call creates gets `ark_oauth_server:DefaultPw` and can sign in immediately unless the
+host's `ark_oauth_server:UserPasswordMode` requires the email activation flow. In `auto` mode,
+set `send_activation_email` to email a link instead; the account then cannot sign in until it is
+used.
 
 The console's **Provision an application** panel — on the administrator's *Provisioning* page,
 linked from the console's own navigation — is this endpoint with a form in front of it. Fill the

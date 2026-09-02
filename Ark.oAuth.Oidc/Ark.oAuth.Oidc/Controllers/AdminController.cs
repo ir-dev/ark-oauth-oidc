@@ -126,6 +126,12 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.ConsoleJs = AssetUrl(appRoot, JsAsset);
             // Named in the footer: which build of the server package is serving this console.
             ViewBag.PackageVersion = PackageVersion;
+            ViewBag.UserPasswordMode = ser.EffectiveUserPasswordMode switch
+            {
+                ArkUserPasswordMode.AdminManaged => "admin_managed",
+                ArkUserPasswordMode.EmailBased => "email_based",
+                _ => "auto"
+            };
 
             // The console's session is the host's authentication cookie, and only the host can
             // drop it. With no route configured, end_session at least ends the session at the IdP

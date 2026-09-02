@@ -124,6 +124,7 @@ app.Run();
     "EnableLogTrace": true,
     "UploadPath": "./wwwroot/{0}/",
     "DefaultPw": "<initial password for new users>",
+    "UserPasswordMode": "admin_managed", // admin_managed | email_based | auto (legacy behaviour)
     "AdminUser": {                     // the account seeded when the database is first created
       "Username": "admin",             // optional, defaults to "admin"; need not be an email address
       "Password": "<required, no default>",
@@ -173,6 +174,11 @@ than in `appsettings.json`.
 
 The section is read only while the database is being created. Changing it afterwards renames
 nothing and resets no password — use the console.
+
+`UserPasswordMode` makes the host choose one password-onboarding flow for newly created accounts.
+Use `admin_managed` when operators set or communicate passwords out of band, or `email_based`
+when email-address accounts should be parked in reset mode and sent an activation link. `auto`
+keeps the older mixed behaviour, where the caller decides.
 
 Your issuer is now:
 

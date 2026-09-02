@@ -35,6 +35,7 @@
       data-page="provisioning"
       data-app-root="@ViewBag.AppRoot"
       data-tenant-id="@ViewBag.TenantId"
+      data-user-password-mode="@ViewBag.UserPasswordMode"
       data-machine-client="@ViewBag.MachineClientId"
       data-machine-has-secret="@((ViewBag.MachineHasSecret == true).ToString().ToLowerInvariant())"
       data-token-endpoint="@ViewBag.TokenEndpoint"
@@ -120,7 +121,7 @@
                     </div>
                     <div class="ark-provision-actions">
                         <button type="button" id="pv-submit">Provision</button>
-                        <span class="ark-note" style="margin:0">
+                        <span class="ark-note" style="margin:0" id="pv-password-mode-note">
                             A new account signs in with <code>ark_oauth_server:DefaultPw</code> unless the box above is ticked.
                         </span>
                     </div>
