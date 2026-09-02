@@ -6,6 +6,7 @@
 step 1: pre installs:
     > brew install uv
     > cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/ark_oauth_client_py
+    > rm -rf dist/*
 
 step 2: token is set:
     > export UV_PUBLISH_TOKEN='....'

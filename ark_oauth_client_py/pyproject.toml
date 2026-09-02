@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ark-oauth-client"
-version = "2.0.5"
+version = "2.0.8"
 description = "The OAuth 2.1 / OpenID Connect client for Python applications, built for Ark.oAuth.Oidc. Authorization code + PKCE with state, nonce, iss and at_hash checks, JWKS rotation, silent refresh, client credentials, the device grant, PAR, introspection, revocation, dynamic client registration and RP-initiated logout - plus a Flask integration for interactive sign-in, for protecting an API, and for account switching on a shared browser."
 readme = "README.md"
 requires-python = ">=3.9"
