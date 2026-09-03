@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Ark.oAuth.Oidc.Protocol;
@@ -25,6 +26,13 @@ namespace Ark.oAuth.Oidc.Endpoints
 
         private static readonly string[] SupportedGrantTypes =
             { "authorization_code", "refresh_token", "client_credentials", "urn:ietf:params:oauth:grant-type:device_code" };
+
+        /// <summary>
+        /// The shape a caller-chosen <c>client_id</c> must have: the same rule as a login id
+        /// (<c>DataAccess.IsValidLoginId</c>), because the id becomes a path segment of
+        /// <c>registration_client_uri</c> and has to survive a URL unescaped.
+        /// </summary>
+        private static readonly Regex ClientIdShape = new(@"^[a-z0-9][a-z0-9._-]{1,63}$", RegexOptions.Compiled);
 
         public OidcRegistrationController(ArkDataContext ctx, IConfiguration config, ArkTokenService tokens, DataAccess da)
             : base(ctx, config)
@@ -52,13 +60,14 @@ namespace Ark.oAuth.Oidc.Endpoints
                 var client = new ArkClient
                 {
                     tenant_id = tenant.tenant_id,
-                    client_id = $"c_{ArkCrypto.RandomToken(12)}",
+                    client_id = RequestedClientId(metadata) ?? $"c_{ArkCrypto.RandomToken(12)}",
                     at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
                     expire_mins = 480
                 };
 
                 ApplyMetadata(client, metadata, ep);
                 await EnforceUniqueClientNameAsync(client);
+                await EnforceUniqueClientIdAsync(client);
 
                 // Public clients get no secret; everything else does.
                 string? secret = null;
@@ -271,6 +280,41 @@ namespace Ark.oAuth.Oidc.Endpoints
             {
                 throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata, ex.Message, ex.StatusCode);
             }
+        }
+
+        /// <summary>
+        /// A <c>client_id</c> the caller asks for, or null to mint one.
+        ///
+        /// RFC 7591 leaves the identifier to the server, and a random <c>c_&lt;16&gt;</c> is what a
+        /// caller gets by default. A host registering one client per tenant of its own would
+        /// rather the id read as that tenant - <c>acme</c>, not <c>c_Iyr8zyUhupW1NEb4</c> - in the
+        /// console, in every token issued for it and in its own audit trail. So a requested id is
+        /// honoured when it has the shape of a login id and is free in the tenant
+        /// (<see cref="EnforceUniqueClientIdAsync"/>). One that does not is refused rather than
+        /// silently replaced (§3.2.1 allows either), so a caller never stores an id other than
+        /// the one it asked for without being told why. A registration that sends none is
+        /// unchanged.
+        /// </summary>
+        private static string? RequestedClientId(JsonObject metadata)
+        {
+            var requested = metadata["client_id"] is JsonValue v && v.TryGetValue<string>(out var s) ? s.Trim() : null;
+            if (string.IsNullOrEmpty(requested)) return null;
+            if (!ClientIdShape.IsMatch(requested))
+                throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                    $"client_id '{requested}' must be 2 to 64 characters of lowercase letters, digits, dot, dash or underscore, starting with a letter or a digit.");
+            return requested;
+        }
+
+        /// <summary>
+        /// Clients are keyed by (tenant, client_id). A minted id cannot realistically collide;
+        /// a requested one can, and the answer is the same 409 a duplicate client_name gets, so
+        /// a caller retrying with a suffix treats both conflicts one way.
+        /// </summary>
+        private async Task EnforceUniqueClientIdAsync(ArkClient client)
+        {
+            if (await _da.GetClient(client.tenant_id, client.client_id) != null)
+                throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                    $"a client with client_id '{client.client_id}' is already registered in tenant '{client.tenant_id}'. Choose a different client_id.", 409);
         }
 
         private static Dictionary<string, object> BuildClientResponse(ArkClient client, ArkOidcEndpoints ep)

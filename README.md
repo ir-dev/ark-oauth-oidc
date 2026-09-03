@@ -588,6 +588,14 @@ The response carries the `client_secret` **once** — it is stored only as a PBK
 cannot be retrieved later. It also returns a `registration_access_token` for reading or deleting
 the registration through `/oauth2/register/{client_id}` (RFC 7592).
 
+The server mints a random `c_<16>` as the `client_id` unless the request names one. A `client_id`
+in the metadata is honoured when it has the shape of a login id — lowercase, starting with a
+letter or digit, 2 to 64 characters of `[a-z0-9._-]`, so it survives the URL path segment it
+becomes — and is not already registered in the tenant; otherwise the registration is refused with
+`invalid_client_metadata` (`409` for a taken id, like a duplicate `client_name`) rather than
+silently given another id. A host that registers one client per tenant of its own uses this to
+make the id read as the tenant (`acme`) instead of an opaque token.
+
 Redirect URIs are validated at registration: they must be absolute, carry no fragment, and use
 `https` unless they are loopback addresses.
 
