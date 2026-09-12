@@ -276,6 +276,24 @@ projects, and now carries a readme, an SPDX license expression and a symbol pack
 	</ItemGroup>
 
 	<!-- ==============================================================================
+		AI-prompt-first developer documentation, packed at the .nupkg root beside the
+		README so it travels with the package. nuget.org renders only PackageReadmeFile
+		(README.md), so README links to these; they are here for a developer or an AI
+		coding agent that has the package in hand (unpack, or browse the repo).
+
+		Same Pack="true" PackagePath="" pattern as README: it lands in the package but is
+		NOT contentFiles, so it is never copied into a consuming project's tree. PackagePath
+		is empty, not "\", for the non-Windows build reason documented above.
+	     ============================================================================== -->
+	<ItemGroup>
+		<None Include="AI-PROMPT.md" Pack="true" PackagePath="" />
+		<None Include="AI-RECIPES.md" Pack="true" PackagePath="" />
+		<None Include="API-GUIDE.md" Pack="true" PackagePath="" />
+		<None Include="TROUBLESHOOTING.md" Pack="true" PackagePath="" />
+		<None Include="MIGRATION.md" Pack="true" PackagePath="" />
+	</ItemGroup>
+
+	<!-- ==============================================================================
 		wwwroot: embedded, never served.
 
 		AddArkOidcServer runs EmbeddedResourceUnpacker in Development, which writes every embedded
