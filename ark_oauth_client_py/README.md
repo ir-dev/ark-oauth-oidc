@@ -15,6 +15,13 @@ random values, the digests — is the standard library.
 pip install ark-oauth-client
 ```
 
+> **For AI coding agents** — prompt-oriented, source-verified docs ship beside this README (and
+> inside the package): [`AI-PROMPT.md`](AI-PROMPT.md) (rules + capability map + injectable context
+> block), [`AI-RECIPES.md`](AI-RECIPES.md) (task → code recipes), [`API-GUIDE.md`](API-GUIDE.md)
+> (exact public API + decision guide), [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) (symptom → cause →
+> fix), [`MIGRATION.md`](MIGRATION.md) (versions & the .NET/Node name mapping). The code under
+> `src/ark_oauth_client/` is authoritative; do not invent APIs.
+
 ---
 
 ## Contents

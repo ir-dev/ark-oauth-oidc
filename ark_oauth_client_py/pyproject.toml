@@ -75,6 +75,17 @@ Changelog = "https://github.com/ir-dev/ark-oauth-oidc/blob/main/ark_oauth_client
 [tool.hatch.build.targets.wheel]
 packages = ["src/ark_oauth_client"]
 
+# AI-prompt-first developer documentation. force-include places these inside the installed package
+# (site-packages/ark_oauth_client/) so they travel with `pip install`, not only in the sdist -- the
+# same intent as packing them into the .NET .nupkg beside the README. PyPI still renders only the
+# `readme` (README.md), which links to the rest.
+[tool.hatch.build.targets.wheel.force-include]
+"AI-PROMPT.md" = "ark_oauth_client/AI-PROMPT.md"
+"AI-RECIPES.md" = "ark_oauth_client/AI-RECIPES.md"
+"API-GUIDE.md" = "ark_oauth_client/API-GUIDE.md"
+"TROUBLESHOOTING.md" = "ark_oauth_client/TROUBLESHOOTING.md"
+"MIGRATION.md" = "ark_oauth_client/MIGRATION.md"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
@@ -82,6 +93,11 @@ include = [
     "/examples",
     "/README.md",
     "/CHANGELOG.md",
+    "/AI-PROMPT.md",
+    "/AI-RECIPES.md",
+    "/API-GUIDE.md",
+    "/TROUBLESHOOTING.md",
+    "/MIGRATION.md",
     "/LICENSE",
 ]
 
