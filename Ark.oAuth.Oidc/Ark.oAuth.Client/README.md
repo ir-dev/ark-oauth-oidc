@@ -10,6 +10,13 @@ Built for [`Ark.oAuth.Oidc`](https://www.nuget.org/packages/Ark.oAuth.Oidc), but
 stock handler underneath, changing `Authority` and `ClientId` is enough to point the same
 application at Entra ID, Okta, Auth0 or Keycloak.
 
+> **For AI coding agents** — prompt-oriented, source-verified docs live beside this README:
+> [`AI-PROMPT.md`](AI-PROMPT.md) (rules + capability map + injectable context block),
+> [`AI-RECIPES.md`](AI-RECIPES.md) (task → code recipes), [`API-GUIDE.md`](API-GUIDE.md) (exact
+> public API + decision guide), [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md) (symptom → cause → fix),
+> [`MIGRATION.md`](MIGRATION.md) (versions & upgrading). The C# in this directory is authoritative;
+> do not invent APIs.
+
 ## Install
 
 ```bash

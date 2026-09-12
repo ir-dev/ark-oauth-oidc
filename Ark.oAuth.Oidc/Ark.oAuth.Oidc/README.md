@@ -7,6 +7,13 @@ discovery document.
 Multi-tenant, runs on SQLite / MySQL / PostgreSQL / SQL Server, and ships its own sign-in, consent
 and admin UI. The matching client package is [`Ark.oAuth.Client`](https://www.nuget.org/packages/Ark.oAuth.Client).
 
+> **For AI coding agents** — prompt-oriented, source-verified docs live beside this README:
+> [`AI-PROMPT.md`](AI-PROMPT.md) (rules + capability map + injectable context block),
+> [`AI-RECIPES.md`](AI-RECIPES.md) (task → code recipes), [`API-GUIDE.md`](API-GUIDE.md) (host APIs,
+> endpoints, settings, management routes + decision guide), [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)
+> (symptom → cause → fix), [`MIGRATION.md`](MIGRATION.md) (versions, schema scripts, upgrading). The
+> C# in this directory is authoritative; do not invent APIs, endpoints, or settings.
+
 ## Install
 
 ```bash
