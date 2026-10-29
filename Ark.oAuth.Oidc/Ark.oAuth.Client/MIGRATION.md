@@ -7,8 +7,8 @@
 
 ## Current version
 
-- **`2.0.9`** (`<Version>` in `Ark.oAuth.Client.csproj`), `net9.0`.
-- Ships in lockstep with **`Ark.oAuth.Oidc 2.0.9`** — the client and server packages deliberately
+- **`2.0.11`** (`<Version>` in `Ark.oAuth.Client.csproj`), `net9.0`.
+- Ships in lockstep with **`Ark.oAuth.Oidc 2.0.11`** — the client and server packages deliberately
   carry the **same version number**. Upgrade both together.
 - The Python (`ark-oauth-client` / PyPI) and Node (`ark-oauth-client` / npm) clients are ports of
   this one and carry the same version; an integration translates almost line-for-line.
@@ -16,9 +16,9 @@
 > **Version-number vs changelog note (flagged discrepancy):** the `PackageReleaseNotes` in the
 > `.csproj` are written under the heading of the version a feature *landed in*. The client's newest
 > heading is **"2.1.0 — account switching on a shared browser"**, but the package's actual
-> `<Version>` is **`2.0.9`**. The account-switching feature described under that heading **is present
-> and compiled** in the 2.0.9 assembly (`Access/ArkAccountSwitch.cs` etc.). Treat the shipped
-> assembly as the source of truth: the feature exists in 2.0.9 and is **off by default**.
+> `<Version>` is **`2.0.11`**. The account-switching feature described under that heading **is present
+> and compiled** in the 2.0.11 assembly (`Access/ArkAccountSwitch.cs` etc.). Treat the shipped
+> assembly as the source of truth: the feature exists in 2.0.11 and is **off by default**.
 
 ## Framework & dependency compatibility
 
@@ -37,7 +37,7 @@ downward.
 
 ## Changelog (from the .csproj, newest first)
 
-- **"2.1.0" — account switching on a shared browser** (present in 2.0.9): `AccountSwitch:RequireArkClaims`
+- **"2.1.0" — account switching on a shared browser** (present in 2.0.11): `AccountSwitch:RequireArkClaims`
   moves the entitlement check to the callback; a built-in `/ark/no-access` page offers "Sign in as a
   different user" (`prompt=login`) and replaces the framework's `/Account/AccessDenied` for `[Authorize]`
   403s; `HttpContext.ArkSwitchUserAsync`/`ArkSignOutEverywhereAsync`/`ArkSignOutLocallyAsync`;

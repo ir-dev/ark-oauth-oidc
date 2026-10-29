@@ -16,13 +16,13 @@ the Python port of the .NET `Ark.oAuth.Client`, feature for feature.
 | | |
 |---|---|
 | **Package** | `ark-oauth-client` (PyPI) |
-| **Current version** | `2.0.9` (moves in lockstep with `Ark.oAuth.Client` / npm `ark-oauth-client`) |
+| **Current version** | `2.0.11` (moves in lockstep with `Ark.oAuth.Client` / npm `ark-oauth-client`) |
 | **Import name** | `ark_oauth_client` (Flask helpers under `ark_oauth_client.flask`) |
 | **Python** | `>=3.9` |
 | **Install** | `pip install "ark-oauth-client[flask]"` (omit `[flask]` for the protocol client only) |
 | **Purpose** | OAuth 2.1 / OIDC **client** (relying party) for Python. One call + `authority` + `client_id`, and `@auth.require_auth()` works. |
 | **Problem solved** | A correct, self-contained OIDC client with `state`/`nonce`/`iss`/`at_hash` checks, JWKS rotation, silent refresh, and the shared-browser account-switch — without hand-rolling any of it. |
-| **Runtime dependency** | `cryptography>=41` (signature verification). Everything else is stdlib. `flask>=2.2` is optional (the Flask integration). |
+| **Runtime dependency** | `cryptography>=49.0.0` (`>=46.0.6` on Python 3.9.0/3.9.1; signature verification). Everything else is stdlib. `flask>=2.2` is optional (the Flask integration). |
 | **Config section** | `ark_oauth_client` (binds the same keys as .NET; accepts snake_case, camelCase, or PascalCase) |
 
 Two ways in:
@@ -161,15 +161,15 @@ DO NOT:
 
 ## 6. Version & compatibility
 
-- Python `>=3.9`; runtime dependency `cryptography>=41`; `flask>=2.2` optional.
-- Current version **2.0.9**; ships with `Ark.oAuth.Client 2.0.9` and npm `ark-oauth-client 2.0.9`.
+- Python `>=3.9`; runtime dependency `cryptography>=49.0.0` (`>=46.0.6` on 3.9.0/3.9.1); `flask>=2.2` optional.
+- Current version **2.0.11**; ships with `Ark.oAuth.Client 2.0.11` and npm `ark-oauth-client 2.0.11`.
 - Feature parity with the .NET client (plus device grant, PAR, introspection, revocation and
   `private_key_jwt` exposed on `ArkOAuthClient`). Full detail: [`MIGRATION.md`](MIGRATION.md).
 
 ## 7. AI context block (inject into a system/developer prompt)
 
 ```text
-LIBRARY: ark-oauth-client (Python, v2.0.9, import ark_oauth_client)
+LIBRARY: ark-oauth-client (Python, v2.0.11, import ark_oauth_client)
 
 PURPOSE:
 OAuth 2.1 / OpenID Connect client for Python. Flask integration (add_ark_oidc_client / add_ark_oidc_api)

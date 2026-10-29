@@ -8,14 +8,14 @@
 
 ## Current version
 
-- **`2.0.9`** (`<Version>` in `Ark.oAuth.Oidc.csproj`), `net9.0`, EF Core `9.0.x`.
-- Ships in lockstep with **`Ark.oAuth.Client 2.0.9`** — deliberately the **same version number**.
+- **`2.0.11`** (`<Version>` in `Ark.oAuth.Oidc.csproj`), `net9.0`, EF Core `9.0.x`.
+- Ships in lockstep with **`Ark.oAuth.Client 2.0.11`** — deliberately the **same version number**.
   Upgrade both packages together.
 
 > **Version-number vs changelog note (flagged discrepancy):** the `PackageReleaseNotes` are headed by
 > the version a feature *landed in*; the server's newest heading is **"2.0.3"**, while the package's
-> actual `<Version>` is **`2.0.9`**. The 2.0.3-described features (back-channel logout, browser-wide
-> sign-out, the trimmed dependency graph) **are present and compiled** in 2.0.9. Treat the shipped
+> actual `<Version>` is **`2.0.11`**. The 2.0.3-described features (back-channel logout, browser-wide
+> sign-out, the trimmed dependency graph) **are present and compiled** in 2.0.11. Treat the shipped
 > assembly and the schema scripts on disk as the source of truth.
 
 ## Framework, database & dependency compatibility
@@ -36,7 +36,7 @@ The split does not fail at restore or build — it fails at the **first OIDC cha
 `MethodAccessException`/missing-method error naming neither package. The .csproj raises the floor to
 `8.8.0`; do not override it downward.
 
-**Dependency change in 2.0.3 (present in 2.0.9):** `Ark.EfCore`, `Azure.Identity` and `BouncyCastle`
+**Dependency change in 2.0.3 (present in 2.0.11):** `Ark.EfCore`, `Azure.Identity` and `BouncyCastle`
 were removed. EF Core `9.0.x` and the Sqlite/MySQL/PostgreSQL providers are now referenced directly.
 Nothing in this package used a type from `Ark.EfCore`; it was only a carrier for EF packages (and was
 dragging in a SQL Server provider stack this package cannot select).
@@ -78,7 +78,7 @@ machine client on start-up.
 
 ## Behavioural changes by version (from the .csproj notes)
 
-- **2.0.3** (present in 2.0.9): Back-Channel Logout 1.0 (signed `logout_token`, `typ: logout+jwt`,
+- **2.0.3** (present in 2.0.11): Back-Channel Logout 1.0 (signed `logout_token`, `typ: logout+jwt`,
   `sid`, no `nonce`); a down client cannot block sign-out (parallel, per-client timeout, logged not
   raised); clients notified because they *took part* (recorded via `session_clients`, not derived from
   live refresh tokens); browser-wide sign-out via the `ark_idp_bid` cookie; discovery corrected —

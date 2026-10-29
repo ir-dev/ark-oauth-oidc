@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.0.11
+
+`cryptography` is now required at a version clear of every published advisory. The floor was
+`>=41.0`, which admitted releases with a Bleichenbacher timing oracle (CVE-2023-50782), missing EC
+subgroup validation (CVE-2026-26007) and bundled vulnerable OpenSSL builds. It is now `>=49.0.0`, or
+`>=46.0.6` on Python 3.9.0/3.9.1, which 49 does not support.
+
+`ark_oauth_client.__version__` agrees with the package version again. It had stayed at `2.0.5`
+through 2.0.8–2.0.10, so the access-denied page's footer named the wrong release.
+
+Published alongside `Ark.oAuth.Oidc` and `Ark.oAuth.Client` 2.0.11. No API change.
+
 ## 2.0.5
 
 The built-in access-denied page now names the library that drew it — `ark-oauth-client <version>`,

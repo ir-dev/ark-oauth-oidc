@@ -7,7 +7,7 @@
 
 # Ark.oAuth.Client — API guide
 
-Exact public API surface (namespace **`Ark.oAuth`**, package `Ark.oAuth.Client` v2.0.9, `net9.0`).
+Exact public API surface (namespace **`Ark.oAuth`**, package `Ark.oAuth.Client` v2.0.11, `net9.0`).
 Signatures are verified against the source. Members marked *internal* are listed for understanding
 only — do not call them.
 

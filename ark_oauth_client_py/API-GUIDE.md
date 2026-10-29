@@ -7,7 +7,7 @@
 # ark-oauth-client (Python) — API guide
 
 Exact public API (import root `ark_oauth_client`, Flask helpers `ark_oauth_client.flask`, PyPI
-`ark-oauth-client` v2.0.9, Python `>=3.9`). Verified against source.
+`ark-oauth-client` v2.0.11, Python `>=3.9`). Verified against source.
 
 ## Flask integration (`ark_oauth_client.flask`)
 

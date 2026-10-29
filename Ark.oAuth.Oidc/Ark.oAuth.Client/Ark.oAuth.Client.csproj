@@ -26,9 +26,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.0.10</Version>
-		<AssemblyVersion>2.0.10.0</AssemblyVersion>
-		<FileVersion>2.0.10.0</FileVersion>
+		<Version>2.0.11</Version>
+		<AssemblyVersion>2.0.11.0</AssemblyVersion>
+		<FileVersion>2.0.11.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -212,7 +212,7 @@ carries a readme, an SPDX license expression and a symbol package.
 
 	<!-- ============================== Dependencies ============================== -->
 	<ItemGroup>
-		<PackageReference Include="ark.net.util" Version="1.0.4.14" />
+		<PackageReference Include="ark.net.util" Version="1.0.4.15" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.15" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.15" />
 		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.8.0" />
@@ -232,18 +232,6 @@ carries a readme, an SPDX license expression and a symbol package.
 		-->
 		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.8.0" />
 		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.8.0" />
-		<!--
-			Not used by this assembly — security floors for packages ark.net.util 1.0.4.14 brings in.
-			It resolves MailKit 4.8.0 → MimeKit 4.8.0 → System.Security.Cryptography.Pkcs 8.0.0:
-			  MailKit < 4.16.0   GHSA-9j88-vvj5-vhgr  STARTTLS response injection / SASL downgrade
-			  MimeKit < 4.15.1   GHSA-g7hc-96xr-gvvx  CRLF injection → SMTP command injection
-			  Pkcs    < 8.0.2    GHSA-846f-f764-76mx  denial of service (High)
-			These are what put the vulnerability warning into every app that references this
-			package. As direct references they ship as package dependencies, so consumers inherit
-			the patched versions. Drop these once ark.net.util itself depends on patched versions.
-		-->
-		<PackageReference Include="MailKit" Version="4.18.2" />
-		<PackageReference Include="MimeKit" Version="4.18.2" />
 	</ItemGroup>
 
 </Project>

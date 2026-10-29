@@ -16,7 +16,7 @@ failures in [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md); upgrades in [`MIGRATION.
 | | |
 |---|---|
 | **Package** | `Ark.oAuth.Oidc` (nuget.org) |
-| **Current version** | `2.0.9` (moves in lockstep with `Ark.oAuth.Client`) |
+| **Current version** | `2.0.11` (moves in lockstep with `Ark.oAuth.Client`) |
 | **Root namespace** | `Ark.oAuth.Oidc`. Host also uses `Ark.oAuth` for the client extension. |
 | **Target framework** | `net9.0` |
 | **Purpose** | A self-contained OAuth 2.1 / OpenID Connect **provider** (IdP) for ASP.NET Core. Add two lines to `Program.cs`; standard OIDC clients configure themselves from discovery. |
@@ -162,7 +162,7 @@ DO NOT:
 ## 6. Version & compatibility
 
 - Target framework `net9.0`; EF Core `9.0.x`.
-- Current version **2.0.9**; ships with `Ark.oAuth.Client 2.0.9`.
+- Current version **2.0.11**; ships with `Ark.oAuth.Client 2.0.11`.
 - **Unsupported by design:** implicit grant, hybrid flow, ROPC, plain PKCE, SQL Server.
 - Schema history is tracked in `ark_schema_history`; scripts `00003` (2.0.0), `00004` (2.0.2),
   `00005` (2.0.3). Full detail: [`MIGRATION.md`](MIGRATION.md).
@@ -170,7 +170,7 @@ DO NOT:
 ## 7. AI context block (inject into a system/developer prompt)
 
 ```text
-LIBRARY: Ark.oAuth.Oidc (v2.0.9, net9.0, namespace Ark.oAuth.Oidc)
+LIBRARY: Ark.oAuth.Oidc (v2.0.11, net9.0, namespace Ark.oAuth.Oidc)
 
 PURPOSE:
 Self-contained multi-tenant OAuth 2.1 / OpenID Connect provider for ASP.NET Core. Two lines in

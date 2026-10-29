@@ -30,9 +30,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.0.10</Version>
-		<AssemblyVersion>2.0.10.0</AssemblyVersion>
-		<FileVersion>2.0.10.0</FileVersion>
+		<Version>2.0.11</Version>
+		<AssemblyVersion>2.0.11.0</AssemblyVersion>
+		<FileVersion>2.0.11.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -335,7 +335,7 @@ projects, and now carries a readme, an SPDX license expression and a symbol pack
 		it has never been a working option and shipping the client library implied otherwise.
 	     ============================================================================== -->
 	<ItemGroup>
-		<PackageReference Include="ark.net.util" Version="1.0.4.14" />
+		<PackageReference Include="ark.net.util" Version="1.0.4.15" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.19" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.19" />
 		<PackageReference Include="MySql.EntityFrameworkCore" Version="9.0.17" />
@@ -351,18 +351,6 @@ projects, and now carries a readme, an SPDX license expression and a symbol pack
 			package. Raising the floor to 8.8.0 keeps Protocols and Tokens on the same major.
 		-->
 		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.8.0" />
-		<!--
-			Not used by this assembly — security floors for packages ark.net.util 1.0.4.14 brings in.
-			It resolves MailKit 4.8.0 → MimeKit 4.8.0 → System.Security.Cryptography.Pkcs 8.0.0:
-			  MailKit < 4.16.0   GHSA-9j88-vvj5-vhgr  STARTTLS response injection / SASL downgrade
-			  MimeKit < 4.15.1   GHSA-g7hc-96xr-gvvx  CRLF injection → SMTP command injection
-			  Pkcs    < 8.0.2    GHSA-846f-f764-76mx  denial of service (High)
-			Direct references lift the whole graph, and because they ship as package dependencies a
-			consumer of this package inherits the patched versions instead of the vulnerable ones.
-			Drop these once ark.net.util itself depends on patched versions.
-		-->
-		<PackageReference Include="MailKit" Version="4.18.2" />
-		<PackageReference Include="MimeKit" Version="4.18.2" />
 	</ItemGroup>
 
 </Project>
