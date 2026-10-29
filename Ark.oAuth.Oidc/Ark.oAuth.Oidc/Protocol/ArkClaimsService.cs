@@ -87,6 +87,18 @@ namespace Ark.oAuth.Oidc.Protocol
         }
 
         /// <summary>
+        /// Whether the subject has an access mapping to this client — the same row
+        /// <see cref="DataAccess.ValidateUserCreds"/> insists on at the password prompt.
+        /// </summary>
+        public async Task<bool> HasClientAccessAsync(string subject, string tenantId, ArkClient client)
+        {
+            return await _ctx.user_client_claims.AsNoTracking().AnyAsync(m =>
+                (m.email ?? "").ToLower() == (subject ?? "").ToLower() &&
+                (m.tenant_id ?? "").ToLower() == (tenantId ?? "").ToLower() &&
+                (m.client_id ?? "").ToLower() == (client.id ?? "").ToLower());
+        }
+
+        /// <summary>
         /// Validates the requested scopes against the catalogue and what the client is registered
         /// for. An unregistered scope is rejected rather than silently dropped, so a client never
         /// believes it holds authority it was not granted.

@@ -666,7 +666,7 @@
         checkboxes(box, state.scopes.map(function (s) { return s.name; }),
             scopes.length ? scopes : ["openid", "profile", "email", "offline_access"]);
 
-        document.getElementById("cl-secret-state").textContent = editing.client_secret_hash
+        document.getElementById("cl-secret-state").textContent = editing.has_client_secret
             ? "A secret is set. Regenerating replaces it immediately."
             : "No secret set.";
         var out = document.getElementById("cl-secret-value");
@@ -804,7 +804,6 @@
                         },
                         { title: "reset_mode", field: "reset_mode", editor: "tickCross", formatter: "tickCross", width: 110 },
                         { title: "emailed", field: "emailed", formatter: "tickCross", width: 95 },
-                        { title: "ref_uid", field: "ref_uid", widthGrow: 2 },
                         { title: "at", field: "at", width: 165 },
                         actionColumn("Save", "", function (cell) {
                             var row = cell.getRow().getData();

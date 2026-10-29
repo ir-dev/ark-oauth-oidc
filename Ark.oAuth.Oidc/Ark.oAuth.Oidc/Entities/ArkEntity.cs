@@ -65,8 +65,19 @@ namespace Ark.oAuth
 
         /// <summary>RFC 7591 client_name. Falls back to <see cref="display"/> / <see cref="name"/> when unset.</summary>
         public string? client_name { get; set; }
-        /// <summary>PBKDF2 hash of the client secret. Null for public clients.</summary>
+        /// <summary>
+        /// PBKDF2 hash of the client secret. Null for public clients.
+        ///
+        /// Never serialised, in either direction: the management API used to return it to the
+        /// console's browser in every client listing, and accept a replacement from any posted
+        /// row. <see cref="has_client_secret"/> is what the console reads instead, and the stored
+        /// value survives a save that does not carry it (see <c>DataAccess.UpsertClient</c>).
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
         public string? client_secret_hash { get; set; }
+        /// <summary>Whether a secret is set — the one fact about it the console needs.</summary>
+        [NotMapped]
+        public bool has_client_secret => !string.IsNullOrEmpty(client_secret_hash);
         public DateTime? client_secret_expires_at { get; set; }
         /// <summary>client_secret_basic | client_secret_post | private_key_jwt | none</summary>
         public string token_endpoint_auth_method { get; set; } = "client_secret_basic";
@@ -133,6 +144,7 @@ namespace Ark.oAuth
         public int authorization_code_lifetime_seconds { get; set; } = 60;
 
         /// <summary>Hash of the registration access token issued by dynamic client registration (RFC 7591).</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
         public string? registration_access_token_hash { get; set; }
 
         /// <summary>
@@ -199,7 +211,17 @@ namespace Ark.oAuth
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public string id { get; set; } 
         public string email { get; set; } // used for login
+        /// <summary>
+        /// The password hash — or, for a service account, its long-lived bearer token. Neither is
+        /// serialised: the user listing used to send both to the console's browser.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
         public string? hash_pw { get; set; }
+        /// <summary>
+        /// The activation / reset link's secret. Whoever holds it sets the password on the
+        /// anonymous reset page, so it goes out by email only, never through the API.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
         public string? ref_uid { get; set; } // referecee uid, used in url sent to email
         public bool? reset_mode { get; set; } = false; // password reset mode is in enabled sate, if false, all is well
         public bool? emailed { get; set; } = false; // set to true, once email is sent successful 

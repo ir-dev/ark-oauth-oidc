@@ -10,6 +10,9 @@
   <ItemGroup>
     <PackageReference Include="IntptrMax.YoloSharp" Version="1.1.5" />
     <PackageReference Include="TorchSharp-cpu" Version="0.105.0" />
+    <!-- Security floor: YoloSharp 1.1.5 resolves Magick.NET 14.6.0, which carries dozens of
+         ImageMagick advisories (several High). Same major, latest patch. -->
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.17.2" />
   </ItemGroup>
 
   <ItemGroup>

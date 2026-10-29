@@ -31,6 +31,7 @@
     var APP_ROOT = root.dataset.appRoot || "";
     var TENANT_ID = root.dataset.tenantId || "";
     var PAGE = root.dataset.page || "console";
+    var USER_PASSWORD_MODE = root.dataset.userPasswordMode || "auto";
     var API = APP_ROOT + "/api/oauth/v1";
 
     // ---------------------------------------------------------------- helpers
@@ -222,6 +223,13 @@
         return /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(value || "");
     }
 
+    function usesEmailPasswordFlowFor(loginId, requested) {
+        if (!isEmailAddress(loginId)) return false;
+        if (USER_PASSWORD_MODE === "admin_managed") return false;
+        if (USER_PASSWORD_MODE === "email_based") return true;
+        return !!requested;
+    }
+
     /** Writes a JSON-list property in both the shapes the entity exposes. */
     function setList(target, field, values) {
         target[field] = values;
@@ -381,6 +389,29 @@
         });
 
         passwordDialog = { open: open, close: close };
+    }
+
+    function syncProvisionPasswordMode() {
+        var toggle = byId("pv-send_activation_email");
+        var note = byId("pv-password-mode-note");
+        if (!toggle || !note) return;
+
+        if (USER_PASSWORD_MODE === "admin_managed") {
+            toggle.checked = false;
+            toggle.disabled = true;
+            note.innerHTML = "This host uses <code>ark_oauth_server:UserPasswordMode = admin_managed</code>, so new accounts start on <code>ark_oauth_server:DefaultPw</code> and operators set passwords directly.";
+            return;
+        }
+
+        if (USER_PASSWORD_MODE === "email_based") {
+            toggle.checked = true;
+            toggle.disabled = true;
+            note.innerHTML = "This host uses <code>ark_oauth_server:UserPasswordMode = email_based</code>, so email-address accounts are created in password-reset mode and sent an activation link.";
+            return;
+        }
+
+        toggle.disabled = false;
+        note.innerHTML = "A new account signs in with <code>ark_oauth_server:DefaultPw</code> unless the box above is ticked.";
     }
 
     function loadTenants() {
@@ -635,7 +666,7 @@
         checkboxes(box, state.scopes.map(function (s) { return s.name; }),
             scopes.length ? scopes : ["openid", "profile", "email", "offline_access"]);
 
-        document.getElementById("cl-secret-state").textContent = editing.client_secret_hash
+        document.getElementById("cl-secret-state").textContent = editing.has_client_secret
             ? "A secret is set. Regenerating replaces it immediately."
             : "No secret set.";
         var out = document.getElementById("cl-secret-value");
@@ -773,7 +804,6 @@
                         },
                         { title: "reset_mode", field: "reset_mode", editor: "tickCross", formatter: "tickCross", width: 110 },
                         { title: "emailed", field: "emailed", formatter: "tickCross", width: 95 },
-                        { title: "ref_uid", field: "ref_uid", widthGrow: 2 },
                         { title: "at", field: "at", width: 165 },
                         actionColumn("Save", "", function (cell) {
                             var row = cell.getRow().getData();
@@ -786,13 +816,13 @@
                             if (!passwordDialog) { toast("f", "password dialog unavailable", 4000); return; }
                             passwordDialog.open(row);
                         }, 135, function (row) { return (row.type || "user") !== "service"; }),
-                        // A reset link needs a mailbox, so this only applies to accounts whose
-                        // login id is an address. The server refuses the rest with a message; not
-                        // drawing the button avoids inviting the error in the first place.
+                        // A reset link needs both a mailbox and a host configured to use
+                        // email-based password resets. The server enforces both too; not drawing
+                        // the button avoids offering an action that cannot succeed here.
                         actionColumn("Reset password", "", function (cell) {
                             var row = cell.getRow().getData();
                             save(API + "/user/pw/reset/init", row).then(loadUsers).catch(function () { });
-                        }, 150, function (row) { return isEmailAddress(row.email); })
+                        }, 150, function (row) { return usesEmailPasswordFlowFor(row.email, true); })
                     ]
                 });
             } else if (tables.user) {
@@ -1008,6 +1038,7 @@
         if (provisionIdEdited) return;
         byId("pv-client_id").value = slug(e.target.value);
     });
+    syncProvisionPasswordMode();
 
     /**
      * The provisioning request as the API would receive it, or null when the form does not yet
