@@ -2,7 +2,18 @@
 
 ----------pip deploy steps
 
+--- below republishing steps
 
+    > cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/ark_oauth_client_py
+    #remove all items in dist folder
+    > rm -rf dist/*
+    # build with latest version
+    > uv build
+    # publish the libs
+    > uv publish --token "$UV_PUBLISH_TOKEN" dist/*
+
+
+--- detailed pyblish step 
 step 1: pre installs:
     > brew install uv
     > cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/ark_oauth_client_py
