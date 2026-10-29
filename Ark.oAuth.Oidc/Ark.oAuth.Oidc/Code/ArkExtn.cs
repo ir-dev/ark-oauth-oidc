@@ -265,7 +265,8 @@ namespace Ark.oAuth.Oidc
                         }
 
                         // Schema updates for a database that already exists. Additive scripts
-                        // only, recorded so none of them runs twice — see ArkSchemaUpdater. This
+                        // only, recorded so none of them runs twice, then whatever the entity
+                        // model has that the database still lacks — see ArkSchemaUpdater. This
                         // used to be an operator's job after every upgrade, and skipping it left
                         // the entities describing columns the tables did not have: the management
                         // API then answered a bare 500 that named nothing.
@@ -433,6 +434,9 @@ namespace Ark.oAuth.Oidc
                 if (result.Applied.Count > 0)
                     da.Log("schema_update", string.Join(", ", result.Applied),
                         $"{result.Applied.Count} schema script(s) applied", "");
+                if (result.Added.Count > 0)
+                    da.Log("schema_sync", string.Join(", ", result.Added),
+                        $"{result.Added.Count} table(s)/column(s) added from the entity model", "");
                 if (result.Baselined.Count > 0)
                     da.Log("schema_baseline", string.Join(", ", result.Baselined),
                         "schema already current; scripts recorded without running", "");

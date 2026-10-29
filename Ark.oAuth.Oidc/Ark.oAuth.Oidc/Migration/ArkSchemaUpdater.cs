@@ -4,6 +4,10 @@ using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 
 namespace Ark.oAuth.Oidc
 {
@@ -35,8 +39,12 @@ namespace Ark.oAuth.Oidc
     ///     script: the name is not recorded, so the next start tries again rather than leaving a
     ///     half-applied schema recorded as done.
     ///
-    /// Only the SQLite scripts exist in this repository. On another provider there is nothing to
-    /// enumerate, so this is a no-op and the <c>ALTER TABLE</c> is still that deployment's own job.
+    /// Only the SQLite scripts exist in this repository, so on every provider the scripts are
+    /// followed by <see cref="AddMissingFromModel"/>: whatever table or column the entity model
+    /// has and the live database does not is added, with DDL written by the provider's own
+    /// migrations generator. That is what keeps MySQL and PostgreSQL current without a script per
+    /// provider per release — and without it, a column added to an entity reached those databases
+    /// only as the first query that selected it failing.
     /// </summary>
     public static class ArkSchemaUpdater
     {
@@ -51,7 +59,9 @@ namespace Ark.oAuth.Oidc
             public List<string> Applied { get; } = new();
             public List<string> Baselined { get; } = new();
             public List<string> Skipped { get; } = new();
-            public bool Any => Applied.Count > 0 || Baselined.Count > 0;
+            /// <summary>Tables ("session_clients") and columns ("clients.backchannel_logout_uri") added from the model.</summary>
+            public List<string> Added { get; } = new();
+            public bool Any => Applied.Count > 0 || Baselined.Count > 0 || Added.Count > 0;
         }
 
         /// <summary>
@@ -73,47 +83,152 @@ namespace Ark.oAuth.Oidc
             var folder = ProviderFolder(ctx.Database.ProviderName);
             if (folder == null) return result;
 
-            var assembly = typeof(ArkSchemaUpdater).Assembly;
-            var prefix = $"{ResourcePrefix}{folder}.up.";
-            var scripts = assembly.GetManifestResourceNames()
-                .Where(n => n.StartsWith(prefix, StringComparison.Ordinal))
-                .OrderBy(n => n, StringComparer.Ordinal)
-                .ToList();
-            if (scripts.Count == 0) return result;
-
             var connection = ctx.Database.GetDbConnection();
             var wasClosed = connection.State != ConnectionState.Open;
             if (wasClosed) connection.Open();
             try
             {
-                EnsureHistoryTable(connection, folder);
-                var applied = ReadHistory(connection);
-
-                foreach (var resource in scripts)
-                {
-                    var name = resource.Substring(prefix.Length);
-                    if (applied.Contains(name)) { result.Skipped.Add(name); continue; }
-
-                    var sql = ReadResource(assembly, resource);
-                    if (string.IsNullOrWhiteSpace(sql)) { result.Skipped.Add(name); continue; }
-
-                    if (AlreadyInSchema(connection, folder, sql))
-                    {
-                        Record(connection, name, "baseline");
-                        result.Baselined.Add(name);
-                        continue;
-                    }
-
-                    Run(connection, folder, sql);
-                    Record(connection, name, "applied");
-                    result.Applied.Add(name);
-                }
+                // Scripts first: they carry data steps the model knows nothing about (00003's
+                // client rewrite, the signing-key adoption), and they decide whether to run by
+                // probing for their columns — which the model step would otherwise add first.
+                ApplyScripts(connection, folder, result);
+                AddMissingFromModel(ctx, connection, folder, result);
             }
             finally
             {
                 if (wasClosed) connection.Close();
             }
             return result;
+        }
+
+        private static void ApplyScripts(DbConnection connection, string folder, Result result)
+        {
+            var assembly = typeof(ArkSchemaUpdater).Assembly;
+            var prefix = $"{ResourcePrefix}{folder}.up.";
+            var scripts = assembly.GetManifestResourceNames()
+                .Where(n => n.StartsWith(prefix, StringComparison.Ordinal))
+                .OrderBy(n => n, StringComparer.Ordinal)
+                .ToList();
+            if (scripts.Count == 0) return;
+
+            EnsureHistoryTable(connection, folder);
+            var applied = ReadHistory(connection);
+
+            foreach (var resource in scripts)
+            {
+                var name = resource.Substring(prefix.Length);
+                if (applied.Contains(name)) { result.Skipped.Add(name); continue; }
+
+                var sql = ReadResource(assembly, resource);
+                if (string.IsNullOrWhiteSpace(sql)) { result.Skipped.Add(name); continue; }
+
+                if (AlreadyInSchema(connection, folder, sql))
+                {
+                    Record(connection, name, "baseline");
+                    result.Baselined.Add(name);
+                    continue;
+                }
+
+                Run(connection, folder, sql);
+                Record(connection, name, "applied");
+                result.Applied.Add(name);
+            }
+        }
+
+        // ------------------------------------------------------------ model sync
+
+        /// <summary>
+        /// Adds every table and column the entity model has and the live database lacks.
+        ///
+        /// The model is the one description of the schema that every provider shares, so it is
+        /// what gets measured; the DDL comes from the provider's own
+        /// <see cref="IMigrationsSqlGenerator"/>, so the column types are the ones
+        /// <c>EnsureCreated</c> would have chosen on that provider. On PostgreSQL this is what
+        /// turns "column c.backchannel_logout_session_required does not exist" (42703, thrown from
+        /// ReconcileAdminConsoleClient on the first request) into an <c>ALTER TABLE</c> at start-up.
+        ///
+        /// Strictly additive: nothing is dropped, renamed or retyped, and a column the database
+        /// has but the model does not is left alone. A missing table is created whole, with its
+        /// indexes. A missing NOT NULL column is given the entity's own initial value as its
+        /// default, so existing rows read as a freshly constructed entity would — adding
+        /// <c>is_active</c> with the CLR default instead would switch every existing client off.
+        /// </summary>
+        private static void AddMissingFromModel(ArkDataContext ctx, DbConnection connection, string folder, Result result)
+        {
+            var model = ctx.GetService<IDesignTimeModel>().Model;
+            var relational = model.GetRelationalModel();
+            var operations = ctx.GetService<IMigrationsModelDiffer>().GetDifferences(null, relational);
+
+            var pending = new List<MigrationOperation>();
+            foreach (var create in operations.OfType<CreateTableOperation>())
+            {
+                if (!TableExists(connection, folder, create.Name))
+                {
+                    pending.Add(create);
+                    pending.AddRange(operations.OfType<CreateIndexOperation>()
+                        .Where(i => i.Table == create.Name && i.Schema == create.Schema));
+                    result.Added.Add(create.Name);
+                    continue;
+                }
+
+                var live = LiveColumns(connection, folder, create.Name);
+                var table = relational.FindTable(create.Name, create.Schema)!;
+                var added = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var column in create.Columns)
+                {
+                    if (live.Contains(column.Name)) continue;
+                    if (!column.IsNullable && column.DefaultValue == null &&
+                        column.DefaultValueSql == null && column.ComputedColumnSql == null)
+                        column.DefaultValue = InitialValue(table.FindColumn(column.Name)!, column.ClrType);
+                    pending.Add(column);
+                    added.Add(column.Name);
+                    result.Added.Add($"{create.Name}.{column.Name}");
+                }
+                // An index over a column that was not there cannot exist yet either.
+                pending.AddRange(operations.OfType<CreateIndexOperation>()
+                    .Where(i => i.Table == create.Name && i.Schema == create.Schema &&
+                                i.Columns.Any(added.Contains)));
+            }
+            if (pending.Count == 0) return;
+
+            // One transaction, so a statement that fails on PostgreSQL or SQLite leaves nothing
+            // half-added for the next start to mistake for done. MySQL commits each DDL statement
+            // implicitly whatever is asked; there the next start's measurement is the retry.
+            using var transaction = connection.BeginTransaction();
+            foreach (var command in ctx.GetService<IMigrationsSqlGenerator>().Generate(pending, model))
+                Execute(connection, command.CommandText, transaction);
+            transaction.Commit();
+        }
+
+        /// <summary>
+        /// The value a new entity carries for this column — its property initialiser
+        /// (<c>require_pkce = true</c>, <c>access_token_lifetime_seconds = 3600</c>,
+        /// <c>application_type = "web"</c>) — in provider form. Falls back to the CLR default, and
+        /// to "" for a string, because NOT NULL with no default cannot be added to a table that
+        /// has rows.
+        /// </summary>
+        private static object? InitialValue(IColumn column, Type providerType)
+        {
+            var mapping = column.PropertyMappings.First();
+            var property = mapping.Property;
+            var entityType = property.DeclaringType.ClrType;
+
+            object? value = null;
+            if (property.PropertyInfo != null && !entityType.IsAbstract &&
+                entityType.GetConstructor(Type.EmptyTypes) != null)
+                value = property.PropertyInfo.GetValue(Activator.CreateInstance(entityType));
+
+            if (value != null && mapping.TypeMapping.Converter is { } converter)
+                value = converter.ConvertToProvider(value);
+
+            value ??= providerType == typeof(string) ? ""
+                : providerType.IsValueType ? Activator.CreateInstance(providerType)
+                : null;
+
+            // Npgsql refuses an Unspecified DateTime for timestamptz, and default(DateTime) is one.
+            if (value is DateTime dt && dt.Kind != DateTimeKind.Utc)
+                value = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+            return value;
         }
 
         // ----------------------------------------------------------------- history
@@ -210,11 +325,39 @@ namespace Ark.oAuth.Oidc
             else
             {
                 command.CommandText =
-                    "SELECT COUNT(*) FROM information_schema.tables WHERE lower(table_name) = lower(@t)";
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE lower(table_name) = lower(@t)" +
+                    SchemaScope(folder);
             }
             command.Parameters.Add(Parameter(command, "@t", table));
             return Convert.ToInt32(command.ExecuteScalar() ?? 0) > 0;
         }
+
+        private static HashSet<string> LiveColumns(DbConnection connection, string folder, string table)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = folder == "Sqlite"
+                ? "SELECT name FROM pragma_table_info(@t)"
+                : "SELECT column_name FROM information_schema.columns WHERE lower(table_name) = lower(@t)" +
+                  SchemaScope(folder);
+            command.Parameters.Add(Parameter(command, "@t", table));
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using var reader = command.ExecuteReader();
+            while (reader.Read()) names.Add(reader.GetString(0));
+            return names;
+        }
+
+        /// <summary>
+        /// Limits an information_schema probe to the schema this connection resolves names in.
+        /// MySQL's information_schema spans every database on the server, so unscoped, a "clients"
+        /// table in a neighbouring database reads as this one already having it.
+        /// </summary>
+        private static string SchemaScope(string folder) => folder switch
+        {
+            "Postgres" => " AND table_schema = current_schema()",
+            "Mysql" => " AND table_schema = DATABASE()",
+            "Sqlserver" => " AND table_schema = SCHEMA_NAME()",
+            _ => ""
+        };
 
         private static bool ColumnExists(DbConnection connection, string folder, string table, string column)
         {
@@ -230,7 +373,8 @@ namespace Ark.oAuth.Oidc
             {
                 command.CommandText =
                     "SELECT COUNT(*) FROM information_schema.columns " +
-                    "WHERE lower(table_name) = lower(@t) AND lower(column_name) = lower(@c)";
+                    "WHERE lower(table_name) = lower(@t) AND lower(column_name) = lower(@c)" +
+                    SchemaScope(folder);
             }
             command.Parameters.Add(Parameter(command, "@t", table));
             command.Parameters.Add(Parameter(command, "@c", column));
@@ -261,10 +405,12 @@ namespace Ark.oAuth.Oidc
             }
         }
 
-        private static void Execute(DbConnection connection, string sql)
+        private static void Execute(DbConnection connection, string sql, DbTransaction? transaction = null)
         {
             using var command = connection.CreateCommand();
             command.CommandText = sql;
+            // Microsoft.Data.Sqlite refuses a command that is not enlisted in the open transaction.
+            command.Transaction = transaction;
             command.ExecuteNonQuery();
         }
 

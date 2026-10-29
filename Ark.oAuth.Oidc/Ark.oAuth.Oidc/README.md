@@ -366,10 +366,14 @@ Skipping this used to be silent and specific: without 00004 the entity carried `
 and the table did not, so `/api/oauth/v1/user/list` answered a bare 500 and the console's Users
 grid came up empty with nothing saying why.
 
-Only the SQLite scripts ship in this package. On MySQL or PostgreSQL there is nothing to run
-automatically and the `ALTER TABLE` is still yours to apply. `GET
-/api/migration/v1/sql?action=up|down&name=00005_sql.sql` is still there to run or roll back one by
-hand, and now reports whether it actually worked instead of always answering "executed".
+Only the SQLite scripts ship in this package, so after them, on every provider, the updater
+compares the entity model with the live database and adds whatever table or column is missing —
+with DDL from the provider's own EF migrations generator, and with each entity's initialiser
+(`is_active = true`, `access_token_lifetime_seconds = 3600`) as the value existing rows receive. It
+is additive only. On MySQL and PostgreSQL this is what replaces hand-written `ALTER TABLE`s; before
+it, a missed one surfaced as `42703: column c.backchannel_logout_session_required does not exist` on
+the first request. `GET /api/migration/v1/sql?action=up|down&name=00005_sql.sql` is still there to
+run or roll back one SQLite script by hand, and reports whether it actually worked.
 
 ## Before production
 

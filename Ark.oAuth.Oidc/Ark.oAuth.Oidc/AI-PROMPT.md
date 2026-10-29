@@ -49,7 +49,8 @@ When using Ark.oAuth.Oidc:
    seeded WITHOUT a secret and cannot mint tokens until an operator regenerates one.
 7. Signing keys are generated in-process on first run and rotate via JWKS (two-phase). Nothing needs
    redeploying on rotation.
-8. Schema updates self-apply on start-up on SQLite. On MySQL/PostgreSQL the ALTER TABLE is yours.
+8. Schema updates self-apply on start-up on every provider: SQLite scripts, then any table/column the
+   entity model has and the DB lacks (additive only). The DB login needs CREATE/ALTER on its tables.
 9. Preserve OAuth 2.1 posture: PKCE S256 is required for public clients; implicit, hybrid and ROPC
    are deliberately unsupported. Do not try to re-enable them.
 10. Point the admin console's Sign out at your OWN route (ark_oauth_server:Admin:SignOutUrl) that
