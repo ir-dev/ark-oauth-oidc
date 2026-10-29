@@ -44,8 +44,23 @@ dragging in a SQL Server provider stack this package cannot select).
 ## Schema scripts & the self-applying updater
 
 Schema changes ship as numbered scripts and **run themselves on start-up** via `UseArkAuthData()` →
-`ArkSchemaUpdater.Apply`, recorded in `ark_schema_history`. **Only the SQLite scripts are embedded and
-auto-applied.** On MySQL/PostgreSQL the equivalent `ALTER TABLE`/`CREATE TABLE` is yours to run.
+`ArkSchemaUpdater.Apply`, recorded in `ark_schema_history`. Only the SQLite scripts are embedded, so
+after them, **on every provider**, the updater compares the EF entity model with the live database and
+adds any table or column the model has and the database lacks (`ArkSchemaUpdater.AddMissingFromModel`,
+audited as `schema_sync`). The DDL comes from the provider's own EF migrations SQL generator, so column
+types are the ones `EnsureCreated` would choose; a missing table is created with its indexes, and an
+index over an added column is created with it.
+
+- **Strictly additive.** Nothing is dropped, renamed or retyped; a column the DB has and the model
+  does not is left alone.
+- **Existing rows get the entity's initialiser**, not the CLR default: `is_active`, `require_pkce`
+  and `backchannel_logout_session_required` arrive `true`, lifetimes as `3600` etc. A NOT NULL
+  column with no initialiser gets `''`/`0`/`false`.
+- **One transaction** on PostgreSQL/SQLite, so a failure adds nothing; MySQL commits DDL per statement
+  and the next start re-measures.
+- **Packages up to 2.0.11 lacked this step.** On MySQL/PostgreSQL every new column reached the DB
+  only as the first query selecting it failing, e.g. `42703: column c.backchannel_logout_session_required
+  does not exist` from `ReconcileAdminConsoleClient`.
 
 | Script | Version | Adds |
 |---|---|---|
@@ -71,10 +86,33 @@ whether the script actually worked instead of always saying "executed").
 **SQLite:** upgrade the package and restart. `UseArkAuthData()` applies `00003`→`00005` as needed and
 records them. Nothing to run by hand.
 
-**MySQL / PostgreSQL:** upgrade the package, apply the equivalent DDL for every script the DB has not
-had (00003/00004/00005), then restart. `ReconcileScopeCatalogue`, `ReconcileAdminConsoleClient` and
-`ReconcileMachineClient` fill in new built-in scopes, the standard admin-console callback URLs, and a
-machine client on start-up.
+**MySQL / PostgreSQL:** upgrade the package and restart. The model sync adds whatever 00003/00004/00005
+(and anything later) would have added. It does not replay 00003's data rewrite, and does not need to:
+`IsPublicClient` already treats a secretless client as public, `ArkKeyService` adopts the tenant's
+existing key as `kid = tenant_id` on first use, and `ReconcileScopeCatalogue`,
+`ReconcileAdminConsoleClient` and `ReconcileMachineClient` fill in the built-in scopes, the standard
+admin-console callback URLs, and a machine client on start-up. The DB login needs `CREATE`/`ALTER` on
+its own tables for this; with a DDL-less login, apply the DDL yourself before the upgrade.
+
+**Unblocking a PostgreSQL DB on 2.0.11 or earlier, without a redeploy.** 00004 + 00005 in the types
+the model sync (and `EnsureCreated`) produce; every statement is idempotent. Restart the app after.
+
+```sql
+ALTER TABLE users    ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true;
+ALTER TABLE clients  ADD COLUMN IF NOT EXISTS backchannel_logout_uri text NULL;
+ALTER TABLE clients  ADD COLUMN IF NOT EXISTS backchannel_logout_session_required boolean NOT NULL DEFAULT true;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS browser_id text NULL;
+CREATE TABLE IF NOT EXISTS session_clients (
+    id         text NOT NULL CONSTRAINT "PK_session_clients" PRIMARY KEY,
+    tenant_id  text NOT NULL,
+    session_id text NOT NULL,
+    client_id  text NOT NULL,
+    subject    text NOT NULL,
+    created_at timestamp with time zone NOT NULL
+);
+CREATE INDEX IF NOT EXISTS "IX_session_clients_session_id" ON session_clients (session_id);
+CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
+```
 
 ## Behavioural changes by version (from the .csproj notes)
 

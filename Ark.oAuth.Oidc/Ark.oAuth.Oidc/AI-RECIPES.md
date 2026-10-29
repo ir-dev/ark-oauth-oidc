@@ -281,9 +281,10 @@ public async Task SignOutAll()
 "ark_oauth_server": { "Provider": "postgres" },   // or "mysql"
 "ConnectionStrings": { "ArkAuthConnection": "Host=…;Database=…;Username=…;Password=…" }
 ```
-- **Only the SQLite migration scripts self-apply.** On MySQL/PostgreSQL you must apply the equivalent
-  `ALTER TABLE`/`CREATE TABLE` for each schema version (00003/00004/00005) yourself — otherwise the
-  entities carry columns the tables lack and the management API answers a bare 500. See
+- **The schema follows the entity model on start-up, on every provider.** After the SQLite scripts,
+  `ArkSchemaUpdater` adds any table/column the model has and the DB lacks, additively, with the
+  entity's initialiser as the default for existing rows. Do not hand-write MySQL/PostgreSQL DDL for
+  an upgrade; the DB login does need `CREATE`/`ALTER` on its own tables. See
   [`MIGRATION.md`](MIGRATION.md).
 - **Never `Provider: "sqlserver"`** — it is not wired and leaves the context with no provider.
 
@@ -298,6 +299,9 @@ public async Task SignOutAll()
   script checked against the live schema) and recorded as a baseline if already present.
 - Scripts: `00003` (2.0.0 — protocol tables, RFC 7591 metadata), `00004` (2.0.2 — `users.is_active`),
   `00005` (2.0.3 — back-channel logout metadata, `sessions.browser_id`, `session_clients`).
+- Then, on every provider, any table/column still missing from the entity model is added (audited as
+  `schema_sync`). A new entity property therefore needs no script on any provider; write one only for
+  a *data* change, and make it safe to run twice.
 - To run/rollback one by hand: `GET /api/migration/v1/sql?action=up|down&name=00005_sql.sql`.
 
 ---
