@@ -10,7 +10,7 @@ Task-oriented prompts and canonical, source-verified examples. Pair with
 [`AI-PROMPT.md`](AI-PROMPT.md) (rules), [`API-GUIDE.md`](API-GUIDE.md) (full surface),
 [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 
-Config section `ark_oauth_server` · issuer = `{BaseUrl}/{TenantId}` · version `2.0.9`.
+Config section `ark_oauth_server` · issuer = `{BaseUrl}/{TenantId}` · version `2.0.11`.
 
 ---
 

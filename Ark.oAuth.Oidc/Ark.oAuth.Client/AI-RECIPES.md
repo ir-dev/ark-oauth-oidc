@@ -9,7 +9,7 @@
 Task-oriented prompts and canonical, source-verified examples. Pair with
 [`AI-PROMPT.md`](AI-PROMPT.md) (rules) and [`API-GUIDE.md`](API-GUIDE.md) (full API).
 
-Namespace for every snippet: `using Ark.oAuth;` · Config section: `ark_oauth_client` · Version `2.0.9`.
+Namespace for every snippet: `using Ark.oAuth;` · Config section: `ark_oauth_client` · Version `2.0.11`.
 
 ---
 

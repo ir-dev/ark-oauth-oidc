@@ -9,7 +9,7 @@
 Task-oriented prompts and canonical, source-verified examples. Pair with
 [`AI-PROMPT.md`](AI-PROMPT.md) (rules) and [`API-GUIDE.md`](API-GUIDE.md) (full API).
 
-Install `pip install "ark-oauth-client[flask]"` · config section `ark_oauth_client` · version `2.0.9`.
+Install `pip install "ark-oauth-client[flask]"` · config section `ark_oauth_client` · version `2.0.11`.
 Runnable versions of most of these are in [`examples/`](examples/).
 
 ---

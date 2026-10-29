@@ -7,29 +7,22 @@
 
 ## Current version
 
-- **`2.0.9`** — the `version` in `pyproject.toml`, which is what the built wheel/sdist and PyPI carry.
-- Ships in lockstep with **`Ark.oAuth.Client 2.0.9`** (NuGet) and **`ark-oauth-client 2.0.9`** (npm).
+- **`2.0.11`** — the `version` in `pyproject.toml`, which is what the built wheel/sdist and PyPI carry.
+- Ships in lockstep with **`Ark.oAuth.Client 2.0.11`** (NuGet) and **`ark-oauth-client 2.0.11`** (npm).
   The three ports deliberately carry the **same version number**; an integration written in one
   translates almost line-for-line into another.
 
-> **Version drift (flagged discrepancy).** Three places state a version and they do not currently
-> agree:
-> - `pyproject.toml` → `version = "2.0.9"` (authoritative for the packaged artifact).
-> - `src/ark_oauth_client/__init__.py` → `__version__ = "2.0.5"` (stale).
-> - `CHANGELOG.md` top entry → `## 2.0.5` (stale).
->
-> The **package version is 2.0.9**. The runtime attribute `ark_oauth_client.__version__` and the
-> changelog lag at `2.0.5`. This matters in one visible place: the built-in access-denied page prints
-> `ark-oauth-client <__version__>` in its footer, so it will read `2.0.5` until `__version__` is
-> synced. Treat the source under `src/` as the behavioural source of truth. Syncing `__version__`
-> (and adding CHANGELOG entries for 2.0.6–2.0.9) is a one-line follow-up, not a doc concern.
+> **`__version__` before 2.0.11.** 2.0.8, 2.0.9 and 2.0.10 shipped with `ark_oauth_client.__version__`
+> still reading `2.0.5`, so on those releases the built-in access-denied page names `2.0.5` in its
+> footer. From 2.0.11 `__version__` and `pyproject.toml` agree again; use `pip show ark-oauth-client`
+> for the installed version on an older release.
 
 ## Compatibility
 
 | Requirement | Value |
 |---|---|
 | Python | `>=3.9` (3.9–3.13 classified) |
-| Runtime dependency | `cryptography>=41` (signature verification) — everything else is stdlib |
+| Runtime dependency | `cryptography>=49.0.0` (`>=46.0.6` on Python 3.9.0/3.9.1) — signature verification; everything else is stdlib |
 | Optional extra | `flask>=2.2` via `pip install "ark-oauth-client[flask]"` |
 | Build backend | `hatchling` |
 
@@ -70,6 +63,9 @@ authorization requests (RFC 9126), introspection (RFC 7662), revocation (RFC 700
 
 ## Changelog (from CHANGELOG.md)
 
+- **2.0.11** — security floor on `cryptography` (`>=49.0.0`; `>=46.0.6` on Python 3.9.0/3.9.1),
+  replacing `>=41.0`, which admitted CVE-2023-50782 and CVE-2026-26007. `__version__` synced with the
+  package version. No API change.
 - **2.0.5** — the built-in access-denied page now names the library (`ark-oauth-client <version>`) in
   its footer. No API change. (Published alongside `Ark.oAuth.Oidc`/`Ark.oAuth.Client` 2.0.5.)
 - **2.0.4** — first release of the Python client, published alongside `Ark.oAuth.Client` 2.0.4 (and
@@ -80,8 +76,8 @@ authorization requests (RFC 9126), introspection (RFC 7662), revocation (RFC 700
   `ArkClientCredentials`, `ArkRegistration`), `ArkOAuthClient`, and `ArkAuthConfig.from_mapping`
   binding an existing `appsettings.json` in either spelling.
 
-  > Note: CHANGELOG entries for 2.0.6–2.0.9 are not yet written; the package version has advanced to
-  > 2.0.9 to stay aligned with the NuGet/npm releases.
+  > Note: CHANGELOG entries for 2.0.6–2.0.10 are not written; the package version advanced through
+  > them to stay aligned with the NuGet releases.
 
 ## Migrating from the .NET or Node client
 
