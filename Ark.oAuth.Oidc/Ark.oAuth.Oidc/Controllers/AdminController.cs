@@ -153,40 +153,8 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.ProvisioningUrl = $"{appRoot}/{tenant.tenant_id}/admin/provisioning";
         }
 
-        /// <summary>
-        /// Whether the signed-in principal is the operator account.
-        ///
-        /// Two ways to be one, because there are two ways deployments describe it:
-        ///
-        ///   * the account named by <c>ark_oauth_server:AdminUser:Username</c> — the one seeded
-        ///     when the database was created, matched against whichever of sub / email /
-        ///     preferred_username the host's handler put on the principal;
-        ///   * an <c>admin</c> authorization claim, which arrives as a role because the Ark client
-        ///     projects <c>ark_claims</c> onto the configured role claim type. That is how an
-        ///     operator who is not the seeded account gets in, without a second setting.
-        ///
-        /// Deliberately not a claim on the access token alone: the seeded administrator has no
-        /// "admin" claim on it, and locking the page to a claim nobody has yet would make it
-        /// unreachable on every existing deployment.
-        /// </summary>
-        private bool IsOperator()
-        {
-            if (User?.Identity?.IsAuthenticated != true) return false;
-
-            var admin = ServerConfig.AdminUser?.Username;
-            if (!string.IsNullOrWhiteSpace(admin))
-            {
-                foreach (var type in new[] { "sub", "email", "preferred_username", System.Security.Claims.ClaimTypes.Name })
-                {
-                    var value = User.FindFirst(type)?.Value;
-                    if (!string.IsNullOrWhiteSpace(value) &&
-                        string.Equals(value.Trim(), admin.Trim(), StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-            }
-
-            return User.IsInRole("admin") || User.IsInRole("ark_admin");
-        }
+        /// <summary>Whether the signed-in principal is the operator account — see <see cref="ArkOperator"/>.</summary>
+        private bool IsOperator() => ArkOperator.IsOperator(User, ServerConfig);
 
         // ------------------------------------------------------------------ static assets
 

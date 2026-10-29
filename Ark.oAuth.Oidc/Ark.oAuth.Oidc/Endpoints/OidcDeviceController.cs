@@ -92,7 +92,11 @@ namespace Ark.oAuth.Oidc.Endpoints
                 return DevicePage(tenant, "enter_code", "Enter the code shown on your device.", null, null);
 
             var entry = await _grants.FindDeviceCodeByUserCodeAsync(userCode);
-            if (entry == null || entry.expires_at <= DateTime.UtcNow)
+            // A code from another tenant is not valid here. User codes are looked up server-wide,
+            // so without this a session in one tenant approved a device in another, and that
+            // tenant's client was then issued tokens for a user it does not hold.
+            if (entry == null || entry.expires_at <= DateTime.UtcNow
+                || !string.Equals(entry.tenant_id, tenant.tenant_id, StringComparison.OrdinalIgnoreCase))
                 return DevicePage(tenant, "enter_code", "That code is not valid or has expired.", userCode, null);
             if (entry.status != "pending")
                 return DevicePage(tenant, "enter_code", "That code has already been used.", userCode, null);
@@ -108,6 +112,19 @@ namespace Ark.oAuth.Oidc.Endpoints
 
             if (action == "approve")
             {
+                // The same access mapping the authorization endpoint requires of a session.
+                var client = await Ctx.clients.AsNoTracking().FirstOrDefaultAsync(c =>
+                    c.tenant_id.ToLower() == tenant.tenant_id.ToLower() &&
+                    c.client_id.ToLower() == entry.client_id.ToLower());
+                if (client == null || !client.is_active
+                    || !await _claims.HasClientAccessAsync(session.subject, tenant.tenant_id, client))
+                {
+                    _da.Log("device_no_access", tenant.tenant_id, "device approval refused: no access mapping",
+                        $"client: {entry.client_id}, sub: {session.subject}", "warn");
+                    return await ShowConfirmationAsync(tenant, userCode,
+                        $"You are signed in as {session.subject}, who does not have access to this application.");
+                }
+
                 var scopes = (entry.scope ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
                 await _grants.SaveConsentAsync(tenant.tenant_id, entry.client_id, session.subject, scopes);
                 await _grants.SetDeviceCodeStatusAsync(entry, "approved", session.subject, session.session_id);
@@ -134,7 +151,8 @@ namespace Ark.oAuth.Oidc.Endpoints
         private async Task<IActionResult> ShowConfirmationAsync(ArkTenant tenant, string userCode, string? error)
         {
             var entry = await _grants.FindDeviceCodeByUserCodeAsync(userCode);
-            if (entry == null || entry.expires_at <= DateTime.UtcNow)
+            if (entry == null || entry.expires_at <= DateTime.UtcNow
+                || !string.Equals(entry.tenant_id, tenant.tenant_id, StringComparison.OrdinalIgnoreCase))
                 return DevicePage(tenant, "enter_code", "That code is not valid or has expired.", userCode, null);
             if (entry.status != "pending")
                 return DevicePage(tenant, "enter_code", "That code has already been used.", userCode, null);

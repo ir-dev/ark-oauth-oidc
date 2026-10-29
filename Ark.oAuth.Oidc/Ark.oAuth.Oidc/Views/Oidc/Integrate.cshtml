@@ -124,7 +124,7 @@ app.UseAuthorization();
 "ark_oauth_client": {
   "Authority": "@ep.Issuer",
   "ClientId": "@c.client_id",@(isPublic ? "" : "\n  \"ClientSecret\": \"<your client secret>\",")
-  "Scopes": [@Html.Raw(string.Join(", ", c.EffectiveScopes.Select(s => $"\"{s}\"")))],
+  "Scopes": [@string.Join(", ", c.EffectiveScopes.Select(s => $"\"{s}\""))],
   "CallbackPath": "/signin-oidc",
   "SignedOutCallbackPath": "/signout-callback-oidc"
 }</pre>
@@ -146,7 +146,7 @@ app.UseAuthorization();
         o.SaveTokens = true;
         o.GetClaimsFromUserInfoEndpoint = true;
         o.MapInboundClaims = false;
-@Html.Raw(string.Join("\n", c.EffectiveScopes.Select(s => $"        o.Scope.Add(\"{s}\");")))
+@string.Join("\n", c.EffectiveScopes.Select(s => $"        o.Scope.Add(\"{s}\");"))
     });</pre>
 </div>
 
@@ -182,10 +182,11 @@ provider, _ := oidc.NewProvider(ctx, "@ep.Issuer")</pre>
 curl -s @ep.Jwks | jq .
 @if (!isPublic)
 {
-    @Html.Raw($@"
+    @* Encoded, not Html.Raw: client ids and scopes are registration data, not markup. *@
+    @($@"
 # client_credentials, for service-to-service calls
 curl -s -X POST {ep.Token} \
-  -u '{c.client_id}:&lt;client secret&gt;' \
+  -u '{c.client_id}:<client secret>' \
   -d 'grant_type=client_credentials' \
   -d 'scope={scopes.Replace("openid ", "").Replace(" offline_access", "")}'")
 }</pre>

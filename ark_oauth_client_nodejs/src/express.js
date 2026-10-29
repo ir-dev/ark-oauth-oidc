@@ -120,6 +120,13 @@ export function arkExpress(options = {}) {
    */
   function safeReturnTo(value) {
     if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return null;
+    // Browsers read `\` as `/` in a URL path, so `/\evil.example` is `//evil.example` — another
+    // host. Control characters are refused for the same reason: a browser strips tabs and
+    // newlines before parsing, so `/\t/evil.example` collapses to the same thing. These are the
+    // checks the .NET (LocalOrDefault) and Python (local_or_default) clients already make.
+    if (value.startsWith('/\\')) return null;
+    // eslint-disable-next-line no-control-regex
+    if (/[\u0000-\u001f\u007f]/.test(value)) return null;
     return value;
   }
 

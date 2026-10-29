@@ -201,6 +201,25 @@ namespace Ark.oAuth.Oidc.Endpoints
                     }
                 }
 
+                // Single sign-on answers for the browser, not for the client. The password prompt
+                // refuses an account with no access mapping to this client (ValidateUserCreds), but
+                // a session created at another client used to skip that check entirely — so this
+                // client was issued a code, and a token, for a user it was never granted. In the
+                // operator tenant that turned any account's session into the admin console's.
+                // Such a session is set aside here, which draws the sign-in form so the person can
+                // sign in as somebody who does have access.
+                string? signedInWithoutAccess = null;
+                if (session != null && !await _claims.HasClientAccessAsync(session.subject, tenant.tenant_id, client))
+                {
+                    _da.Log("signin_no_access", tenant.tenant_id, "session not used: no access mapping for client",
+                        $"user: {session.subject}, client: {client.client_id}", "warn");
+                    if (prompt.Contains("none"))
+                        throw new OAuthException(OAuthErrorCodes.LoginRequired,
+                            "the signed-in user does not have access to this client.");
+                    signedInWithoutAccess = session.subject;
+                    session = null;
+                }
+
                 var action = form?["ark_action"].ToString();
 
                 if (session == null)
@@ -217,6 +236,13 @@ namespace Ark.oAuth.Oidc.Endpoints
                             return LoginPage(brand, client, signIn.error, username, tenant);
                         session = signIn.session!;
                         AppendSessionCookie(session!);
+                    }
+                    else if (signedInWithoutAccess != null)
+                    {
+                        var clientName = string.IsNullOrWhiteSpace(client.display) ? client.client_id : client.display;
+                        return LoginPage(brand, client,
+                            $"You are signed in as {signedInWithoutAccess}, who does not have access to {clientName}. " +
+                            "Sign in with an account that does.", null, tenant);
                     }
                     else
                     {
@@ -397,6 +423,15 @@ namespace Ark.oAuth.Oidc.Endpoints
 
         private IActionResult Respond(string redirectUri, string responseMode, Dictionary<string, string> values)
         {
+            // Registration now refuses these, but a row written before it did is still in the
+            // database. The form_post page writes the URI as its form action, which for a
+            // javascript: value is script running on this origin — so it is checked at the point
+            // of use too, and form_post goes to web URLs only.
+            if (RedirectUriValidator.CarriesScript(redirectUri)
+                || (responseMode == "form_post" && !RedirectUriValidator.IsWebUrl(redirectUri)))
+                return ErrorPage(OAuthErrorCodes.InvalidRequest,
+                    "the registered redirect_uri cannot be used for this response.", null, null);
+
             if (responseMode == "form_post")
                 return View("~/Views/Oidc/FormPost.cshtml", new FormPostModel { RedirectUri = redirectUri, Fields = values });
 
@@ -458,7 +493,8 @@ namespace Ark.oAuth.Oidc.Endpoints
             {
                 Brand = brand,
                 ClientDisplay = string.IsNullOrWhiteSpace(client.display) ? client.client_id : client.display,
-                ClientUri = client.client_uri,
+                // drawn as a link, so web URLs only
+                ClientUri = RedirectUriValidator.IsWebUrl(client.client_uri) ? client.client_uri : null,
                 Subject = subject,
                 ActionUrl = CurrentUrl(),
                 Scopes = models

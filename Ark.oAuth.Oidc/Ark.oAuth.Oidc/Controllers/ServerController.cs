@@ -2,6 +2,7 @@
 using ark.net.util;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Ark.oAuth.Oidc.Protocol;
 
 namespace Ark.oAuth.Oidc.Controllers
@@ -149,6 +150,20 @@ namespace Ark.oAuth.Oidc.Controllers
                 var cc = await _da.GetClient(tenant_id, client_id);
                 if (cc == null) throw new ApplicationException("invalid_client");
                 if (cc.redirect_url.ToLower().Trim() != redirect_uri.ToLower().Trim()) throw new ApplicationException("invalid_redirect_uri");
+
+                // The same lockout the standard sign-in page enforces. Without it this form was an
+                // unthrottled password oracle sitting beside a throttled one.
+                var opt = ser.Oidc ?? new ArkOidcOptions();
+                if (opt.MaxFailedSignIns > 0)
+                {
+                    var login = (Username ?? "").ToLower().Trim();
+                    var status = await _ctx.auth_status.AsNoTracking()
+                        .FirstOrDefaultAsync(s => s.email.ToLower() == login);
+                    if (status != null && status.retry_count >= opt.MaxFailedSignIns
+                        && (DateTime.UtcNow - status.at).TotalMinutes < opt.LockoutMinutes)
+                        throw new ApplicationException($"Too many failed attempts. Try again in {opt.LockoutMinutes} minutes.");
+                }
+
                 var usr = await _da.ValidateUserCreds(Username, Password, client_id, tenant_id);
 
                 // Delegate to the standard grant store. The original code here minted the access
@@ -260,6 +275,10 @@ namespace Ark.oAuth.Oidc.Controllers
         [Route("{tenant_id}/v1/server/{client_id}/userinfo")]
         public async Task<dynamic> UserInfo([FromRoute] string tenant_id, [FromRoute] string client_id, [FromQuery] string sub = null)
         {
+            // Another user's record is the operator's to read, nobody else's: honouring `sub` for
+            // every signed-in caller let any of them read any account's claims for any client.
+            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
+            if (!ArkOperator.IsOperator(User, ser)) sub = null;
             sub = sub ?? Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "sub" || t.Type?.ToLower() == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
             var name = Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "name");
             return await _da.GetUserInfo(sub, tenant_id, client_id);
@@ -316,21 +335,56 @@ namespace Ark.oAuth.Oidc.Controllers
                 }
             };
         }
-        [DisableRequestSizeLimit]
+        /// <summary>
+        /// Stores a branding image under <c>UploadPath/{client_id}/{type}/</c>.
+        ///
+        /// This was anonymous, unbounded and wrote to a path built from three caller-supplied
+        /// strings, so <c>..</c> in any of them — the file name included — wrote anywhere the
+        /// process could, which on most hosts includes its own binaries and wwwroot. It now needs
+        /// the operator account, takes images only, and refuses any path that resolves outside
+        /// the upload folder. The v2 console inlines logos as data URIs and does not call it.
+        /// </summary>
+        [Authorize]
+        [RequestSizeLimit(MaxUploadBytes)]
         [HttpPost]
         [Route("v1/{client_id}/{type}/upload")]
-        public async Task<dynamic> Upload([FromRoute] string client_id, [FromRoute] string type, IFormFile file)
+        public async Task<IActionResult> Upload([FromRoute] string client_id, [FromRoute] string type, IFormFile file)
         {
-            if (file == null || file.Length == 0) return BadRequest("No file uploaded or file is empty.");
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
-            var path = System.IO.Path.Combine($"{ser.UploadPath}", client_id, type, $"{file.FileName}");
-            if (!Directory.Exists(System.IO.Path.GetDirectoryName(path))) Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
-            using (var stream = new FileStream(path, FileMode.OpenOrCreate))
+            if (!ArkOperator.IsOperator(User, ser)) return StatusCode(403, "uploads are restricted to the administrator account.");
+            if (file == null || file.Length == 0) return BadRequest("No file uploaded or file is empty.");
+            if (file.Length > MaxUploadBytes) return BadRequest("file is too large.");
+            if (string.IsNullOrWhiteSpace(ser.UploadPath)) return BadRequest("uploads are not configured (ark_oauth_server:UploadPath).");
+            if (!SafeSegment.IsMatch(client_id ?? "") || !SafeSegment.IsMatch(type ?? ""))
+                return BadRequest("client_id and type may contain only letters, digits, dot, dash and underscore.");
+
+            // The browser's file name is a suggestion, not a path: keep its last segment only.
+            var fileName = System.IO.Path.GetFileName(file.FileName ?? "");
+            if (!SafeSegment.IsMatch(fileName) || !UploadExtensions.Contains(System.IO.Path.GetExtension(fileName)))
+                return BadRequest($"only {string.Join(", ", UploadExtensions)} files with a plain name are accepted.");
+
+            var root = System.IO.Path.GetFullPath(ser.UploadPath);
+            var path = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, client_id!, type!, fileName));
+            if (!path.StartsWith(root.TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                return BadRequest("invalid upload path.");
+
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+            // Create, not OpenOrCreate: a shorter file over a longer one would keep the old tail.
+            using (var stream = new FileStream(path, FileMode.Create))
                 await file.CopyToAsync(stream);
-            return new
+            return Ok(new
             {
-                url = $"/{ser.UploadPath}/{client_id}/{type}.{file.FileName}"
-            };
+                url = $"/{ser.UploadPath.Trim('/')}/{client_id}/{type}/{fileName}"
+            });
         }
+
+        private const long MaxUploadBytes = 2 * 1024 * 1024;
+
+        private static readonly System.Text.RegularExpressions.Regex SafeSegment =
+            new(@"^(?!\.)[A-Za-z0-9._-]{1,100}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        // No SVG: it is a document that can carry script, served from this origin.
+        private static readonly HashSet<string> UploadExtensions =
+            new(StringComparer.OrdinalIgnoreCase) { ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico" };
     }
 }

@@ -582,10 +582,12 @@ namespace Ark.oAuth.Oidc
                 ArkTenant tnt = await da.GetTenant(us_cl.tenant_id);
                 user.hash_pw = (await ts.BuildAsymmetric_AccessToken(tnt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role") }, 525600)).Item1;
                 var dd = await da.UserResetPw(user);
+                // hash_pw is no longer serialised with the user, so the new token is handed back
+                // explicitly — once, to the caller that asked for it.
                 return new
                 {
                     msg = "service account token reset completed.",
-                    data = user
+                    data = new { user.email, user.name, user.type, token = user.hash_pw }
                 };
             }
             catch (Exception ex)

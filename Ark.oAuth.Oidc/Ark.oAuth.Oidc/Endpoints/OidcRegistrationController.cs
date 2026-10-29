@@ -66,6 +66,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 };
 
                 ApplyMetadata(client, metadata, ep);
+                await EnforceKnownScopesAsync(client);
                 await EnforceUniqueClientNameAsync(client);
                 await EnforceUniqueClientIdAsync(client);
 
@@ -194,17 +195,16 @@ namespace Ark.oAuth.Oidc.Endpoints
                 throw new OAuthException(OAuthErrorCodes.InvalidRedirectUri,
                     "redirect_uris is required for the authorization_code grant.");
 
-            foreach (var uri in redirectUris)
+            // Absolute, no fragment, https unless loopback (RFC 8252 §7.3) — and never a scheme the
+            // browser executes. The scheme check was missing: Uri.TryCreate accepts
+            // "javascript:..." as absolute, and a redirect URI is written into this server's own
+            // form_post page as the form's action, so registering one was script on this origin.
+            foreach (var uri in redirectUris.Concat(Strings("post_logout_redirect_uris")))
             {
-                if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed))
-                    throw new OAuthException(OAuthErrorCodes.InvalidRedirectUri, $"'{uri}' is not an absolute URI.");
-                if (!string.IsNullOrEmpty(parsed.Fragment))
-                    throw new OAuthException(OAuthErrorCodes.InvalidRedirectUri, $"'{uri}' must not contain a fragment.");
-                // http is only acceptable for loopback native clients (RFC 8252 §7.3)
-                var loopback = parsed.IsLoopback;
-                if (parsed.Scheme == "http" && !loopback)
+                if (!RedirectUriValidator.IsAcceptableRedirect(uri))
                     throw new OAuthException(OAuthErrorCodes.InvalidRedirectUri,
-                        $"'{uri}' must use https (http is only permitted for loopback redirects).");
+                        $"'{uri}' is not an acceptable redirect URI: it must be absolute, carry no fragment, " +
+                        "use https (http only for loopback) or a custom app scheme, and not be a javascript:, data: or file: URI.");
             }
 
             var authMethod = Str("token_endpoint_auth_method") ?? "client_secret_basic";
@@ -214,6 +214,26 @@ namespace Ark.oAuth.Oidc.Endpoints
             if (authMethod == "private_key_jwt" && string.IsNullOrEmpty(Str("jwks_uri")))
                 throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
                     "jwks_uri is required when token_endpoint_auth_method is private_key_jwt.");
+
+            // The server fetches jwks_uri itself, so it is held to https: anything else lets a
+            // registration point the token endpoint at file:, at plain http on an internal host, or
+            // at whatever else the HTTP stack will follow.
+            var jwksUri = Str("jwks_uri");
+            if (!string.IsNullOrEmpty(jwksUri)
+                && !(RedirectUriValidator.IsWebUrl(jwksUri) && RedirectUriValidator.IsAcceptableRedirect(jwksUri)))
+                throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                    "jwks_uri must be an https URL (http only for loopback).");
+
+            // Rendered as links on the consent and setup pages, so web URLs only.
+            foreach (var name in new[] { "client_uri", "policy_uri", "tos_uri" })
+            {
+                var value = Str(name);
+                if (!string.IsNullOrEmpty(value) && !RedirectUriValidator.IsWebUrl(value))
+                    throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata, $"{name} must be an http or https URL.");
+            }
+            var logo = Str("logo_uri");
+            if (!string.IsNullOrEmpty(logo) && !RedirectUriValidator.IsWebUrl(logo))
+                throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata, "logo_uri must be an http or https URL.");
 
             var scopeValue = Str("scope");
             var scopes = string.IsNullOrWhiteSpace(scopeValue)
@@ -268,6 +288,23 @@ namespace Ark.oAuth.Oidc.Endpoints
             client.redirect_url = redirectUris.FirstOrDefault() ?? "";
             client.logout_url = client.post_logout_redirect_uris.FirstOrDefault() ?? "";
             client.domain = redirectUris.Count > 0 && Uri.TryCreate(redirectUris[0], UriKind.Absolute, out var d) ? d.Host : "";
+        }
+
+        /// <summary>
+        /// A registered scope list is the client's whitelist, so it may only name scopes the
+        /// server's catalogue defines. Free text here used to be stored as-is and then written,
+        /// unencoded, into the setup page's code samples.
+        /// </summary>
+        private async Task EnforceKnownScopesAsync(ArkClient client)
+        {
+            var known = new HashSet<string>(
+                await Ctx.scopes.AsNoTracking().Select(s => s.name).ToListAsync(), StringComparer.OrdinalIgnoreCase);
+            if (known.Count == 0)
+                foreach (var s in ArkClaimsService.DefaultScopes()) known.Add(s.name);
+            var unknown = client.scopes.Where(s => !known.Contains(s)).ToList();
+            if (unknown.Count > 0)
+                throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                    $"unknown scope(s): {string.Join(", ", unknown)}. Register only scopes this server defines.");
         }
 
         private async Task EnforceUniqueClientNameAsync(ArkClient client)

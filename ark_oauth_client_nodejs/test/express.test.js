@@ -196,6 +196,20 @@ describe('interactive sign-in', () => {
     }
   });
 
+  // Browsers read `\` as `/` and drop tabs/newlines, so each of these is another host.
+  for (const sneaky of ['/\\evil.example.com/phish', '/\t/evil.example.com/phish', '//evil.example.com/phish']) {
+    test(`a returnTo that a browser reads as off-site is ignored: ${JSON.stringify(sneaky)}`, async () => {
+      const web = await startApp();
+      const browser = new Browser();
+      try {
+        const result = await browser.go(`${web.origin}/login?returnTo=${encodeURIComponent(sneaky)}`);
+        assert.equal(result.url, `${web.origin}/`);
+      } finally {
+        await web.close();
+      }
+    });
+  }
+
   test('authorization claims gate a route', async () => {
     const web = await startApp();
     const browser = new Browser();

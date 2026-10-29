@@ -79,6 +79,10 @@ namespace Ark.oAuth.Oidc.Protocol
                 throw OAuthException.InvalidClient("client authentication failed: unknown client.");
             if (!client.IsPublicClient)
                 throw OAuthException.InvalidClient("this client is confidential and must authenticate.");
+            // Every method refuses a deactivated client, not only the secret-based ones — a public
+            // SPA or CLI switched off in the console must stop at the token endpoint too.
+            if (!client.is_active)
+                throw OAuthException.InvalidClient("client is disabled.");
 
             return new ClientAuthResult { Client = client, Method = "none" };
         }
@@ -128,6 +132,8 @@ namespace Ark.oAuth.Oidc.Protocol
 
             var client = await FindClientAsync(tenantId, clientId)
                 ?? throw OAuthException.InvalidClient("client authentication failed: unknown client.");
+            if (!client.is_active)
+                throw OAuthException.InvalidClient("client is disabled.");
             if (!string.Equals(client.token_endpoint_auth_method, "private_key_jwt", StringComparison.OrdinalIgnoreCase))
                 throw OAuthException.InvalidClient($"client is registered for {client.token_endpoint_auth_method}.");
             if (string.IsNullOrEmpty(client.jwks_uri))
@@ -186,9 +192,11 @@ namespace Ark.oAuth.Oidc.Protocol
                 _cache.Set(cacheKey, keys, TimeSpan.FromMinutes(10));
                 return keys;
             }
-            catch (Exception ex)
+            catch
             {
-                throw OAuthException.InvalidClient($"could not retrieve the client's JWKS: {ex.Message}");
+                // No exception text: the URI is fetched server-side, and echoing what the fetch ran
+                // into turns the token endpoint into a probe of whatever network this host sits on.
+                throw OAuthException.InvalidClient("could not retrieve the client's JWKS.");
             }
         }
 
@@ -260,5 +268,68 @@ namespace Ark.oAuth.Oidc.Protocol
         private static bool IsLoopbackHost(string host) =>
             host == "127.0.0.1" || host == "::1" || host == "[::1]" ||
             string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Schemes a browser executes or renders as a document from the page that navigates to
+        /// them. A redirect URI is written into this server's own pages — the form_post action
+        /// above all — so one of these registered as a "redirect" is script running on the
+        /// identity provider's origin. Custom native-app schemes (com.example.app:/cb) stay legal.
+        /// </summary>
+        private static readonly HashSet<string> ScriptSchemes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "javascript", "vbscript", "data", "file", "blob", "about", "filesystem"
+        };
+
+        /// <summary>
+        /// An absolute URI, free of whitespace and control characters, whose scheme is not one of
+        /// <see cref="ScriptSchemes"/>. Whitespace is refused outright rather than parsed around:
+        /// browsers drop tabs and newlines from a URL before reading its scheme, so
+        /// <c>java&#9;script:</c> fails <see cref="Uri.TryCreate(string, UriKind, out Uri)"/>
+        /// here and still runs there.
+        ///
+        /// The console's client editor checks only this, so an operator's existing http redirect
+        /// on an intranet host keeps saving; dynamic registration applies the stricter
+        /// <see cref="IsAcceptableRedirect"/>.
+        /// </summary>
+        public static bool IsSafeUri(string? uri) =>
+            !string.IsNullOrEmpty(uri)
+            && !CarriesScript(uri)
+            && ExplicitScheme.IsMatch(uri)
+            // Uri also reads a bare "/path" as an absolute file: URI on Unix, so the parsed scheme
+            // is checked as well as the literal one.
+            && Uri.TryCreate(uri, UriKind.Absolute, out var parsed)
+            && !ScriptSchemes.Contains(parsed.Scheme);
+
+        /// <summary>
+        /// Whitespace or a control character anywhere, or a script scheme in front. The minimum
+        /// any stored URI has to clear; relative values pass, since they can never match a real
+        /// redirect and some legacy columns hold them.
+        ///
+        /// The scheme is read off the text the way a browser reads it — everything before the
+        /// first colon — not through <see cref="Uri"/>, which on Unix parses "/logout" as
+        /// file:///logout and would refuse every relative value as a file: URI.
+        /// </summary>
+        public static bool CarriesScript(string uri)
+        {
+            if (uri.Any(c => char.IsWhiteSpace(c) || char.IsControl(c))) return true;
+            var scheme = ExplicitScheme.Match(uri);
+            return scheme.Success && ScriptSchemes.Contains(scheme.Groups[1].Value);
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex ExplicitScheme =
+            new(@"^([A-Za-z][A-Za-z0-9+.\-]*):", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        /// <summary>A safe URI with no fragment, and http only for loopback (RFC 8252 §7.3).</summary>
+        public static bool IsAcceptableRedirect(string? uri) =>
+            IsSafeUri(uri)
+            && Uri.TryCreate(uri, UriKind.Absolute, out var parsed)
+            && string.IsNullOrEmpty(parsed.Fragment)
+            && (parsed.Scheme != Uri.UriSchemeHttp || parsed.IsLoopback);
+
+        /// <summary>An absolute http(s) URL — for metadata rendered as a link or fetched server-side.</summary>
+        public static bool IsWebUrl(string? uri) =>
+            IsSafeUri(uri)
+            && Uri.TryCreate(uri, UriKind.Absolute, out var parsed)
+            && (parsed.Scheme == Uri.UriSchemeHttps || parsed.Scheme == Uri.UriSchemeHttp);
     }
 }

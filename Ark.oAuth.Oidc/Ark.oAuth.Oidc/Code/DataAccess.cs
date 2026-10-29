@@ -110,6 +110,10 @@ namespace Ark.oAuth.Oidc
             else
             {
                 client.id = tt.id;
+                // The hashes are never serialised (ArkClient), so a row posted from the console
+                // arrives without them — which means "unchanged", not "remove the secret".
+                if (string.IsNullOrEmpty(client.client_secret_hash)) client.client_secret_hash = tt.client_secret_hash;
+                if (string.IsNullOrEmpty(client.registration_access_token_hash)) client.registration_access_token_hash = tt.registration_access_token_hash;
                 _ctx.ChangeTracker.Clear();
                 client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.clients.Update(client);
@@ -157,6 +161,18 @@ namespace Ark.oAuth.Oidc
             client.logout_url = string.IsNullOrWhiteSpace(client.logout_url)
                 ? (client.post_logout_redirect_uris.FirstOrDefault(u => !string.IsNullOrWhiteSpace(u)) ?? "")
                 : client.logout_url.Trim();
+
+            // A redirect URI ends up as the action of the form_post page and as a Location header,
+            // and client_uri as a link on the consent page — all on this server's origin. A
+            // javascript: or data: value in any of them is script running as the identity
+            // provider, so they are refused here as well as at dynamic registration.
+            foreach (var uri in client.redirect_uris.Concat(client.post_logout_redirect_uris)
+                         .Append(client.redirect_url).Append(client.logout_url)
+                         .Append(client.client_uri).Append(client.policy_uri).Append(client.tos_uri).Append(client.jwks_uri))
+            {
+                if (!string.IsNullOrWhiteSpace(uri) && Protocol.RedirectUriValidator.CarriesScript(uri.Trim()))
+                    throw new ApplicationException($"'{uri}' is not an acceptable URI: javascript:, data:, file: and values containing whitespace are refused.");
+            }
 
             if (string.IsNullOrWhiteSpace(client.domain))
             {
@@ -419,6 +435,11 @@ namespace Ark.oAuth.Oidc
             }
             else
             {
+                // Same contract as the client hashes: hash_pw and ref_uid are not serialised, so
+                // a posted row without them leaves the stored ones alone. Passwords change through
+                // SetUserPassword / UpdatePassword, never through a row save.
+                if (string.IsNullOrEmpty(user.hash_pw)) user.hash_pw = tt.hash_pw;
+                if (string.IsNullOrEmpty(user.ref_uid)) user.ref_uid = tt.ref_uid;
                 _ctx.ChangeTracker.Clear();
                 user.id = tt.id;
                 user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");

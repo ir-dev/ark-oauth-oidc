@@ -54,7 +54,15 @@ classifiers = [
 # Signature verification is the one thing the standard library cannot do. Everything else -- the
 # HTTP layer, the random values, the digests -- is stdlib, so the dependency surface of a security
 # package stays at one well-maintained, widely-audited library.
-dependencies = ["cryptography>=41.0"]
+#
+# The floor is a security floor. ">=41.0" admitted releases with a Bleichenbacher timing oracle
+# (CVE-2023-50782), missing EC subgroup validation (CVE-2026-26007) and bundled vulnerable OpenSSL
+# builds. 49.0.0 is the first release clear of every published advisory; it does not support
+# Python 3.9.0/3.9.1, which keep the newest floor they can install (46.0.6).
+dependencies = [
+    "cryptography>=49.0.0; python_full_version >= '3.9.2'",
+    "cryptography>=46.0.6; python_full_version < '3.9.2'",
+]
 
 [project.optional-dependencies]
 flask = ["flask>=2.2"]

@@ -134,7 +134,11 @@ namespace Ark.oAuth.Oidc.Endpoints
                     // An access token is a self-contained JWT and cannot be withdrawn, but
                     // revoking the session behind it stops any further tokens being minted.
                     var result = await _tokens.ValidateAsync(token, tenant, ep.Issuer);
-                    if (result.IsValid)
+                    // RFC 7009 §2.1: only the client the token was issued to may revoke it. This
+                    // check was missing, so any client — a public one needs nothing but its id —
+                    // could end another application's user session by presenting its token.
+                    var issuedTo = result.ClaimsIdentity?.FindFirst("client_id")?.Value;
+                    if (result.IsValid && string.Equals(issuedTo, auth.Client.client_id, StringComparison.OrdinalIgnoreCase))
                     {
                         var sid = result.ClaimsIdentity?.FindFirst("sid")?.Value;
                         if (!string.IsNullOrEmpty(sid))
@@ -231,7 +235,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                     c.client_id.ToLower() == (clientId ?? "").ToLower());
 
                 // Only redirect to a URI the client registered — otherwise this is an open redirect.
-                if (client != null && RedirectUriValidator.Matches(client.EffectivePostLogoutRedirectUris, postLogoutRedirectUri!))
+                if (client != null && RedirectUriValidator.Matches(client.EffectivePostLogoutRedirectUris, postLogoutRedirectUri!)
+                    && !RedirectUriValidator.CarriesScript(postLogoutRedirectUri!))
                 {
                     var target = postLogoutRedirectUri!;
                     if (!string.IsNullOrEmpty(state))
