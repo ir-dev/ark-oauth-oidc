@@ -1,4 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
+using System.Data.Common;
 using System.Reflection;
 using ark.net.util;
 
@@ -100,21 +103,47 @@ namespace Ark.oAuth.Oidc
                     try
                     {
                         var dbContext = scope.ServiceProvider.GetRequiredService<ArkDataContext>();
+                        var creator = dbContext.GetService<IRelationalDatabaseCreator>();
+                        var conf = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+                        var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
                         if (dbContext.Database.GetPendingMigrations().Any())
                         {
                             dbContext.Database.Migrate();
                         }
-                        else if (!dbContext.Database.CanConnect())
+                        // A database with no tables is as fresh as a missing one. This used to be
+                        // !CanConnect(), which only ever meant "the database is missing": a database
+                        // created beforehand for an account that may not create its own — the usual
+                        // arrangement on a managed PostgreSQL server — connected fine and was left
+                        // to the schema updater to fill. CanConnect() also swallows every error, so
+                        // a wrong password or a refused CONNECT was taken for a missing database too.
+                        else if (!creator.Exists() || !creator.HasTables())
                         {
-                            var conf = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-                            var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
-                            // Resolved before the schema is created, not after. Seeding is only ever
-                            // attempted against a database that does not exist yet, so a failure once
-                            // the file is on disk would leave an empty schema behind that every later
-                            // start treats as already initialised — no tenant, no client, no admin,
-                            // and no second attempt.
+                            CreateSchema(dbContext, creator);
+                        }
+
+                        // Schema updates for a database that already exists. Additive scripts
+                        // only, recorded so none of them runs twice, then whatever the entity
+                        // model has that the database still lacks — see ArkSchemaUpdater. This
+                        // used to be an operator's job after every upgrade, and skipping it left
+                        // the entities describing columns the tables did not have: the management
+                        // API then answered a bare 500 that named nothing. On a schema just
+                        // created it only records the scripts as a baseline. It runs before the
+                        // seed so a database left with old, empty tables is current before
+                        // anything is written to it.
+                        ApplySchemaUpdates(scope.ServiceProvider);
+
+                        // Seeding is decided by the data, not the schema: a database without a
+                        // single tenant has never been seeded, whatever tables it has. It used to
+                        // be decided by the schema, so tables created any other way — by the
+                        // updater above, on a database the old CanConnect() test took for
+                        // initialised, or by a seed that failed after creating them — were never
+                        // seeded at all, and ReconcileMachineClient then inserted a client for a
+                        // tenant that did not exist: 23503, FK_clients_tenants_tenant_id. The
+                        // seed is one SaveChanges, so it either happens whole or is tried again on
+                        // the next start.
+                        if (!dbContext.tenants.Any())
+                        {
                             var admin = ResolveAdminUser(ser);
-                            dbContext.Database.EnsureCreated();
                             var htp = scope.ServiceProvider.GetService<IHttpContextAccessor>();
                             var util = scope.ServiceProvider.GetRequiredService<ArkUtil>();
                             // Signing keys are generated here, in this process. They used to be
@@ -154,8 +183,8 @@ namespace Ark.oAuth.Oidc
                                 status = "active",
                                 created_at = DateTime.UtcNow
                             });
-                            foreach (var sc in Protocol.ArkClaimsService.DefaultScopes())
-                                dbContext.scopes.Add(sc);
+                            // No scopes here: ReconcileScopeCatalogue adds the missing ones below,
+                            // and a database that reached this point unseeded may already hold them.
                             var cll = new ArkClient()
                             {
                                 tenant_id = ser.TenantId,
@@ -212,7 +241,8 @@ namespace Ark.oAuth.Oidc
                                 "phone_number",
                                 "address"
                             };
-                            foreach (var item in lls)
+                            var existingClaims = dbContext.claims.Select(c => c.key).ToList();
+                            foreach (var item in lls.Where(k => !existingClaims.Contains(k)))
                             {
                                 dbContext.claims.Add(new ArkClaim() { key = item, display = item });
                             }
@@ -263,14 +293,16 @@ namespace Ark.oAuth.Oidc
                             });
                             dbContext.SaveChanges();
                         }
-
-                        // Schema updates for a database that already exists. Additive scripts
-                        // only, recorded so none of them runs twice, then whatever the entity
-                        // model has that the database still lacks — see ArkSchemaUpdater. This
-                        // used to be an operator's job after every upgrade, and skipping it left
-                        // the entities describing columns the tables did not have: the management
-                        // API then answered a bare 500 that named nothing.
-                        ApplySchemaUpdates(scope.ServiceProvider);
+                        // Tenants, but not the configured one: TenantId was changed after the
+                        // database was seeded. Every step below assumes that tenant, and the
+                        // first insert would fail on the foreign key without naming either value.
+                        else if (!string.IsNullOrWhiteSpace(ser.TenantId) && !dbContext.tenants.Any(t => t.tenant_id == ser.TenantId))
+                        {
+                            throw new ApplicationException(
+                                $"ark_oauth_server:TenantId is '{ser.TenantId}', but this database has no tenant " +
+                                "of that name. TenantId names the operator tenant the database was first seeded " +
+                                "with; set it back to that value (tenant ids are compared case-sensitively).");
+                        }
 
                         ReconcileAdminConsoleClient(scope.ServiceProvider);
                         ReconcileScopeCatalogue(scope.ServiceProvider);
@@ -298,8 +330,9 @@ namespace Ark.oAuth.Oidc
         /// with the same credentials on the one account that administers every tenant, and the
         /// only thing standing between a fresh install and a stranger was whether anyone had
         /// read the release notes. Refusing to seed is louder than seeding something guessable:
-        /// this runs once, while the database is being created, so the message lands in front of
-        /// whoever is installing the server rather than months later.
+        /// this runs only while the database has no tenant, so the message lands in front of
+        /// whoever is installing the server rather than months later, and the next start after
+        /// the password is set seeds the database it left unseeded.
         ///
         /// <c>DefaultPw</c> is accepted as the fallback because it already means "the initial
         /// password for an account created without one", which is exactly what this is.
@@ -335,6 +368,53 @@ namespace Ark.oAuth.Oidc
             var trimmed = (value ?? "").Trim();
             if (trimmed.Length == 0) return null;
             return trimmed.StartsWith("<<") && trimmed.EndsWith(">>") ? null : value;
+        }
+
+        /// <summary>
+        /// Creates the database if it does not exist yet, then its tables — what
+        /// <c>EnsureCreated</c> does, with the two refusals a restricted PostgreSQL account meets
+        /// turned into messages that name the real cause.
+        ///
+        /// Creating a database is the one step here that needs more than the database's own
+        /// privileges: Npgsql runs CREATE DATABASE from the maintenance database, so an account
+        /// limited to its own database is refused with <c>42501: permission denied for database
+        /// "postgres"</c> — a database nobody configured. That step is only reached when the
+        /// configured database was not found, and on PostgreSQL that is usually its name's case:
+        /// an unquoted <c>CREATE DATABASE CMS_Auth</c> stores <c>cms_auth</c>, which a connection
+        /// string naming <c>CMS_Auth</c> does not find.
+        ///
+        /// Creating the tables can be refused too: from PostgreSQL 15 the public schema no longer
+        /// lets every account create in it, only the database's owner.
+        /// </summary>
+        private static void CreateSchema(ArkDataContext dbContext, IRelationalDatabaseCreator creator)
+        {
+            var database = dbContext.Database.GetDbConnection().Database;
+            if (!creator.Exists())
+            {
+                try
+                {
+                    creator.Create();
+                }
+                catch (DbException ex) when (ex.SqlState == "42501")
+                {
+                    throw new ApplicationException(
+                        $"database '{database}' does not exist on the server, and this account may not " +
+                        "create databases. Create it beforehand and grant this account access to it. If it " +
+                        "does exist, compare the exact spelling: PostgreSQL database names are case-sensitive, " +
+                        "and CREATE DATABASE without quotes stores the name in lower case.", ex);
+                }
+            }
+            try
+            {
+                creator.CreateTables();
+            }
+            catch (DbException ex) when (ex.SqlState == "42501")
+            {
+                throw new ApplicationException(
+                    $"this account may not create tables in database '{database}'. From PostgreSQL 15 the " +
+                    "public schema accepts new tables only from the database's owner: make this account the " +
+                    "owner (ALTER DATABASE … OWNER TO …), or GRANT USAGE, CREATE ON SCHEMA public TO it.", ex);
+            }
         }
 
         /// <summary>
