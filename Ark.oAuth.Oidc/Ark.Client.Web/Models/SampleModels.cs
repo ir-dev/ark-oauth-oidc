@@ -112,8 +112,34 @@ namespace Ark.Client.Web.Models
         public bool AppIsConfidential { get; set; }
         public bool AppRequiresArkClaims { get; set; }
 
+        /// <summary>
+        /// The machine client's token from Step 1, when its secret works. It is both the initial
+        /// access token for registration and the bearer the management API accepts from the machine
+        /// client, which is what lets Steps 2 and 3 run from this page. Never rendered.
+        /// </summary>
+        public string? ManagementToken { get; set; }
+        public ArkTokenResult? SecretCheck { get; set; }
+
+        /// <summary>
+        /// The client the later steps act on: this app's own client id unless another one was
+        /// registered. Carried between the page's forms in a hidden field.
+        /// </summary>
+        public string TargetClientId { get; set; } = "";
+
+        /// <summary>What the IdP holds for <see cref="TargetClientId"/>, read with the management API.</summary>
+        public ArkClientSummary? TargetClient { get; set; }
+
+        /// <summary><c>found</c>, <c>missing</c>, <c>failed</c>, or <c>unchecked</c> (no working machine secret).</summary>
+        public string TargetLookup { get; set; } = "unchecked";
+        public string? TargetLookupError { get; set; }
+
+        /// <summary>Login ids on the IdP, offered by the Step 3 form.</summary>
+        public List<string> Users { get; set; } = new();
+
         // the form, echoed back so a failed submission is not retyped
-        public string ClientName { get; set; } = "My new client";
+        public string ClientName { get; set; } = "";
+        /// <summary>Sent as <c>client_id</c>; Ark honours a requested id when it is free. Empty mints one.</summary>
+        public string RequestedClientId { get; set; } = "";
         public string RedirectUris { get; set; } = "";
         public string PostLogoutRedirectUris { get; set; } = "";
         public string GrantTypes { get; set; } = "authorization_code refresh_token";
@@ -133,6 +159,42 @@ namespace Ark.Client.Web.Models
         // prefilled for the management form after a successful registration
         public string ManageClientId { get; set; } = "";
         public string ManageAccessToken { get; set; } = "";
+
+        // Step 3, the access mapping form
+        public string MapUser { get; set; } = "admin";
+        public string MapClaims { get; set; } = "";
+        public ArkManagementResult? Mapping { get; set; }
+        public List<string> MappedClaims { get; set; } = new();
+
+        /// <summary>Result of removing an existing client through the management API.</summary>
+        public ArkManagementResult? Removal { get; set; }
+    }
+
+    /// <summary>The parts of an IdP client record the register page shows.</summary>
+    public class ArkClientSummary
+    {
+        /// <summary>The surrogate key. Access mappings join on this, not on <see cref="ClientId"/>.</summary>
+        public string Id { get; set; } = "";
+        public string ClientId { get; set; } = "";
+        public string? Name { get; set; }
+        public string? TokenEndpointAuthMethod { get; set; }
+        public bool IsActive { get; set; }
+        public bool IsConfidential => !string.IsNullOrEmpty(TokenEndpointAuthMethod)
+            && !string.Equals(TokenEndpointAuthMethod, "none", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// One call to the IdP's management API (<c>/api/oauth/v1/...</c>), which answers
+    /// <c>{ error, code, msg, data }</c> — usually with HTTP 200 even when <c>error</c> is true.
+    /// </summary>
+    public class ArkManagementResult
+    {
+        public int StatusCode { get; set; }
+        public bool Succeeded { get; set; }
+        public string? Code { get; set; }
+        public string? Message { get; set; }
+        public string? RawResponse { get; set; }
+        public System.Text.Json.Nodes.JsonNode? Data { get; set; }
     }
 
     public class ErrorViewModel

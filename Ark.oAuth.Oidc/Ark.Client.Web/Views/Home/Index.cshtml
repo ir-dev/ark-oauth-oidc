@@ -22,6 +22,21 @@
     </div>
 }
 
+@* The provider ships its admin console in the package, at {BaseUrl}/{TenantId}/admin. Every
+   registration step below happens there, so the link sits above them rather than inside one. *@
+<div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="flex:1;min-width:240px">
+        <strong>Built-in admin console</strong><br />
+        <span style="color:var(--fg-muted);font-size:13.5px">
+            Clients, users, access mapping and signing keys for tenant
+            <code>@Model.TenantId</code> — sign in as <code>admin</code> / <code>admin</code> on a
+            fresh provider.
+        </span><br />
+        <code>@Model.AdminConsoleUrl</code>
+    </div>
+    <a class="btn" href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">Open admin console</a>
+</div>
+
 <h2>Step 1 — Run the identity provider</h2>
 <div class="card">
     <p style="margin-top:0">
@@ -68,8 +83,8 @@
 <h2>Step 2 — Register this application as a client</h2>
 <div class="card">
     <p style="margin-top:0">
-        Sign in to the admin console at
-        <code>@Model.AdminConsoleUrl</code> and add a client under
+        Sign in to the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
+        at <code>@Model.AdminConsoleUrl</code> and add a client under
         <strong>Clients</strong> with exactly these values. Redirect URIs are matched
         <em>exactly</em> — no wildcards, no prefix matching, no trailing-slash tolerance.
     </p>
@@ -126,7 +141,8 @@
         to it at all, and the sign-in page reports only that the credentials were not recognised.
     </p>
     <p>
-        In the admin console open <strong>Access mapping</strong>, pick the user, pick
+        In the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
+        open <strong>Access mapping</strong>, pick the user, pick
         <code>@Model.ClientId</code>, and add the claims they should carry. Identity claims
         (<code>name</code>, <code>email</code>, …) control what appears in the ID token and
         UserInfo; anything else becomes an authorization claim, delivered in the access token as

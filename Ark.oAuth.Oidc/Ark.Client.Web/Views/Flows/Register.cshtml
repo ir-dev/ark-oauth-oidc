@@ -3,10 +3,14 @@
     ViewData["Title"] = "Dynamic registration";
 
     var reg = Model.Registration;
-    // Once a registration succeeds, every later step on the page is written for that client.
-    var newClientId = reg?.Succeeded == true ? reg.ClientId : null;
-    var clientIdShown = newClientId ?? "<client_id from step 2>";
-    var newIsConfidential = reg?.Succeeded == true && !string.IsNullOrEmpty(reg.ClientSecret);
+    var target = Model.TargetClient;
+    // Every later step is written for one client: the one just registered, otherwise the page's
+    // target — this app's own client id unless another was registered.
+    var registeredNow = reg?.Succeeded == true ? reg.ClientId : null;
+    var clientIdShown = registeredNow ?? Model.TargetClientId;
+    var isCurrentApp = string.Equals(clientIdShown, Model.AppClientId, StringComparison.Ordinal);
+    var targetExists = registeredNow != null || Model.TargetLookup == "found";
+    var newIsConfidential = registeredNow != null ? !string.IsNullOrEmpty(reg!.ClientSecret) : target?.IsConfidential == true;
     // What the IdP said about the machine secret — see BuildRegisterModelAsync. "Configured" alone
     // only meant a value was present, which a recreated IdP database silently invalidates.
     var secretWorks = Model.MachineSecretStatus == "works";
@@ -14,12 +18,37 @@
     var signedIn = User.Identity?.IsAuthenticated == true;
     var signedInAs = User.FindFirst("name")?.Value ?? User.FindFirst("email")?.Value ?? "a user";
 
-    var switchCommands = $"dotnet user-secrets set \"ark_oauth_client:ClientId\" \"{clientIdShown}\" --project Ark.Client.Web";
-    if (newIsConfidential)
-        switchCommands += "\ndotnet user-secrets set \"ark_oauth_client:ClientSecret\" \"<client_secret from step 2>\" --project Ark.Client.Web";
-    else if (Model.AppIsConfidential)
-        switchCommands += "\n# a public client must not send a secret, and this app has one configured"
-                        + "\ndotnet user-secrets remove \"ark_oauth_client:ClientSecret\" --project Ark.Client.Web";
+    // Registering this app's own client id leaves nothing to configure, unless the kind of client
+    // registered (public or confidential) differs from what this app is set up as.
+    var commands = new List<string>();
+    if (!isCurrentApp)
+        commands.Add($"dotnet user-secrets set \"ark_oauth_client:ClientId\" \"{clientIdShown}\" --project Ark.Client.Web");
+    if (newIsConfidential && (registeredNow != null || !Model.AppIsConfidential))
+        commands.Add("dotnet user-secrets set \"ark_oauth_client:ClientSecret\" \"<client_secret from step 2>\" --project Ark.Client.Web");
+    else if (!newIsConfidential && Model.AppIsConfidential)
+    {
+        commands.Add("# a public client must not send a secret, and this app has one configured");
+        commands.Add("dotnet user-secrets remove \"ark_oauth_client:ClientSecret\" --project Ark.Client.Web");
+    }
+    var switchCommands = string.Join("\n", commands);
+}
+
+@* State the page's forms pass along, since each post re-renders the whole page. The secret and
+   the registration access token are echoed into this no-store page and kept nowhere else. *@
+@functions {
+    void CarryFields(bool includeTarget, bool includeManage)
+    {
+        <input type="hidden" name="MachineSecret" class="carry-secret" value="@Model.MachineSecret" />
+        if (includeTarget)
+        {
+            <input type="hidden" name="TargetClientId" value="@(Model.Registration?.Succeeded == true ? Model.Registration.ClientId : Model.TargetClientId)" />
+        }
+        if (includeManage)
+        {
+            <input type="hidden" name="ManageClientId" value="@Model.ManageClientId" />
+            <input type="hidden" name="ManageAccessToken" value="@Model.ManageAccessToken" />
+        }
+    }
 }
 
 <style>
@@ -65,6 +94,32 @@
     console, then sign in with it and open this app's protected page. The steps below follow
     the order they happen in the protocol, and each one says which part of OAuth 2 it is.
 </p>
+
+<div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="flex:1;min-width:240px">
+        <strong>Registering this app: <code>@Model.AppClientId</code></strong><br />
+        <span style="color:var(--fg-muted);font-size:13.5px">
+            The form is prefilled with this app's own client id, callbacks and scopes, so the client
+            created here is the one this app already signs in as. Every step runs from a form on
+            this page once Step 1 has a working machine secret.
+        </span>
+    </div>
+    @switch (Model.TargetLookup)
+    {
+        case "found":
+            <span class="pill ok">@Model.TargetClientId is registered</span>
+            break;
+        case "missing":
+            <span class="pill warn">@Model.TargetClientId is not registered yet</span>
+            break;
+        case "failed":
+            <span class="pill bad">could not ask the IdP</span>
+            break;
+        default:
+            <span class="pill">registration unknown — see Step 1</span>
+            break;
+    }
+</div>
 
 @if (!Model.DiscoveryOk)
 {
@@ -292,7 +347,7 @@ else if (!Model.SupportsDynamicRegistration)
                 </td>
                 <td>
                     Regenerate it in the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
-                    and paste it in <a class="step" href="#step-2">Step 2</a> —
+                    and paste it in <a class="step" href="#step-1">Step 1</a> —
                     <a class="step" href="#get-machine-secret">how</a>.
                 </td>
             </tr>
@@ -310,7 +365,8 @@ else if (!Model.SupportsDynamicRegistration)
                 <td><span class="pill">check</span></td>
                 <td>
                     The first run creates <code>admin</code> with the password set in
-                    <code>ark_oauth_server:AdminUser:Password</code>. Step 3 is done there.
+                    <code>ark_oauth_server:AdminUser:Password</code>. It is needed once, to get the
+                    machine secret; Steps 2 and 3 then run from this page.
                 </td>
             </tr>
             <tr>
@@ -330,11 +386,20 @@ else if (!Model.SupportsDynamicRegistration)
     <p style="margin-top:0">
         Messages 1–2. This app posts the machine client's own credentials to the token endpoint and
         asks for <code>client.register</code>. No user is involved: the token says "this service
-        may create clients", nothing more. You do not press anything for this step — it runs when
-        you submit Step 2.
+        may create clients", nothing more. You do not press anything for this step — it runs every
+        time a form on this page is submitted. On Ark the same token also drives the management
+        API, which is what lets this page check the registration and grant access in Step 3.
     </p>
     <div class="kv">
         <div>machine client_id</div><div><code>@Model.MachineClientId</code></div>
+        <div>machine client_secret</div>
+        <div class="secret-field">
+            @* No form of its own: every form on the page copies it in when submitted. *@
+            <input type="password" id="machine-secret" value="@Model.MachineSecret"
+                   autocomplete="off" spellcheck="false"
+                   placeholder="@(secretWorks && !Model.MachineSecretPasted ? "optional — the configured secret works" : "paste the secret from the admin console")" />
+            <button class="btn ghost" type="button" id="machine-secret-view">View</button>
+        </div>
         <div>client_secret</div>
         <div>
             @switch (Model.MachineSecretStatus)
@@ -386,9 +451,9 @@ else if (!Model.SupportsDynamicRegistration)
                     time the value is shown: copy it now.
                 </li>
                 <li>
-                    Paste it into <strong>machine client_secret</strong> in
-                    <a class="step" href="#step-2">Step 2</a>; <strong>View</strong> shows what you pasted.
-                    It is used for that registration only and kept nowhere — not by this app, not by the IdP.
+                    Paste it into <strong>machine client_secret</strong> above; <strong>View</strong>
+                    shows what you pasted. Each form on this page sends it along, and it is kept
+                    nowhere — not by this app, not by the IdP.
                 </li>
             </ol>
             To reuse it after you leave this page, keep it wherever suits you and hand it to this app
@@ -406,8 +471,9 @@ else if (!Model.SupportsDynamicRegistration)
         {
             <div class="note ok">
                 <strong>Token obtained.</strong> Scope <code>@(iat.Scope ?? "—")</code>, valid for
-                @iat.ExpiresIn seconds. It was cached, so registering again within its lifetime
-                reuses it.
+                @iat.ExpiresIn seconds. This page asks for a fresh one on every submission, to
+                prove the secret still works; service code should call the cached
+                <code>GetTokenAsync</code> instead.
             </div>
         }
         else
@@ -418,19 +484,55 @@ else if (!Model.SupportsDynamicRegistration)
             </div>
         }
     }
+
+    @if (Model.TargetLookup == "failed")
+    {
+        <div class="note bad">
+            <strong>The secret works, but the management API refused the token.</strong><br />
+            <code>@Model.TargetLookupError</code><br />
+            It accepts tokens issued to the operator tenant's machine client only, so this app's
+            <code>Authority</code> has to name that tenant. Steps 2 and 3 cannot check or change
+            anything on the IdP until it does.
+        </div>
+    }
 </div>
 
 <h2 id="step-2">Step 2 — Register the client <span class="pill">RFC 7591 §3.1</span></h2>
 <div class="card">
     <p style="margin-top:0">
-        Messages 3–4. The form is prefilled with a client this app can sign in with: its redirect
-        URIs are this app's own callbacks, and it asks for the authorization code grant with
-        refresh tokens. Change the name if you register more than once — a
-        <code>client_name</code> must be unique within the tenant.
+        Messages 3–4. The form is prefilled with <strong>this app's own registration</strong>:
+        <code>client_id</code> and <code>client_name</code> are <code>@Model.AppClientId</code>,
+        the redirect URIs are this app's callbacks, the scopes are the ones it requests, and it
+        asks for the authorization code grant with refresh tokens. Ark honours a requested
+        <code>client_id</code> when it is free, so once this succeeds the app can sign in with no
+        configuration change. Clear <code>client_id</code> to have the IdP mint one instead.
     </p>
-    <form method="post" action="/flows/register">
+
+    @if (Model.TargetLookup == "found" && registeredNow == null && target != null)
+    {
+        <div class="note warn">
+            <strong><code>@target.ClientId</code> is already registered on the IdP</strong>
+            (@(target.IsConfidential ? target.TokenEndpointAuthMethod : "public client")@(target.IsActive ? "" : ", deactivated")),
+            so registering it again answers <code>409</code>. If it is set up the way you want,
+            skip to <a class="step" href="#step-3">Step 3</a>. Otherwise remove it and register it
+            afresh — RFC 7592's delete in Step 6 needs the registration access token, which is
+            gone once the page that showed it is reloaded, so this uses the management API.
+            <form method="post" action="/flows/register/remove" data-carry style="margin-top:8px"
+                  onsubmit="return confirm('Remove @target.ClientId from the IdP? Its access mappings and refresh tokens go with it.');">
+                @Html.AntiForgeryToken()
+                @{ CarryFields(includeTarget: true, includeManage: false); }
+                <button class="btn ghost" type="submit">Remove @target.ClientId from the IdP</button>
+            </form>
+        </div>
+    }
+
+    <form method="post" action="/flows/register" data-carry>
         @Html.AntiForgeryToken()
+        @{ CarryFields(includeTarget: false, includeManage: false); }
         <div class="kv" style="margin-bottom:14px">
+            <div>client_id</div>
+            <div><input name="RequestedClientId" value="@Model.RequestedClientId" style="width:100%" placeholder="empty: the IdP mints one" /></div>
+
             <div>client_name</div>
             <div><input name="ClientName" value="@Model.ClientName" style="width:100%" /></div>
 
@@ -463,29 +565,9 @@ else if (!Model.SupportsDynamicRegistration)
                 </select>
             </div>
 
-            <div>machine client_secret</div>
-            <div class="secret-field">
-                <input type="password" name="MachineSecret" id="machine-secret" value="@Model.MachineSecret"
-                       autocomplete="off" spellcheck="false"
-                       placeholder="@(secretWorks && !Model.MachineSecretPasted ? "optional — the configured secret works" : "paste the secret from the admin console (Step 1)")" />
-                <button class="btn ghost" type="button" id="machine-secret-view">View</button>
-            </div>
         </div>
         <button class="btn" type="submit">Register</button>
     </form>
-    <script>
-        // View/Hide for the pasted machine secret. It never leaves the form except in this post.
-        (function () {
-            var input = document.getElementById("machine-secret");
-            var button = document.getElementById("machine-secret-view");
-            if (!input || !button) return;
-            button.addEventListener("click", function () {
-                var show = input.type === "password";
-                input.type = show ? "text" : "password";
-                button.textContent = show ? "Hide" : "View";
-            });
-        })();
-    </script>
 
     <div class="note">
         Redirect URIs are matched exactly and must be absolute. <code>https</code> is required
@@ -493,8 +575,8 @@ else if (!Model.SupportsDynamicRegistration)
         a fragment is never allowed. Choosing <code>none</code> makes this a public client: no
         secret is issued and PKCE becomes mandatory. This app is currently configured as a
         <strong>@(Model.AppIsConfidential ? "confidential" : "public")</strong> client, so
-        <code>@(Model.AppIsConfidential ? "client_secret_post" : "none")</code> is the choice
-        that needs the fewest configuration changes in Step 4.
+        <code>@(Model.AppIsConfidential ? "client_secret_post" : "none")</code> is preselected:
+        it is the choice that needs no configuration change in Step 4.
     </div>
     <div class="note">
         Every scope must already exist in the IdP's scope catalogue, and the list becomes this
@@ -503,6 +585,32 @@ else if (!Model.SupportsDynamicRegistration)
     </div>
 </div>
 
+@if (Model.Removal != null)
+{
+    <h2>Remove result <span class="pill">management API</span></h2>
+    <div class="card">
+        @if (Model.Removal.Succeeded)
+        {
+            <div class="note ok">
+                <strong><code>@Model.TargetClientId</code> removed from the IdP.</strong>
+                Register it again with the form in Step 2. Tokens it was issued stay valid until
+                they expire.
+            </div>
+        }
+        else
+        {
+            <div class="note bad">
+                <strong>@(Model.Removal.StatusCode == 0 ? "Not sent" : Model.Removal.StatusCode.ToString()) — @(Model.Removal.Code ?? "error")</strong><br />
+                @Model.Removal.Message
+            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(Model.Removal.RawResponse))
+        {
+            <pre>@Model.Removal.RawResponse</pre>
+        }
+    </div>
+}
+
 @if (reg != null)
 {
     <h2>The registration response <span class="pill">RFC 7591 §3.2</span></h2>
@@ -510,8 +618,18 @@ else if (!Model.SupportsDynamicRegistration)
         @if (reg.Succeeded)
         {
             <div class="note ok">
-                <strong>@reg.StatusCode — client created.</strong> Steps 3–5 below now name
-                <code>@reg.ClientId</code>, so you can follow them as written.
+                <strong>@reg.StatusCode — client created.</strong>
+                @if (isCurrentApp)
+                {
+                    <text>
+                        <code>@reg.ClientId</code> is this app's own client id, so it is now this
+                        app's registration. Grant a user access in Step 3 and sign in.
+                    </text>
+                }
+                else
+                {
+                    <text>Steps 3–5 below now name <code>@reg.ClientId</code>, so you can follow them as written.</text>
+                }
             </div>
             <div class="kv">
                 <div>client_id</div><div><code>@reg.ClientId</code></div>
@@ -565,8 +683,9 @@ else if (!Model.SupportsDynamicRegistration)
                 else if (reg.Error == "invalid_client_metadata")
                 {
                     <div style="margin-top:6px">
-                        Usually a <code>client_name</code> that is already taken, or a scope the
-                        IdP's catalogue does not define. The description above says which.
+                        Usually a <code>client_id</code> or <code>client_name</code> that is already
+                        taken, or a scope the IdP's catalogue does not define. The description above
+                        says which. A taken id can be removed from the note at the top of Step 2.
                     </div>
                 }
                 else if (reg.Error == "registration_not_supported")
@@ -596,18 +715,68 @@ else if (!Model.SupportsDynamicRegistration)
         mapping to <code>@clientIdShown</code> cannot sign in to it at all, and the sign-in page
         reports only that the credentials were not recognised.
     </p>
-    <ol class="steps">
-        <li>Open the admin console at <code>@Model.AdminConsoleUrl</code> and sign in.</li>
-        <li>
-            Under <strong>Clients</strong>, confirm <code>@clientIdShown</code> is listed and
-            active. A registered client appears there like any other, and can be edited there too.
-        </li>
-        <li>
-            Under <strong>Access mapping</strong>, pick the user you will sign in as, pick
-            <code>@clientIdShown</code>, and add at least one authorization claim, for example
-            <code>sample.admin</code>.
-        </li>
-    </ol>
+    <form method="post" action="/flows/register/map" data-carry>
+        @Html.AntiForgeryToken()
+        @{ CarryFields(includeTarget: true, includeManage: true); }
+        <div class="kv" style="margin-bottom:14px">
+            <div>client</div>
+            <div>
+                <code>@clientIdShown</code>
+                @if (targetExists) { <span class="pill ok">registered</span> }
+                else if (Model.TargetLookup == "missing") { <span class="pill warn">not registered — Step 2</span> }
+            </div>
+
+            <div>user</div>
+            <div>
+                <input name="MapUser" value="@Model.MapUser" list="idp-users" style="width:100%"
+                       autocomplete="off" spellcheck="false" placeholder="the login id to sign in with" />
+                <datalist id="idp-users">
+                    @foreach (var user in Model.Users)
+                    {
+                        <option value="@user"></option>
+                    }
+                </datalist>
+            </div>
+
+            <div>claims</div>
+            <div><input name="MapClaims" value="@Model.MapClaims" style="width:100%" spellcheck="false" /></div>
+        </div>
+        <button class="btn" type="submit" disabled="@(!secretWorks || !targetExists)">Grant access</button>
+        @if (!secretWorks)
+        {
+            <span class="secret-src">needs a working machine secret — Step 1</span>
+        }
+        else if (!targetExists)
+        {
+            <span class="secret-src">register <code>@clientIdShown</code> in Step 2 first</span>
+        }
+    </form>
+    <p style="margin-bottom:0">
+        This writes the same row as <strong>Access mapping</strong> in the
+        <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>, through
+        the management API. Claims the user already has on this client are kept; the ones above are
+        added.
+    </p>
+
+    @if (Model.Mapping != null)
+    {
+        if (Model.Mapping.Succeeded)
+        {
+            <div class="note ok">
+                <strong><code>@Model.MapUser</code> can now sign in to <code>@clientIdShown</code></strong>
+                with <code>@string.Join(" ", Model.MappedClaims)</code>. Claims are written into tokens
+                when they are issued, so sign out and back in (Step 4) to see them.
+            </div>
+        }
+        else
+        {
+            <div class="note bad">
+                <strong>@(Model.Mapping.StatusCode == 0 ? "Not sent" : Model.Mapping.StatusCode.ToString()) — @(Model.Mapping.Code ?? "error")</strong><br />
+                @Model.Mapping.Message
+            </div>
+        }
+    }
+
     @if (Model.AppRequiresArkClaims)
     {
         <div class="note warn">
@@ -627,45 +796,82 @@ else if (!Model.SupportsDynamicRegistration)
     }
 </div>
 
-<h2 id="step-4">Step 4 — Point this app at the new client <span class="pill">config</span></h2>
+<h2 id="step-4">Step 4 — Point this app at the client <span class="pill">config</span></h2>
 <div class="card">
-    <p style="margin-top:0">
-        Message 6. This app is signing in as <code>@Model.AppClientId</code> right now. The
-        authority stays the same; only the client changes.
-    </p>
-    <ol class="steps">
-        <li>
-            <strong>Sign out first, while the app still runs as the old client.</strong>
-            The session cookie is not tied to a client id, so after the switch it would open
-            <code>/home/secure</code> without a new sign-in and you would see nothing happen.
-            Signing out now also ends the IdP session cleanly, with an ID token the IdP recognises.
-            @if (signedIn)
+    @if (commands.Count == 0)
+    {
+        <p style="margin-top:0">
+            Message 6. This app already signs in as <code>@Model.AppClientId</code>, which is the client
+            registered above, and as the same kind of client
+            (<strong>@(Model.AppIsConfidential ? "confidential" : "public")</strong>).
+        </p>
+        <div class="note ok">
+            <strong>Nothing to configure and nothing to restart.</strong> The OpenID Connect handler
+            was configured with this client id at start-up, and the IdP now knows it.
+        </div>
+        <p>
+            If you are already signed in, sign out once: the session cookie was written before the
+            mapping in Step 3, so it does not carry the claims granted there.
+        </p>
+        @if (signedIn)
+        {
+            <form method="post" action="/account/logout">
+                @Html.AntiForgeryToken()
+                <button class="btn ghost" type="submit">Sign out @signedInAs</button>
+            </form>
+        }
+        else
+        {
+            <span class="pill ok">You are signed out</span>
+        }
+    }
+    else
+    {
+        <p style="margin-top:0">
+            Message 6. This app is signing in as <code>@Model.AppClientId</code> right now
+            @if (isCurrentApp)
             {
-                <form method="post" action="/account/logout" style="margin-top:8px">
-                    @Html.AntiForgeryToken()
-                    <button class="btn ghost" type="submit">Sign out @signedInAs</button>
-                </form>
+                <text>— the same client id, but registered as a <strong>@(newIsConfidential ? "confidential" : "public")</strong> client while this app is configured as a <strong>@(Model.AppIsConfidential ? "confidential" : "public")</strong> one.</text>
             }
             else
             {
-                <div style="margin-top:6px"><span class="pill ok">You are signed out</span></div>
+                <text>. The authority stays the same; only the client changes.</text>
             }
-        </li>
-        <li>
-            Override the client id with user-secrets, from the <code>Ark.oAuth.Oidc</code> folder.
-            Nothing goes into <code>appsettings.json</code>, so reverting is one command.
-            <pre style="margin-top:8px">@switchCommands</pre>
-        </li>
-        <li>
-            Restart this app. The client id is read once at start-up, when the OpenID Connect
-            handler is configured — changing it while the app runs has no effect.
-        </li>
-    </ol>
-    <div class="note">
-        This is the same configuration a brand-new application would carry: an
-        <code>Authority</code> of <code>@Model.Authority</code> and the new
-        <code>ClientId</code>. Endpoints and signing keys are discovered, so nothing else changes.
-    </div>
+        </p>
+        <ol class="steps">
+            <li>
+                <strong>Sign out first, while the app still runs as the old client.</strong>
+                The session cookie is not tied to a client id, so after the switch it would open
+                <code>/home/secure</code> without a new sign-in and you would see nothing happen.
+                Signing out now also ends the IdP session cleanly, with an ID token the IdP recognises.
+                @if (signedIn)
+                {
+                    <form method="post" action="/account/logout" style="margin-top:8px">
+                        @Html.AntiForgeryToken()
+                        <button class="btn ghost" type="submit">Sign out @signedInAs</button>
+                    </form>
+                }
+                else
+                {
+                    <div style="margin-top:6px"><span class="pill ok">You are signed out</span></div>
+                }
+            </li>
+            <li>
+                Change the configuration with user-secrets, from the <code>Ark.oAuth.Oidc</code> folder.
+                Nothing goes into <code>appsettings.json</code>, so reverting is one command.
+                <pre style="margin-top:8px">@switchCommands</pre>
+            </li>
+            <li>
+                Restart this app. The client is read once at start-up, when the OpenID Connect
+                handler is configured — changing it while the app runs has no effect.
+            </li>
+        </ol>
+        <div class="note">
+            This is the same configuration a brand-new application would carry: an
+            <code>Authority</code> of <code>@Model.Authority</code> and the
+            <code>ClientId</code>. Endpoints and signing keys are discovered, so nothing else changes.
+        </div>
+    }
 </div>
 
 <h2 id="step-5">Step 5 — Open the protected page <span class="pill">RFC 6749 §4.1 + PKCE</span></h2>
@@ -759,8 +965,9 @@ else if (!Model.SupportsDynamicRegistration)
         The registration access token authenticates these calls, and nothing else does — not the
         client's own access token, not the initial access token that created it.
     </p>
-    <form method="post" action="/flows/register/manage">
+    <form method="post" action="/flows/register/manage" data-carry>
         @Html.AntiForgeryToken()
+        @{ CarryFields(includeTarget: true, includeManage: false); }
         <div class="kv" style="margin-bottom:14px">
             <div>client_id</div>
             <div><input name="clientId" value="@Model.ManageClientId" style="width:100%" /></div>
@@ -770,14 +977,26 @@ else if (!Model.SupportsDynamicRegistration)
         <button class="btn" type="submit" name="action" value="read">Read registration</button>
         <button class="btn ghost" type="submit" name="action" value="delete">Delete registration</button>
     </form>
-    <div class="note">
-        <strong>To put this app back the way it was:</strong> sign out, remove the override and
-        restart, then delete the registration here.
-        <pre style="margin-top:8px">dotnet user-secrets remove "ark_oauth_client:ClientId" --project Ark.Client.Web</pre>
-        Keep that order. Delete the registration first and the app goes on running as a client
-        that no longer exists, so every sign-in fails with <code>invalid_client</code> until the
-        override is removed.
-    </div>
+    @if (isCurrentApp)
+    {
+        <div class="note warn">
+            <strong><code>@clientIdShown</code> is this app's own registration.</strong> Delete it and
+            this app goes on running as a client that no longer exists: every sign-in fails with
+            <code>invalid_client</code> until it is registered again in Step 2. The token is only
+            on this page until it is reloaded; after that, remove the client from the note in Step 2.
+        </div>
+    }
+    else
+    {
+        <div class="note">
+            <strong>To put this app back the way it was:</strong> sign out, remove the override and
+            restart, then delete the registration here.
+            <pre style="margin-top:8px">dotnet user-secrets remove "ark_oauth_client:ClientId" --project Ark.Client.Web</pre>
+            Keep that order. Delete the registration first and the app goes on running as a client
+            that no longer exists, so every sign-in fails with <code>invalid_client</code> until the
+            override is removed.
+        </div>
+    }
 </div>
 
 @if (Model.Management != null)
@@ -838,3 +1057,24 @@ var result = await registration.RegisterAsync(metadata, initial.AccessToken);
   "ClientId": "&lt;result.ClientId&gt;"
 }</pre>
 </div>
+
+<script>
+    // View/Hide for the pasted machine secret, and the hand-off into whichever form is
+    // submitted. It never leaves the page except in this app's own form posts.
+    (function () {
+        var input = document.getElementById("machine-secret");
+        var button = document.getElementById("machine-secret-view");
+        if (!input || !button) return;
+        button.addEventListener("click", function () {
+            var show = input.type === "password";
+            input.type = show ? "text" : "password";
+            button.textContent = show ? "Hide" : "View";
+        });
+        document.querySelectorAll("form[data-carry]").forEach(function (form) {
+            form.addEventListener("submit", function () {
+                var carry = form.querySelector("input.carry-secret");
+                if (carry) carry.value = input.value;
+            });
+        });
+    })();
+</script>
