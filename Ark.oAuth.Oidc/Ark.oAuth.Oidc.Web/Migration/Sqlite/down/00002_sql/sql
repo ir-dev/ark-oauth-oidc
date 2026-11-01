@@ -1,1 +1,0 @@
-﻿DROP TABLE if EXISTS "auth_status"
