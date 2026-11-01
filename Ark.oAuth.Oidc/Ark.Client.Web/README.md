@@ -305,8 +305,11 @@ The machine client's token also drives the IdP's management API, which the rest 
 
 * it checks whether the client already exists, and offers **Remove** when it does — RFC 7592's
   delete needs the registration access token, which is gone once the page is reloaded;
-* Step 3, **Grant access**, writes the user's access mapping, keeping any claims they already have
-  on the client and adding the ones in the form (by default `name email email_verified sample.admin`).
+* Step 3, **Grant access**, calls `POST /api/oauth/v1/provision/user`. An account that exists is
+  left untouched and only mapped; one that does not is created with the IdP's default password and
+  the display name from the form (the user id when blank). The mapping keeps any claims the user
+  already has on the client, always carries `sub name email email_verified`, and adds the ones in
+  the form (by default `name email email_verified sample.admin`).
 
 That works only when `Authority` names the IdP's operator tenant: the management API accepts tokens
 issued to that tenant's `<tenant>_machine` and nothing else.

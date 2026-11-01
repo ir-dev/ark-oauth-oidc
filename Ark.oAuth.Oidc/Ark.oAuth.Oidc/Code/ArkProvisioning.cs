@@ -109,6 +109,41 @@ namespace Ark.oAuth.Oidc
     }
 
     /// <summary>
+    /// What a caller asks for when giving one user access to an application that already exists.
+    /// Only <see cref="client_id"/> and <see cref="user_name"/> are required.
+    /// </summary>
+    public class ArkProvisionUserRequest
+    {
+        /// <summary>Defaults to <c>ark_oauth_server:TenantId</c>.</summary>
+        public string? tenant_id { get; set; }
+        /// <summary>Required. The client's public client_id, not its surrogate id.</summary>
+        public string? client_id { get; set; }
+        /// <summary>Required. An email address, or a plain username.</summary>
+        public string? user_name { get; set; }
+        /// <summary>Optional display name for a user this call has to create; defaults to <see cref="user_name"/>.</summary>
+        public string? user_display_name { get; set; }
+        /// <summary>Claims to add to the mapping, on top of the identity claims every mapping gets.</summary>
+        public List<string>? claims { get; set; }
+        /// <summary>As on <see cref="ArkProvisionRequest.send_activation_email"/>.</summary>
+        public bool send_activation_email { get; set; }
+    }
+
+    /// <summary>What granting access did: whether the account had to be created, and the claims
+    /// the mapping now holds.</summary>
+    public class ArkProvisionUserResult
+    {
+        public string tenant_id { get; set; } = default!;
+        public string client_id { get; set; } = default!;
+        public string client_name { get; set; } = default!;
+        public string user_name { get; set; } = default!;
+        public bool user_created { get; set; }
+        /// <summary>default_password | activation_email | existing_account</summary>
+        public string user_credential { get; set; } = default!;
+        public bool mapping_created { get; set; }
+        public List<string> claims { get; set; } = new();
+    }
+
+    /// <summary>
     /// Raised for a provisioning request that cannot be carried out for a reason the caller can
     /// act on — the client already exists, the tenant does not. Carries a stable
     /// <see cref="Code"/> so the caller can branch on it without matching on prose, and an HTTP
@@ -242,6 +277,93 @@ namespace Ark.oAuth.Oidc
                 backchannel_logout_session_required = true
             });
 
+            var claims = Clean(req.claims);
+            if (claims.Count == 0) claims = DefaultClaims.ToList();
+            var grant = await GrantAsync(tenant.tenant_id, client, userName, req.user_display_name, claims, req.send_activation_email);
+
+            _da.Log("provision", $"{tenant.tenant_id}/{client.client_id}", "client and user provisioned",
+                $"client: {client.client_id}, user: {userName}, user_created: {grant.user_created}");
+
+            return new ArkProvisionResult
+            {
+                tenant_id = tenant.tenant_id,
+                client_id = client.client_id,
+                client_name = client.client_name ?? clientName,
+                client_created = true,
+                user_name = userName,
+                user_created = grant.user_created,
+                user_credential = grant.user_credential,
+                mapping_created = grant.mapping_created,
+                claims = grant.claims,
+                redirect_uris = client.EffectiveRedirectUris,
+                issuer = ep.Issuer,
+                discovery = ep.Discovery,
+                setup_url = $"{ep.Issuer}/oauth2/integrate/{client.client_id}"
+            };
+        }
+
+        /// <summary>
+        /// Gives one user access to an application that already exists — the half of
+        /// <see cref="ProvisionAsync"/> that is still owed every time a person is added to an app.
+        ///
+        /// An existing account is left exactly as it is: not its name, not its password, not its
+        /// activation state. Only the mapping is written. Changing someone's password because they
+        /// were given a second application would lock them out of the first.
+        ///
+        /// A new account gets the configured default password (or an activation link, with
+        /// <c>send_activation_email</c>) and the display name, falling back to the username.
+        ///
+        /// The mapping always carries the identity claims, plus whatever is asked for, plus
+        /// whatever it already held — saving a mapping replaces its claims, so granting a role must
+        /// not take <c>name</c> and <c>email</c> away.
+        /// </summary>
+        public async Task<ArkProvisionUserResult> ProvisionUserAsync(ArkProvisionUserRequest req)
+        {
+            if (req == null) throw new ArkProvisionException("invalid_request", "a request body is required.");
+
+            var clientId = (req.client_id ?? "").Trim();
+            var userName = (req.user_name ?? "").ToLower().Trim();
+            if (string.IsNullOrWhiteSpace(clientId))
+                throw new ArkProvisionException("invalid_request", "client_id is required.");
+            if (string.IsNullOrWhiteSpace(userName))
+                throw new ArkProvisionException("invalid_request", "user_name is required.");
+            // checked here rather than left to UpsertUser, which would refuse only after an
+            // existing-user lookup and report it as a server fault
+            if (!DataAccess.IsValidLoginId(userName))
+                throw new ArkProvisionException("invalid_request",
+                    $"'{userName}' is not a valid username - use an email address, or 2-64 characters of letters, digits, dot, dash or underscore.");
+
+            var tenantId = string.IsNullOrWhiteSpace(req.tenant_id)
+                ? _util.ServerConfig.TenantId
+                : req.tenant_id!.Trim();
+            var tenant = await _da.GetTenant(tenantId)
+                ?? throw new ArkProvisionException("unknown_tenant",
+                    $"no tenant '{tenantId}' exists on this server.", 404);
+            var client = await _da.GetClient(tenant.tenant_id, clientId)
+                ?? throw new ArkProvisionException("unknown_client",
+                    $"no client '{clientId}' is registered in tenant '{tenant.tenant_id}' - register it first, or use v1/provision/client to do both.",
+                    404);
+
+            var claims = DefaultClaims.Concat(Clean(req.claims)).ToList();
+            var grant = await GrantAsync(tenant.tenant_id, client, userName, req.user_display_name, claims, req.send_activation_email);
+
+            _da.Log("provision_user", $"{tenant.tenant_id}/{client.client_id}", "user granted access",
+                $"client: {client.client_id}, user: {userName}, user_created: {grant.user_created}, claims: {string.Join(" ", grant.claims)}");
+
+            grant.tenant_id = tenant.tenant_id;
+            grant.client_id = client.client_id;
+            grant.client_name = client.client_name ?? client.display ?? client.client_id;
+            grant.user_name = userName;
+            return grant;
+        }
+
+        /// <summary>
+        /// Creates the account if there is none, then writes the user-client mapping with
+        /// <paramref name="claims"/> added to any the mapping already held.
+        /// </summary>
+        async Task<ArkProvisionUserResult> GrantAsync(string tenantId, ArkClient client, string userName,
+            string? displayName, List<string> claims, bool sendActivationEmail)
+        {
             // The account is looked up before the upsert so the response can say whether this call
             // created it — which decides what the caller has to tell the person about their password.
             var existingUser = await _da.GetUser(userName);
@@ -252,51 +374,43 @@ namespace Ark.oAuth.Oidc
                 user = await _da.UpsertUser(new ArkUser
                 {
                     email = userName,
-                    name = string.IsNullOrWhiteSpace(req.user_display_name) ? userName : req.user_display_name!.Trim(),
+                    name = string.IsNullOrWhiteSpace(displayName) ? userName : displayName!.Trim(),
                     type = "user",
                     is_active = true,
                     hash_pw = _util.HashPasswordPBKDF2(_util.ServerConfig.DefaultPw)
-                }, sendActivationEmail: req.send_activation_email);
+                }, sendActivationEmail: sendActivationEmail);
             }
-
-            var claims = Clean(req.claims);
-            if (claims.Count == 0) claims = DefaultClaims.ToList();
-            foreach (var key in claims)
-                if (await _da.GetClaim(key) == null)
-                    await _da.UpsertClaim(new ArkClaim { key = key, display = key });
 
             // The mapping stores the client's surrogate id, not its client_id string - that is
             // what ValidateUserCreds joins on, and getting it wrong is invisible until sign-in.
-            var mappings = await _da.GetUsersClientClaims(userName, tenant.tenant_id);
-            var mappingExisted = mappings.Any(m => string.Equals(m.client_id, client.id, StringComparison.OrdinalIgnoreCase));
+            var mappings = await _da.GetUsersClientClaims(userName, tenantId);
+            var existingMapping = mappings.FirstOrDefault(m => string.Equals(m.client_id, client.id, StringComparison.OrdinalIgnoreCase));
+            var merged = (existingMapping?.claims ?? new List<string>())
+                .Concat(claims)
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            foreach (var key in merged)
+                if (await _da.GetClaim(key) == null)
+                    await _da.UpsertClaim(new ArkClaim { key = key, display = key });
+
             await _da.UpsertUsersClientClaims(new ArkUserClientClaim
             {
                 email = userName,
-                tenant_id = tenant.tenant_id,
+                tenant_id = tenantId,
                 client_id = client.id,
-                claims = claims
+                claims = merged
             });
 
-            _da.Log("provision", $"{tenant.tenant_id}/{client.client_id}", "client and user provisioned",
-                $"client: {client.client_id}, user: {userName}, user_created: {userCreated}");
-
-            return new ArkProvisionResult
+            return new ArkProvisionUserResult
             {
-                tenant_id = tenant.tenant_id,
-                client_id = client.client_id,
-                client_name = client.client_name ?? clientName,
-                client_created = true,
-                user_name = userName,
                 user_created = userCreated,
                 user_credential = !userCreated
                     ? "existing_account"
                     : ((user?.reset_mode ?? false) ? "activation_email" : "default_password"),
-                mapping_created = !mappingExisted,
-                claims = claims,
-                redirect_uris = client.EffectiveRedirectUris,
-                issuer = ep.Issuer,
-                discovery = ep.Discovery,
-                setup_url = $"{ep.Issuer}/oauth2/integrate/{client.client_id}"
+                mapping_created = existingMapping == null,
+                claims = merged
             };
         }
 

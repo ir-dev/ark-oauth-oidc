@@ -125,6 +125,7 @@ plain PKCE, SQL Server.
 | Method + route | Body | Result |
 |---|---|---|
 | `POST /v1/provision/client` | `ArkProvisionRequest` | 200 `{error:false, code:"provisioned", data: ArkProvisionResult}`; 409 `{error:true, code:"client_exists"}` (nothing written) |
+| `POST /v1/provision/user` | `ArkProvisionUserRequest` | 200 `{error:false, code:"provisioned", data: ArkProvisionUserResult}`; 404 `unknown_client` / `unknown_tenant`; 400 `invalid_request` |
 | `POST /v1/activation/client` | `ArkActivationRequest` | client `is_active` on/off; deactivation revokes its refresh tokens |
 | `POST /v1/activation/user` | `ArkActivationRequest` | user `is_active` on/off; deactivation revokes sessions + refresh tokens |
 
@@ -138,6 +139,16 @@ offline_access), `application_type` (web|spa|native|service, default web), `toke
 **`ArkProvisionResult`**: `tenant_id`, `client_id`, `client_name`, `client_created`, `user_name`,
 `user_created`, `user_credential` (`default_password`|`activation_email`|`existing_account`),
 `mapping_created`, `claims`, `redirect_uris`, `issuer`, `discovery`, `setup_url`.
+
+**`ArkProvisionUserRequest`**: `client_id` (**required**, the public client_id of an existing client),
+`user_name` (**required**), `tenant_id` (default `TenantId`), `user_display_name` (new accounts only;
+default `user_name`), `claims` (added to `sub name email email_verified`, which are always mapped),
+`send_activation_email` (default false). An existing account is never modified — only its mapping is
+written, keeping the claims it already held. A new account gets `DefaultPw`.
+
+**`ArkProvisionUserResult`**: `tenant_id`, `client_id`, `client_name`, `user_name`, `user_created`,
+`user_credential` (`default_password`|`activation_email`|`existing_account`), `mapping_created`,
+`claims` (what the mapping now holds).
 
 **`ArkActivationRequest`**: `tenant_id`, `client_id`, `user_name`, `is_active`, `reason`.
 
