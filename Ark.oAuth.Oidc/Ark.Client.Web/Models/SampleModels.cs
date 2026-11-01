@@ -91,6 +91,15 @@ namespace Ark.Client.Web.Models
         public string MachineClientId { get; set; } = "";
         public bool MachineSecretConfigured { get; set; }
 
+        // What the walkthrough needs to say "change this, then sign in": where the console is,
+        // and the client this app is signing in with right now.
+        public string AdminConsoleUrl { get; set; } = "";
+        public string Origin { get; set; } = "";
+        public string AppClientId { get; set; } = "";
+        public string AppRedirectUri { get; set; } = "";
+        public bool AppIsConfidential { get; set; }
+        public bool AppRequiresArkClaims { get; set; }
+
         // the form, echoed back so a failed submission is not retyped
         public string ClientName { get; set; } = "My new client";
         public string RedirectUris { get; set; } = "";

@@ -131,14 +131,7 @@ namespace Ark.Client.Web.Controllers
         [HttpGet("register")]
         public async Task<IActionResult> Register()
         {
-            var model = await BuildRegisterModelAsync();
-
-            // Prefill with something that would actually work, so the first submission succeeds.
-            var origin = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
-            model.RedirectUris = $"{origin}/signin-oidc";
-            model.PostLogoutRedirectUris = $"{origin}/signout-callback-oidc";
-
-            return View(model);
+            return View(await BuildRegisterModelAsync());
         }
 
         /// <summary>
@@ -271,8 +264,19 @@ namespace Ark.Client.Web.Controllers
             {
                 Authority = authority,
                 MachineClientId = _appConfig["sample:Machine:ClientId"] ?? $"{TenantId(authority)}_machine",
-                MachineSecretConfigured = !string.IsNullOrWhiteSpace(MachineSecret())
+                MachineSecretConfigured = !string.IsNullOrWhiteSpace(MachineSecret()),
+                AdminConsoleUrl = AdminConsoleUrl(authority),
+                Origin = $"{Request.Scheme}://{Request.Host}{Request.PathBase}",
+                AppClientId = _config.ClientId,
+                AppIsConfidential = !string.IsNullOrWhiteSpace(_config.ClientSecret),
+                AppRequiresArkClaims = _config.AccountSwitch?.RequireArkClaims == true
             };
+
+            // This app's own callbacks. They prefill the form, so the client registered here is one
+            // this app can sign in with once its ClientId points at it.
+            model.AppRedirectUri = $"{model.Origin}{CallbackPath(_config.CallbackPath, "/signin-oidc")}";
+            model.RedirectUris = model.AppRedirectUri;
+            model.PostLogoutRedirectUris = $"{model.Origin}{CallbackPath(_config.SignedOutCallbackPath, "/signout-callback-oidc")}";
 
             try
             {
@@ -301,6 +305,9 @@ namespace Ark.Client.Web.Controllers
             var slash = trimmed.LastIndexOf('/');
             return slash > 0 ? $"{trimmed[..slash]}/{TenantId(authority)}/admin" : trimmed + "/admin";
         }
+
+        private static string CallbackPath(string? configured, string fallback) =>
+            string.IsNullOrWhiteSpace(configured) ? fallback : "/" + configured.TrimStart('/');
 
         private static JsonArray ToJsonArray(string? spaceOrNewlineSeparated)
         {
