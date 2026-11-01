@@ -437,3 +437,4 @@ Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/appsettings.Development.json
 # ---------------------------------------------------------------------------
 .run-logs/
 ark_oauth_client_py/uv.lock
+Migration/
