@@ -1,0 +1,42 @@
+# Pages: publish site/ (the project home page) to https://ir-dev.github.io/ark-oauth-oidc/
+#
+# The page is static HTML, CSS and a little JS. No build step, no Jekyll.
+#
+# ONE-TIME SETUP
+#   GitHub: Settings -> Pages -> Build and deployment -> Source = "GitHub Actions".
+#   (The run fails at configure-pages until this is set; GITHUB_TOKEN cannot enable Pages itself.)
+#
+# GitHub Pages serves files only. It cannot run the identity provider, whatever the database:
+# see site/README.md.
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v5
