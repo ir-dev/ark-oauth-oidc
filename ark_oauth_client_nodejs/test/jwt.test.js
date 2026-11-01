@@ -145,3 +145,15 @@ test('EC and PSS signatures verify, so the same client works against other provi
   const psToken = signJwt({ exp: now() + 60 }, { key: rsa.privateKey, kid: 'ps1', alg: 'PS256' });
   assert.ok(verifySignature(decodeJwt(psToken), { ...rsa.jwk, alg: undefined }));
 });
+
+test('a time claim that is not a number is refused, not silently skipped', () => {
+  const now = Math.floor(Date.now() / 1000);
+  assert.throws(() => validateClaims({ exp: now + 60, nbf: 'later' }), /nbf/);
+  assert.throws(() => validateClaims({ exp: now + 60, iat: 'yesterday' }), /iat/);
+});
+
+test('a segment that decodes to null or an array is a token error, not a TypeError', () => {
+  const seg = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  assert.throws(() => decodeJwt(`${seg(null)}.${seg({})}.x`), ArkTokenError);
+  assert.throws(() => decodeJwt(`${seg({ alg: 'RS256' })}.${seg([1])}.x`), ArkTokenError);
+});

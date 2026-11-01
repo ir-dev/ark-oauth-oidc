@@ -19,8 +19,18 @@
  *   app.get('/billing', auth.requireClaims('billing.admin'), handler);
  */
 
+export { VERSION } from './version.js';
 export { ArkOAuthClient, createArkClient } from './client.js';
 export { arkExpress, arkBearer } from './express.js';
+export { ArkAuthConfig } from './app-config.js';
+export {
+  ArkAccessDeniedReasons,
+  ArkChallengeProperties,
+  ACCOUNT_SWITCH_DEFAULTS,
+  normalizeAccountSwitch,
+  localOrDefault
+} from './access.js';
+export { renderAccessDeniedPage } from './denied-page.js';
 export { TokenSet } from './tokens.js';
 export { MetadataResolver, discoveryUrls } from './discovery.js';
 export { JwksCache } from './jwks.js';

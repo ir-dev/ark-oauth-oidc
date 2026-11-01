@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
+using System.Reflection;
 
 namespace Ark.oAuth.Oidc.Host.Controllers
 {
@@ -32,7 +33,27 @@ namespace Ark.oAuth.Oidc.Host.Controllers
             ViewBag.Jwks = endpoints.Jwks;
             ViewBag.HostName = ser.EmailConfig?.host_company_display ?? ser.EmailConfig?.host_company_name ?? "Identity Provider";
             ViewBag.AuthError = Request.Query["auth_error"].ToString();
+
+            // The landing page states what this deployment actually has switched on, read from the
+            // same options the discovery document is built from, so the two cannot disagree.
+            ViewBag.Endpoints = endpoints;
+            ViewBag.Oidc = ser.Oidc;
+            ViewBag.Provider = string.IsNullOrWhiteSpace(ser.Provider) ? "sqlite" : ser.Provider;
+            ViewBag.PackageVersion = PackageVersion;
             return View();
+        }
+
+        /// <summary>The Ark.oAuth.Oidc package version serving this host, without Source Link's "+commit".</summary>
+        private static readonly string PackageVersion = ReadPackageVersion();
+
+        private static string ReadPackageVersion()
+        {
+            var assembly = typeof(ArkOidcEndpoints).Assembly;
+            var informational = assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            if (string.IsNullOrWhiteSpace(informational)) return assembly.GetName().Version?.ToString() ?? "";
+            var plus = informational.IndexOf('+');
+            return plus < 0 ? informational : informational[..plus];
         }
 
         /// <summary>Starts an authorization request; the OIDC handler returns here signed in.</summary>

@@ -489,3 +489,64 @@ describe('setup probe', () => {
     assert.match(report.problems[0], /discovery document could not be read/);
   });
 });
+
+describe('2.1.1 fixes', () => {
+  test('a tenant that requires PAR gets PAR without being told twice', async () => {
+    idp.requirePar = true;
+    try {
+      const client = confidentialClient(); // usePar left at its default
+      const { url } = await client.createAuthorizationUrl();
+      const query = new URL(url).searchParams;
+      assert.ok(query.get('request_uri'), 'the browser carries only a request_uri');
+      assert.equal(query.get('code_challenge'), null);
+    } finally {
+      idp.requirePar = false;
+    }
+  });
+
+  test('extra authorization parameters cannot replace state, PKCE or the redirect URI', async () => {
+    const client = publicClient({ extraAuthorizationParams: { state: 'mine', code_challenge: 'mine', resource: 'https://api.example.com' } });
+    const transaction = await client.createAuthorizationUrl({ extra: { redirect_uri: 'https://evil.example.com/cb' } });
+    const query = new URL(transaction.url).searchParams;
+    assert.equal(query.get('state'), transaction.state);
+    assert.notEqual(query.get('code_challenge'), 'mine');
+    assert.equal(query.get('redirect_uri'), CALLBACK);
+    assert.equal(query.get('resource'), 'https://api.example.com', 'a genuine extra still goes along');
+  });
+
+  test('a wrong secret is refused by the provider, not served the cached token', async () => {
+    const client = confidentialClient();
+    const good = await client.clientCredentials();
+    assert.ok(good.accessToken);
+    await assert.rejects(
+      () => client.clientCredentials({ clientSecret: 'not-the-secret' }),
+      (error) => error instanceof ArkOAuthError && error.error === 'invalid_client'
+    );
+    assert.equal((await client.clientCredentials()).accessToken, good.accessToken, 'the right secret still hits the cache');
+  });
+
+  test('the device poll does not pile listeners onto the caller\'s signal', async () => {
+    const client = confidentialClient();
+    const controller = new AbortController();
+    let added = 0;
+    let removed = 0;
+    const { addEventListener, removeEventListener } = controller.signal;
+    controller.signal.addEventListener = (...args) => (added++, addEventListener.apply(controller.signal, args));
+    controller.signal.removeEventListener = (...args) => (removed++, removeEventListener.apply(controller.signal, args));
+
+    // The user never approves: the poll waits out its deadline through authorization_pending.
+    const authorization = await client.deviceAuthorization({ scopes: ['openid'] });
+    const pending = client.pollDeviceToken({ ...authorization, interval: 0.01, expires_in: 0.2 }, { signal: controller.signal });
+    await assert.rejects(pending, (error) => error instanceof ArkOAuthError && error.error === 'expired_token');
+    assert.ok(added >= 2, 'it polled more than once');
+    assert.equal(added, removed, 'every listener was taken off again');
+  });
+
+  test('checkSetup reports the redirect URI this app will send, and where to register it', async () => {
+    const report = await publicClient({ redirectUri: undefined }).checkSetup({ origin: 'https://app.example.com', callbackPath: '/auth/cb' });
+    assert.equal(report.redirectUri, 'https://app.example.com/auth/cb');
+    assert.equal(report.tenantId, 'test_idp');
+    assert.equal(report.adminConsoleUrl, `${idp.baseUrl}/test_idp/admin`);
+    assert.equal(report.supportsClientCredentials, true);
+  });
+});

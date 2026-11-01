@@ -21,6 +21,8 @@ npm install ark-oauth-client
 - [What it implements](#what-it-implements)
 - [Configuration](#configuration)
 - [The middleware](#the-middleware)
+- [Account switching on a shared browser](#account-switching-on-a-shared-browser)
+- [Loading appsettings.json](#loading-appsettingsjson)
 - [Protecting an API](#protecting-an-api)
 - [Sessions](#sessions)
 - [Using the client directly](#using-the-client-directly)
@@ -135,13 +137,14 @@ a plain-http authority, `private_key_jwt` with no key, a `clientSecret` alongsid
 `@fastify/middie`, with `koa-connect`, and with a bare `http.createServer` — the package depends on
 none of them.
 
-It claims three paths and passes everything else through:
+It claims these paths and passes everything else through:
 
 | Path | Purpose |
 |---|---|
 | `loginPath` (`/login`) | Starts a sign-in. `?returnTo=/somewhere` comes back to that page — same-origin paths only |
-| `callbackPath` (path of `redirectUri`, else `/signin-oidc`) | Completes it |
+| `callbackPath` (path of `redirectUri`, else `/signin-oidc`) | Completes it. **Never add a route of your own here** |
 | `logoutPath` (`/logout`) | Revokes the refresh token, destroys the session, clears the cookie, then redirects to the provider's `end_session_endpoint` |
+| `/ark/no-access`, `/ark/switch-user`, `/ark/sign-out` | The access-denied page and its two POSTs — see [account switching](#account-switching-on-a-shared-browser) |
 
 ### `req.ark`
 
@@ -156,7 +159,13 @@ It claims three paths and passes everything else through:
 | `await accessToken()` | The access token, renewed first if it is close to expiring |
 | `await authorize(headers?)` | Returns headers with `Authorization: Bearer …` set, for a downstream call |
 | `hasClaim(…)`, `hasScope(…)` | |
-| `await login({ returnTo })`, `await logout()` | Drive the flows from your own routes |
+| `await login({ returnTo, prompt, loginHint })`, `await logout({ returnTo })` | Drive the flows from your own routes |
+| `await switchUser({ returnUrl })` | Drop this session and challenge with `prompt=login` |
+| `await signOutEverywhere()`, `await signOutLocally()` | Provider session too, or this application only |
+| `deniedAccount()` | Who the last denial was about, for an access-denied page of your own |
+
+Read the access token through `accessToken()` on every call rather than keeping it: it is renewed
+underneath you, and the refresh token it was renewed with is retired the moment that happens.
 
 ### Guards
 
@@ -170,7 +179,8 @@ app.get('/admin',    auth.requireAuth({ claims: ['tenant.root'], scopes: ['admin
 An unauthenticated **browser** request is redirected to the login page with a `returnTo`. Anything
 else — `fetch`, XHR, a mobile client — gets `401` with an RFC 6750 challenge, because redirecting a
 background request to a sign-in page produces a CORS error rather than anything the caller can act
-on. A signed-in user missing a claim gets `403`, never a redirect loop.
+on. A signed-in user missing a claim gets `403`, never a redirect loop — for a browser, the
+access-denied page with a way out; for anything else, an RFC 6750 `insufficient_scope` body.
 
 ### Middleware options
 
@@ -182,12 +192,98 @@ on. A signed-in user missing a claim gets `403`, never a redirect loop.
 | `cookieName` | `ark_session` | |
 | `cookie` | `{ httpOnly: true, secure: true, sameSite: 'Lax', path: '/' }` | `secure: false` only for local http |
 | `sessionTtlSeconds` | `28800` | Matches the server's default session lifetime |
-| `refreshLeewaySeconds` | `60` | Renew the access token this long before it expires |
+| `refreshLeewaySeconds` | `120` | Renew the access token this long before it expires — the .NET and Python window |
 | `fetchUserInfo` | `false` | Also call `/userinfo` at sign-in and merge it into `req.ark.user` |
 | `defaultReturnTo` | `/` | |
 | `errorPath` | `null` | Where a failed sign-in lands, with `?auth_error=…`. Otherwise a plain 400 |
 | `onError` | `null` | `(error, req, res, next)` — full control instead of `errorPath` |
-| `trustProxy` | `true` | Honour `X-Forwarded-Proto` / `X-Forwarded-Host` when deriving this app's own origin |
+| `trustProxy` | `true` | Honour `X-Forwarded-Proto` + `X-Forwarded-Host` (both, or neither) when deriving this app's own origin. Turn it off when nothing in front of the app sets them |
+| `accountSwitch` | all off | See [below](#account-switching-on-a-shared-browser) |
+| `events` | `{}` | `onEvaluateAccess`, `onAccessDenied` |
+
+`responseMode: 'form_post'` is a cross-site POST, which a browser sends without a `SameSite=Lax`
+cookie; the middleware refuses to start with that combination rather than fail every sign-in. Use
+`cookie: { sameSite: 'None', secure: true }` with it, or stay on the default `query`.
+
+---
+
+## Account switching on a shared browser
+
+Single sign-on is browser-wide. Once one person has signed in anywhere, the provider's session
+answers the authorize request of every other client in that browser: the next person opens this
+application, is silently signed in **as the first person**, is told they have no access — and has no
+way out, because the sign-in link returns to the same session and gives the same answer.
+
+The fix is the same in all three Ark clients and, as there, **off by default**:
+
+```js
+const auth = arkExpress({
+  authority, clientId, secret,
+  accountSwitch: {
+    requireArkClaims: true,          // refuse, at the callback, an account with no ark_claims here
+    appDisplayName: 'Billing Portal',
+    supportEmail: 'help@example.com'
+  },
+  events: {
+    // Optional: your own entitlement rule, replacing the configured one.
+    onEvaluateAccess: ({ arkClaims, allowedByConfiguration }) => allowedByConfiguration || arkClaims.includes('tenant.root'),
+    // Optional: log it, or draw your own page (respond, or set denied.handled = true).
+    onAccessDenied: (denied, req, res) => console.warn('access denied', denied.email, denied.reason)
+  }
+});
+```
+
+* **`requireArkClaims`** moves the entitlement check to the callback. An account the provider issued
+  no `ark_claims` for is refused *before* the session is written — the browser never holds a session
+  for somebody who cannot use the application — and its refresh token is revoked. `requiredClaims`
+  narrows it to particular values. **Set `requiredClaims` in practice:** the Ark server issues the
+  whole access-mapping list as `ark_claims`, identity names (`sub`, `email`, …) included, so a
+  mapping with no authorization claim still satisfies "any `ark_claims`".
+* **`/ark/no-access`** names the account that is signed in and offers **Sign in as a different user**,
+  which challenges with `prompt=login` so the provider draws its sign-in form instead of answering
+  from its session. It is a self-contained page — no script, a strict CSP, `ark-oauth-client <version>`
+  in the footer. A guarded route a signed-in browser lacks a claim for lands here too.
+* **`/ark/switch-user`** and **`/ark/sign-out`** accept only a same-origin `POST`. The return URL is
+  kept to same-origin paths. `endProviderSessionOnSwitch: true` makes switching a full provider
+  sign-out, for a kiosk.
+
+| `accountSwitch` option | Default | |
+|---|---|---|
+| `enabled` | `true` | Serve the endpoints and send a browser's 403 to the page |
+| `requireArkClaims` | `false` | The check that makes the case recoverable |
+| `requiredClaims` | `[]` | At least one of these (case-insensitive); empty means any |
+| `accessDeniedPath`, `switchUserPath`, `signOutPath` | `/ark/…` | Local paths only |
+| `serveDefaultPage` | `true` | Off when `accessDeniedPath` is your own route; read `req.ark.deniedAccount()` there |
+| `appDisplayName` | client id | |
+| `showSignedInAccount`, `allowFullSignOut` | `true` | |
+| `endProviderSessionOnSwitch` | `false` | |
+| `prompt` | `login` | |
+| `homePath` | `/` | Fallback for a missing or off-site return URL |
+| `supportUrl`, `supportEmail` | — | Shown as "Need access?" on the page |
+
+The account named on the page travels from the callback in a five-minute, `HttpOnly` cookie sealed
+with AES-256-GCM under a key derived from `secret` — the Python client's format, byte for byte.
+
+---
+
+## Loading appsettings.json
+
+An Ark application usually already has an `ark_oauth_client` section. `ArkAuthConfig.fromMapping`
+reads it unchanged — C# (`ClientId`), camel or snake spellings, the whole file or just the section:
+
+```js
+import { readFileSync } from 'node:fs';
+import { arkExpress, ArkAuthConfig } from 'ark-oauth-client';
+
+const settings = JSON.parse(readFileSync('appsettings.json', 'utf8'));
+app.use(arkExpress({ ...ArkAuthConfig.fromMapping(settings), secret: process.env.ARK_SESSION_SECRET }));
+```
+
+`Authority` (or `AuthServerUrl` + `TenantId`), `ClientId`, `ClientSecret`, `Scopes`, `CallbackPath`,
+`LoginPath`, `LogoutPath`, `AuthErrorPath`, `CookieName`, `RoleClaimType`, `RequireHttpsMetadata`,
+`ExpireMins`, `PostLogoutRedirectUri` and `AccountSwitch` are read. The v1 keys (`RsaPublic`,
+`Issuer`, `Tenants`, `RedirectUri`) are ignored on purpose: the redirect URI is derived from
+`CallbackPath`, as the .NET handler does.
 
 ---
 
@@ -308,6 +404,9 @@ await client.registerClient(metadata, initialAccessToken);
 ```js
 const report = await client.checkSetup();
 if (report.problems.length) console.warn(report.problems);
+
+// Inside the app: the redirect URI this request would really send, and who is signed in.
+app.get('/setup', async (req, res) => res.json(await auth.checkSetup(req)));
 ```
 
 Pairs local configuration with the provider's live metadata and returns what does not line up:
@@ -379,7 +478,16 @@ browser clients redeeming their own codes.
   fetch — otherwise a stream of forged tokens turns this client into a request amplifier pointed at
   your identity server.
 - **`returnTo` accepts same-origin paths only**, so the login route cannot become an open redirect.
-- **Sign-out revokes the refresh token** before ending the local session.
+- **Sign-out revokes the refresh token** before ending the local session; so do switching accounts
+  and a refused sign-in.
+- **A refresh is shared, and its result reaches every waiting request.** With rotation on, a request
+  left holding the retired refresh token would present it again and revoke the whole family.
+- **Bodies are bounded and parameters are strings.** A callback or account form over 64 KiB is
+  refused; `state` is looked up as an own property only.
+- **Error text never reaches a header unescaped.** A forged token's `kid` cannot inject a header or
+  crash the process through a `WWW-Authenticate` challenge.
+- **Extra authorization parameters cannot replace** `state`, `nonce`, the PKCE challenge or the
+  redirect URI.
 
 ---
 
@@ -389,6 +497,8 @@ browser clients redeeming their own codes.
 |---|---|
 | `redirect_uri does not match a registered value` | The registered value differs by a character — scheme, port, trailing slash. Matching is exact, with one carve-out for loopback ports |
 | Sign-in fails as though the password were wrong | The user has no access mapping to this client |
+| The next person at a shared browser is signed in as the previous one | SSO. Turn on `accountSwitch.requireArkClaims`; the access-denied page offers `prompt=login` |
+| `responseMode 'form_post' needs cookie: { sameSite: 'None' … }` at startup | See [Middleware options](#middleware-options) |
 | `this sign-in could not be matched to a request from this browser` | The login expired (10 minutes), or the process restarted with the in-memory store |
 | `invalid_grant` on the second refresh | A retired refresh token was presented; the family is revoked. Always store what a refresh returns |
 | `the provider … identifies itself as '…'` | `authority` is not the issuer. It is `{BaseUrl}/{TenantId}`, tenant id included |
@@ -400,7 +510,7 @@ browser clients redeeming their own codes.
 ## Development
 
 ```bash
-npm test          # 94 tests, no install required
+npm test          # 135 tests, no install required
 ```
 
 The suite runs against `test/stub-idp.js`, an in-process stand-in for the Ark server that mirrors

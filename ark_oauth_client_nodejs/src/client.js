@@ -4,7 +4,7 @@ import { JwksCache } from './jwks.js';
 import { TokenSet } from './tokens.js';
 import { basicAuthHeader, getJson, postForm, request } from './http.js';
 import { createNonce, createPkcePair, createState } from './pkce.js';
-import { fixedTimeEqual, randomToken } from './crypto.js';
+import { fixedTimeEqual, randomToken, sha256 } from './crypto.js';
 import { signJwt, verifyJwt } from './jwt.js';
 import { ArkCallbackError, ArkConfigError, ArkOAuthError, ArkTokenError } from './errors.js';
 
@@ -94,7 +94,12 @@ export class ArkOAuthClient {
     const wantsIdToken = scopes.includes('openid');
     const nonce = options.nonce ?? (wantsIdToken ? createNonce() : null);
 
+    // Extra parameters go first so they can add to the request but never replace what the flow's
+    // security rests on: an `extra` carrying its own state or code_challenge would detach the
+    // response from the transaction this method returns.
     const params = {
+      ...config.extraAuthorizationParams,
+      ...options.extra,
       response_type: 'code',
       client_id: config.clientId,
       redirect_uri: redirectUri,
@@ -107,9 +112,7 @@ export class ArkOAuthClient {
       ...(options.prompt ?? config.prompt ? { prompt: options.prompt ?? config.prompt } : {}),
       ...(options.loginHint ? { login_hint: options.loginHint } : {}),
       ...(options.maxAge !== undefined && options.maxAge !== null ? { max_age: String(options.maxAge) } : {}),
-      ...(options.acrValues ?? config.acrValues ? { acr_values: options.acrValues ?? config.acrValues } : {}),
-      ...config.extraAuthorizationParams,
-      ...options.extra
+      ...(options.acrValues ?? config.acrValues ? { acr_values: options.acrValues ?? config.acrValues } : {})
     };
 
     const authorizationEndpoint = metadata.authorization_endpoint;
@@ -120,7 +123,7 @@ export class ArkOAuthClient {
     // Pushed authorization requests (RFC 9126): the parameters travel over the authenticated back
     // channel and the browser only carries a one-time reference to them, so nothing in the URL can
     // be logged, tampered with or replayed. Used when asked for, and when the tenant requires it.
-    const usePar = options.usePar ?? config.usePar ?? metadata.require_pushed_authorization_requests === true;
+    const usePar = options.usePar ?? (config.usePar || metadata.require_pushed_authorization_requests === true);
     let url;
     if (usePar) {
       const pushed = await this.pushAuthorizationRequest(params);
@@ -271,7 +274,11 @@ export class ArkOAuthClient {
 
     const id = clientId ?? this.#config.clientId;
     const scopeValue = [...scopes].join(' ');
-    const key = `${this.#config.authority}|${id}|${scopeValue}`;
+    // The credential is part of the key: a caller presenting a wrong secret must be refused by the
+    // provider, not handed the token another caller earned with the right one. Hashed, so the cache
+    // holds no secret.
+    const credential = sha256(String(clientSecret ?? this.#config.clientSecret ?? '')).toString('base64url');
+    const key = `${this.#config.authority}|${id}|${credential}|${scopeValue}`;
 
     const cached = this.#serviceTokens.get(key);
     if (!force && cached && !cached.expired(renewBeforeSeconds)) return cached;
@@ -329,11 +336,15 @@ export class ArkOAuthClient {
       }
 
       await new Promise((resolve) => {
-        const timer = setTimeout(resolve, interval);
-        signal?.addEventListener('abort', () => {
+        const wake = () => {
           clearTimeout(timer);
+          signal?.removeEventListener('abort', wake);
           resolve();
-        }, { once: true });
+        };
+        // One listener per wait, removed again: left attached, a long approval piles up one per
+        // poll on the caller's signal.
+        const timer = setTimeout(wake, interval);
+        signal?.addEventListener('abort', wake, { once: true });
       });
 
       try {
@@ -571,19 +582,28 @@ export class ArkOAuthClient {
    * or a scope the client was never registered for is `invalid_request` on a page the user is
    * looking at. Render this on a health or setup page and the mistake reads as a sentence.
    */
-  async checkSetup({ origin } = {}) {
+  async checkSetup({ origin, callbackPath = '/signin-oidc' } = {}) {
     const config = this.#config;
+    const base = config.authority.slice(0, config.authority.lastIndexOf('/'));
+    const tenantId = config.authority.slice(config.authority.lastIndexOf('/') + 1);
     const report = {
       authority: config.authority,
       clientId: config.clientId,
       isConfidential: config.tokenEndpointAuthMethod !== 'none',
       tokenEndpointAuthMethod: config.tokenEndpointAuthMethod,
       scopes: [...config.scopes],
-      redirectUri: config.redirectUri ?? (origin ? `${origin.replace(/\/+$/, '')}/signin-oidc` : null),
+      redirectUri: config.redirectUri ?? (origin ? `${origin.replace(/\/+$/, '')}${callbackPath}` : null),
       postLogoutRedirectUri: config.postLogoutRedirectUri,
+      origin: origin ?? null,
+      tenantId,
+      // Where the client is registered, and the provider's own page of what it expects from it.
+      adminConsoleUrl: `${base}/${tenantId}/admin`,
+      integrationPageUrl: `${config.authority}/oauth2/integrate/${encodeURIComponent(config.clientId)}`,
       discoveryUrl: `${config.authority}/.well-known/openid-configuration`,
       discoveryOk: false,
       discoveryError: null,
+      supportsClientCredentials: false,
+      supportsDynamicRegistration: false,
       provider: null,
       problems: []
     };
@@ -615,6 +635,8 @@ export class ArkOAuthClient {
       tokenEndpointAuthMethodsSupported: metadata.token_endpoint_auth_methods_supported ?? [],
       requirePushedAuthorizationRequests: metadata.require_pushed_authorization_requests === true
     };
+    report.supportsClientCredentials = report.provider.grantTypesSupported.includes('client_credentials');
+    report.supportsDynamicRegistration = Boolean(metadata.registration_endpoint);
 
     try {
       const keys = await (await this.jwks()).keys({ force: true });

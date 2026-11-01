@@ -320,9 +320,17 @@ export interface ArkSetupReport {
   scopes: string[];
   redirectUri: string | null;
   postLogoutRedirectUri: string | null;
+  origin: string | null;
+  tenantId: string;
+  /** The tenant's admin console, where the client is registered. */
+  adminConsoleUrl: string;
+  /** The provider's own page of what it expects from this client. */
+  integrationPageUrl: string;
   discoveryUrl: string;
   discoveryOk: boolean;
   discoveryError: string | null;
+  supportsClientCredentials: boolean;
+  supportsDynamicRegistration: boolean;
   provider: Record<string, any> | null;
   signingKeys?: Array<{ kid?: string; kty: string; alg: string | null; use: string | null }>;
   /** Empty when local configuration and the provider's metadata agree. */
@@ -388,7 +396,7 @@ export class ArkOAuthClient {
   deleteRegistration(clientId: string, registrationAccessToken: string): Promise<true>;
 
   /** Pairs local configuration with the provider's live metadata and reports what does not line up. */
-  checkSetup(options?: { origin?: string }): Promise<ArkSetupReport>;
+  checkSetup(options?: { origin?: string; callbackPath?: string }): Promise<ArkSetupReport>;
 }
 
 export function createArkClient(options: ArkClientOptions): ArkOAuthClient;
@@ -426,6 +434,111 @@ export function serializeCookie(
 ): string;
 
 // =====================================================================
+// account switching on a shared browser
+// =====================================================================
+
+export const ArkAccessDeniedReasons: Readonly<{ NO_APP_ACCESS: 'no_app_access'; FORBIDDEN: 'forbidden' }>;
+export type ArkAccessDeniedReason = 'no_app_access' | 'forbidden';
+
+/** `accountSwitch` — the same settings as AccountSwitch (.NET) and account_switch (Python). Everything is off or unchanged by default. */
+export interface ArkAccountSwitchOptions {
+  /** Serve the three endpoints, and send an HTML 403 to the page. Default true. */
+  enabled?: boolean;
+  /** Refuse, at the callback, an account the provider issued no ark_claims for. Default false. */
+  requireArkClaims?: boolean;
+  /** Narrow that check to at least one of these values (case-insensitive). */
+  requiredClaims?: string[];
+  /** Default /ark/no-access. */
+  accessDeniedPath?: string;
+  /** Default /ark/switch-user. */
+  switchUserPath?: string;
+  /** Default /ark/sign-out. */
+  signOutPath?: string;
+  /** Draw the built-in page. Turn off when accessDeniedPath is a route of your own. Default true. */
+  serveDefaultPage?: boolean;
+  /** Defaults to the client id. */
+  appDisplayName?: string | null;
+  showSignedInAccount?: boolean;
+  allowFullSignOut?: boolean;
+  /** Switching also ends the provider session — for a kiosk. Default false. */
+  endProviderSessionOnSwitch?: boolean;
+  /** Default 'login'. */
+  prompt?: string;
+  homePath?: string;
+  /** http(s) only. */
+  supportUrl?: string | null;
+  supportEmail?: string | null;
+}
+
+export const ACCOUNT_SWITCH_DEFAULTS: Readonly<Required<ArkAccountSwitchOptions>>;
+export function normalizeAccountSwitch(options?: ArkAccountSwitchOptions): Readonly<Required<ArkAccountSwitchOptions>>;
+
+export interface ArkAccessEvaluationContext {
+  /** ID token claims. */
+  claims: Record<string, any>;
+  arkClaims: string[];
+  /** What the configured rule concluded before your handler ran. */
+  allowedByConfiguration: boolean;
+  tokens: TokenSet | null;
+}
+
+export interface ArkAccessDeniedContext {
+  reason: ArkAccessDeniedReason;
+  subject: string | null;
+  email: string | null;
+  name: string | null;
+  arkClaims: string[];
+  returnUrl: string | null;
+  /** Set true when you have written the response yourself. */
+  handled: boolean;
+}
+
+export interface ArkDeniedAccount {
+  subject: string | null;
+  email: string | null;
+  name: string | null;
+  reason: ArkAccessDeniedReason | null;
+  returnUrl: string | null;
+}
+
+export interface ArkClientEvents {
+  /** Your entitlement rule. Replaces the configured one; read allowedByConfiguration to combine them. */
+  onEvaluateAccess?: (context: ArkAccessEvaluationContext) => boolean | Promise<boolean>;
+  /** Log a denial, or write a response of your own (then set `handled` or just respond). */
+  onAccessDenied?: (context: ArkAccessDeniedContext, req: any, res: any) => void | Promise<void>;
+}
+
+export interface ArkChallengeOptions {
+  returnTo?: string;
+  prompt?: string;
+  loginHint?: string;
+  scopes?: string[];
+  maxAge?: number;
+}
+
+export const ArkChallengeProperties: Readonly<{
+  /** prompt=login: the provider draws its sign-in form instead of answering from its session. */
+  switchUser(returnUrl?: string | null, loginHint?: string | null, prompt?: string): ArkChallengeOptions;
+  selectAccount(returnUrl?: string | null): ArkChallengeOptions;
+}>;
+
+/** A same-origin path, or `fallback`. Guards every return URL against open redirects. */
+export function localOrDefault(url: string | null | undefined, fallback?: string | null): string | null;
+
+export function renderAccessDeniedPage(
+  options: Readonly<Required<ArkAccountSwitchOptions>>,
+  model: { app?: string | null; account?: string | null; returnUrl: string }
+): string;
+
+/** Binds an appsettings.json `ark_oauth_client` section (C#, camel or snake keys) into arkExpress()/ArkOAuthClient options. */
+export const ArkAuthConfig: Readonly<{
+  fromMapping(data: Record<string, any>): Partial<ArkExpressOptions>;
+}>;
+
+/** This package's version, read from its package.json. */
+export const VERSION: string;
+
+// =====================================================================
 // middleware
 // =====================================================================
 
@@ -449,8 +562,17 @@ export interface ArkRequestContext {
   authorize(headers?: Record<string, string>): Promise<Record<string, string>>;
   hasClaim(...wanted: Array<string | string[]>): boolean;
   hasScope(...wanted: Array<string | string[]>): boolean;
-  login(options?: { returnTo?: string; prompt?: string; loginHint?: string; scopes?: string[]; maxAge?: number }): Promise<void>;
-  logout(): Promise<void>;
+  login(options?: ArkChallengeOptions): Promise<void>;
+  /** Revokes the refresh token, ends the local session, then RP-initiated logout at the provider. */
+  logout(options?: { returnTo?: string }): Promise<void>;
+  /** Drops this session and challenges with prompt=login, so somebody else can sign in. */
+  switchUser(options?: { returnUrl?: string; loginHint?: string }): Promise<void>;
+  /** This application's session and the provider's. */
+  signOutEverywhere(options?: { returnUrl?: string }): Promise<void>;
+  /** This application's session only. */
+  signOutLocally(options?: { returnUrl?: string }): Promise<void>;
+  /** The account the last denial was about, for a page of your own; null otherwise. */
+  deniedAccount(): ArkDeniedAccount | null;
 }
 
 /** What arkBearer attaches when a token is presented. */
@@ -484,7 +606,7 @@ export interface ArkExpressOptions extends Partial<ArkClientOptions> {
   cookieName?: string;
   cookie?: { httpOnly?: boolean; secure?: boolean; sameSite?: string; domain?: string; path?: string };
   sessionTtlSeconds?: number;
-  /** Renew the access token this many seconds before it expires. Default 60. */
+  /** Renew the access token this many seconds before it expires. Default 120, as in the .NET and Python clients. */
   refreshLeewaySeconds?: number;
   /** Also call /userinfo at sign-in and merge the result into `req.ark.user`. */
   fetchUserInfo?: boolean;
@@ -493,7 +615,11 @@ export interface ArkExpressOptions extends Partial<ArkClientOptions> {
   /** Where a failed sign-in lands, with ?auth_error=… */
   errorPath?: string | null;
   onError?: (error: Error, req: any, res: any, next: (error?: any) => void) => void;
+  /** Read X-Forwarded-Proto + X-Forwarded-Host (both, or neither). Turn off when no proxy sets them. Default true. */
   trustProxy?: boolean;
+  /** The shared-browser case: entitlement at the callback, the access-denied page, prompt=login switching. */
+  accountSwitch?: ArkAccountSwitchOptions;
+  events?: ArkClientEvents;
 }
 
 export interface ArkExpressMiddleware extends Middleware {
@@ -501,8 +627,15 @@ export interface ArkExpressMiddleware extends Middleware {
   requireAuth(options?: { claims?: string[]; scopes?: string[] }): Middleware;
   requireClaims(...claims: Array<string | string[]>): Middleware;
   requireScopes(...scopes: Array<string | string[]>): Middleware;
+  /** checkSetup() for this request: the redirect URI it would really send, and who is signed in. */
+  checkSetup(req: any): Promise<ArkSetupReport & { isAuthenticated: boolean; signedInAs: string | null; authError: string | null }>;
+  switchUser(req: any, res: any, options?: { returnUrl?: string; loginHint?: string }): Promise<void>;
+  signOutEverywhere(req: any, res: any, options?: { returnUrl?: string }): Promise<void>;
+  signOutLocally(req: any, res: any, options?: { returnUrl?: string }): Promise<void>;
+  deniedAccount(req: any): ArkDeniedAccount | null;
   readonly client: ArkOAuthClient;
   readonly store: SessionStore;
+  readonly accountSwitch: Readonly<Required<ArkAccountSwitchOptions>>;
   readonly loginPath: string;
   readonly callbackPath: string;
   readonly logoutPath: string;

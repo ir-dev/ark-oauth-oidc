@@ -1,7 +1,7 @@
 {
   "name": "ark-oauth-client",
-  "version": "2.1.0",
-  "description": "The OAuth 2.1 / OpenID Connect client for Node.js applications, built for Ark.oAuth.Oidc. Authorization code + PKCE with state, nonce, iss and at_hash checks, JWKS rotation, silent refresh, client credentials, the device grant, PAR, introspection, revocation, dynamic client registration and RP-initiated logout \u2014 plus Express/Connect middleware for interactive sign-in and for protecting an API. No runtime dependencies.",
+  "version": "2.1.1",
+  "description": "The OAuth 2.1 / OpenID Connect client for Node.js applications, built for Ark.oAuth.Oidc. Authorization code + PKCE with state, nonce, iss and at_hash checks, JWKS rotation, silent refresh, client credentials, the device grant, PAR, introspection, revocation, dynamic client registration and RP-initiated logout \u2014 plus Express/Connect middleware for interactive sign-in, account switching on a shared browser, and protecting an API. No runtime dependencies.",
   "keywords": [
     "oauth",
     "oauth2",
@@ -41,8 +41,12 @@
     "src",
     "types",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20.0.0"
   },
@@ -52,7 +56,8 @@
     "example:web": "node examples/web-app.js",
     "example:api": "node examples/api-server.js",
     "example:device": "node examples/device-flow.js",
-    "example:setup": "node examples/setup-check.js"
+    "example:setup": "node examples/setup-check.js",
+    "example:switch": "node examples/account-switch.js"
   },
   "dependencies": {},
   "devDependencies": {

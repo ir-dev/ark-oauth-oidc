@@ -4,263 +4,488 @@
 *@
 @model ArkSetupModel
 @{
-    ViewData["Title"] = "Setup";
+    ViewData["Title"] = "Setup guide";
+    ViewData["Wide"] = true;
+
+    var callbackPath = Model.RedirectUri.Substring(Model.RedirectUri.LastIndexOf('/'));
+    var signedOutPath = Model.PostLogoutRedirectUri.Substring(Model.PostLogoutRedirectUri.LastIndexOf('/'));
+
+    // What can be checked from here. Registration and access mapping live in the provider and
+    // cannot be read without signing in to it — but a completed sign-in proves both.
+    var issuerOk = Model.DiscoveryOk && !Model.IssuerMismatch;
+    var scopesOk = Model.DiscoveryOk && Model.UnsupportedScopes.Count == 0;
+    var step1 = issuerOk ? "ok" : "bad";
+    var step2 = Model.IsAuthenticated ? "ok" : Model.DiscoveryOk && !scopesOk ? "bad" : "";
+    var step3 = Model.IsAuthenticated ? "ok" : "";
+    var step4 = string.IsNullOrEmpty(Model.ClientId) ? "bad" : "ok";
+    var step5 = Model.IsAuthenticated ? "ok" : "";
+
+    var icons = new Dictionary<string, string>
+    {
+        ["check"] = "<path d='m5 12 5 5 9-10'/>",
+        ["x"] = "<path d='M6 6l12 12M18 6 6 18'/>",
+        ["dash"] = "<path d='M7 12h10'/>",
+        ["app"] = "<rect x='3' y='4' width='18' height='16' rx='2'/><path d='M3 9h18M7 6.5h.01M10 6.5h.01'/>",
+        ["lock"] = "<rect x='4' y='11' width='16' height='10' rx='2'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/>",
+        ["user"] = "<circle cx='12' cy='8' r='4'/><path d='M4 21a8 8 0 0 1 16 0'/>",
+        ["badge"] = "<path d='M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z'/><path d='m9 12 2 2 4-4'/>",
+        ["api"] = "<path d='m8 6-6 6 6 6M16 6l6 6-6 6'/>",
+        ["browser"] = "<rect x='2' y='4' width='20' height='16' rx='2'/><path d='M2 9h20M9 14l-2 2 2 2M15 14l2 2-2 2'/>",
+        ["server"] = "<rect x='3' y='4' width='18' height='7' rx='2'/><rect x='3' y='13' width='18' height='7' rx='2'/><path d='M7 7.5h.01M7 16.5h.01'/>",
+        ["plus"] = "<rect x='3' y='3' width='18' height='18' rx='3'/><path d='M12 8v8M8 12h8'/>",
+        ["external"] = "<path d='M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5'/>",
+        ["arrow"] = "<path d='M5 12h14M13 6l6 6-6 6'/>"
+    };
+}
+@functions {
+    static Microsoft.AspNetCore.Html.IHtmlContent Svg(string paths) =>
+        new Microsoft.AspNetCore.Html.HtmlString(
+            $"<svg class=\"sx-i\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">{paths}</svg>");
+}
+@{
+    // A value with a copy button beside it. sample.js draws the icon.
+    void Val(string? value)
+    {
+        <code>@value</code><button class="sx-copy" type="button" data-copy="@value" aria-label="Copy @value"></button>
+    }
+
+    void State(string state, string label)
+    {
+        <span class="sx-state @(state == "" ? "todo" : state)" role="img" aria-label="@label">@Svg(icons[state switch { "ok" => "check", "bad" => "x", "warn" => "x", _ => "dash" }])</span>
+    }
+
+    void Dot(string state, int n)
+    {
+        <span class="sx-dot @state">@if (state == "ok") { @Svg(icons["check"]) } else if (state == "bad") { @Svg(icons["x"]) } else { @n }</span>
+    }
 }
 
-<h1>Registering and using this client</h1>
-<p class="sub">
-    Every value on this page is read live — from local configuration on one side, and from the
-    provider's discovery document on the other. Register the client so the two agree, and sign-in
-    works.
-</p>
-
-@if (!string.IsNullOrEmpty(Model.AuthError))
-{
-    <div class="note bad">
-        <strong>The last sign-in callback failed.</strong><br />
-        <code>@Model.AuthError</code>
-    </div>
-}
-
-@* The provider ships its admin console in the package, at {BaseUrl}/{TenantId}/admin. Every
-   registration step below happens there, so the link sits above them rather than inside one. *@
-<div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-    <div style="flex:1;min-width:240px">
-        <strong>Built-in admin console</strong><br />
-        <span style="color:var(--fg-muted);font-size:13.5px">
-            Clients, users, access mapping and signing keys for tenant
-            <code>@Model.TenantId</code> — sign in as <code>admin</code> / <code>admin</code> on a
-            fresh provider.
-        </span><br />
-        <code>@Model.AdminConsoleUrl</code>
-    </div>
-    <a class="btn" href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">Open admin console</a>
-</div>
-
-<h2>Step 1 — Run the identity provider</h2>
-<div class="card">
-    <p style="margin-top:0">
-        From the solution root: <code>dotnet run --project Ark.oAuth.Oidc.Host</code>.
-        On first run it creates its database, generates a signing key, seeds the scope catalogue
-        and creates an <code>admin</code> / <code>admin</code> account.
-    </p>
-    <div class="kv">
-        <div>Configured Authority</div><div><code>@Model.Authority</code></div>
-        <div>Discovery document</div><div><code>@Model.DiscoveryUrl</code></div>
-        <div>Reachable</div>
-        <div>
-            @if (Model.DiscoveryOk)
+<section class="sx-hero">
+    <div>
+        <p class="sx-eyebrow">Reference client · ASP.NET Core</p>
+        <h1>Sign this app in against Ark IdP</h1>
+        <p class="sub">
+            Every value on this page is read live — from local configuration on one side and from the
+            provider's discovery document on the other. Register the client so the two agree, grant
+            yourself access, and sign-in works. Copy anything with the
+            <span style="white-space:nowrap">@Svg("<rect x='9' y='9' width='12' height='12' rx='2'/><path d='M5 15V5a2 2 0 0 1 2-2h10'/>")</span> button.
+        </p>
+        <div class="sx-actions">
+            @if (Model.IsAuthenticated)
             {
-                <span class="pill ok">yes</span>
+                <a class="btn" href="/home/profile">Inspect my tokens @Svg(icons["arrow"])</a>
             }
             else
             {
-                <span class="pill bad">no</span> <span style="color:var(--fg-muted)">@Model.DiscoveryError</span>
+                <a class="btn" href="/account/login?returnUrl=%2Fhome%2Fprofile">Sign in and show my profile @Svg(icons["arrow"])</a>
             }
+            <a class="btn ghost" href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">Open admin console @Svg(icons["external"])</a>
         </div>
+
+        @if (!string.IsNullOrEmpty(Model.AuthError))
+        {
+            <div class="note bad" style="margin-top:18px">
+                <strong>The last sign-in callback failed.</strong><br />
+                <code>@Model.AuthError</code>
+            </div>
+        }
     </div>
 
-    @if (!Model.DiscoveryOk)
-    {
-        <div class="note bad">
-            Until this succeeds nothing else can work — the OpenID Connect handler fetches the same
-            document on its first challenge. Check that the provider is running, that the port in
-            <code>Authority</code> matches, and that its development certificate is trusted
-            (<code>dotnet dev-certs https --trust</code>).
+    <aside class="sx-checks" aria-label="Live checks">
+        <div class="sx-checks-head">
+            <img src="~/img/ark-shield-160.png" alt="" width="34" height="34" />
+            <div>
+                <b>Live checks</b>
+                <span>tenant <code>@Model.TenantId</code> · client <code>@Model.ClientId</code> · @(Model.IsConfidential ? "confidential" : "public + PKCE")</span>
+            </div>
         </div>
-    }
-    else if (Model.IssuerMismatch)
-    {
-        <div class="note bad">
-            <strong>Issuer mismatch.</strong> The document declares
-            <code>@Model.Issuer</code> but this app is configured with
-            <code>@Model.Authority</code>. Token validation rejects a mismatched issuer, so
-            sign-in will fail at the callback. Usually this means the tenant segment is wrong.
-        </div>
-    }
-</div>
+        <ul>
+            <li>
+                @{ State(Model.DiscoveryOk ? "ok" : "bad", Model.DiscoveryOk ? "passing" : "failing"); }
+                <div>Provider reachable<small>@(Model.DiscoveryOk ? Model.DiscoveryUrl : Model.DiscoveryError)</small></div>
+            </li>
+            <li>
+                @{ State(!Model.DiscoveryOk ? "" : issuerOk ? "ok" : "bad", issuerOk ? "passing" : "failing"); }
+                <div>Issuer matches Authority<small>@(Model.DiscoveryOk ? Model.Issuer : "waiting for discovery")</small></div>
+            </li>
+            <li>
+                @{ State(!Model.DiscoveryOk ? "" : scopesOk ? "ok" : "warn", scopesOk ? "passing" : "warning"); }
+                <div>Requested scopes advertised<small>@string.Join(" ", Model.Scopes)</small></div>
+            </li>
+            <li>
+                @{ State(Model.IsAuthenticated ? "ok" : "", Model.IsAuthenticated ? "passing" : "not yet"); }
+                <div>Round trip completed<small>@(Model.IsAuthenticated ? $"signed in as {Model.SignedInAs ?? "a user"}" : "sign in to prove registration and access mapping")</small></div>
+            </li>
+        </ul>
+    </aside>
+</section>
 
-<h2>Step 2 — Register this application as a client</h2>
-<div class="card">
-    <p style="margin-top:0">
-        Sign in to the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
-        at <code>@Model.AdminConsoleUrl</code> and add a client under
-        <strong>Clients</strong> with exactly these values. Redirect URIs are matched
-        <em>exactly</em> — no wildcards, no prefix matching, no trailing-slash tolerance.
-    </p>
-    <div class="kv">
-        <div>client_id</div><div><code>@Model.ClientId</code></div>
-        <div>application_type</div><div><code>web</code></div>
-        <div>token_endpoint_auth_method</div>
-        <div>
-            <code>@(Model.IsConfidential ? "client_secret_post" : "none")</code>
-            <span class="pill">@(Model.IsConfidential ? "confidential client" : "public client")</span>
-        </div>
-        <div>redirect_uris</div><div><code>@Model.RedirectUri</code></div>
-        <div>post_logout_redirect_uris</div><div><code>@Model.PostLogoutRedirectUri</code></div>
-        <div>grant_types</div><div><code>authorization_code</code>, <code>refresh_token</code></div>
-        <div>scopes</div><div><code>@string.Join(" ", Model.Scopes)</code></div>
-        <div>require_pkce</div><div><code>true</code></div>
-        <div>is_active</div><div><code>true</code></div>
+<section class="sx-flow" aria-labelledby="flow-title">
+    <div class="sx-flow-head">
+        <h3 id="flow-title">How a sign-in travels</h3>
+        <span>Authorization code + PKCE, run by ASP.NET Core's own OpenID Connect handler</span>
     </div>
-
-    @if (Model.UnsupportedScopes.Count > 0)
-    {
-        <div class="note warn">
-            The provider does not advertise <code>@string.Join(", ", Model.UnsupportedScopes)</code>
-            in <code>scopes_supported</code>. A scope the client is not registered for is rejected
-            outright rather than silently dropped, so add it to the client's scope list — or stop
-            requesting it here.
+    <div class="sx-actors">
+        <div class="sx-actor">
+            <img src="~/img/avatar.png" alt="" width="34" height="34" />
+            <div><b>Browser</b><small>the person signing in</small></div>
         </div>
-    }
-
-    @if (Model.IsConfidential)
-    {
-        <div class="note">
-            This app is configured with a client secret. Generate it with
-            <strong>Regenerate secret</strong> on the client record — it is shown once and stored
-            only as a PBKDF2 hash, so it cannot be read back. Keep it in user-secrets or an
-            environment variable, not in <code>appsettings.json</code>.
+        <div class="sx-actor">
+            <span class="sx-badge">@Svg(icons["app"])</span>
+            <div><b>This app</b><small>@Model.Origin</small></div>
         </div>
-    }
-    else
-    {
-        <div class="note">
-            A public client has no secret, which is why PKCE is mandatory for it: the
-            <code>code_verifier</code> is what proves the caller redeeming the code is the one that
-            started the flow. The handler generates and sends it automatically.
+        <div class="sx-actor">
+            <img src="~/img/ark-shield-160.png" alt="" width="34" height="34" />
+            <div><b>Ark IdP</b><small>@Model.Authority</small></div>
         </div>
-    }
-</div>
-
-<h2>Step 3 — Grant a user access to the client</h2>
-<div class="card">
-    <p style="margin-top:0">
-        This step is easy to miss and it is not optional. Ark authorizes
-        <strong>per user, per client</strong>: a user with no mapping to this client cannot sign in
-        to it at all, and the sign-in page reports only that the credentials were not recognised.
-    </p>
-    <p>
-        In the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
-        open <strong>Access mapping</strong>, pick the user, pick
-        <code>@Model.ClientId</code>, and add the claims they should carry. Identity claims
-        (<code>name</code>, <code>email</code>, …) control what appears in the ID token and
-        UserInfo; anything else becomes an authorization claim, delivered in the access token as
-        <code>ark_claims</code> and projected onto <code>@Model.RoleClaimType</code>
-        so <code>[Authorize(Roles = "…")]</code> works against it.
-    </p>
-    <div class="note">
-        Add <code>sample.admin</code> to the mapping to see the <a href="/home/roles">Roles</a> page
-        flip from denied to granted. Claim changes take effect at the next sign-in, because they
-        are written into the token when it is issued.
     </div>
-</div>
+    <ol class="sx-hops">
+        <li><span class="sx-route">Browser → app</span><b>Open a protected page</b><span><code>[Authorize]</code> or <code>/account/login</code> issues a challenge.</span></li>
+        <li><span class="sx-route">App → Ark</span><b>Redirect to authorize</b><span>With PKCE, <code>state</code> and <code>nonce</code> to <code>@(Model.AuthorizationEndpoint ?? "/oauth2/authorize")</code></span></li>
+        <li><span class="sx-route">At Ark</span><b>User signs in</b><span>Ark checks the user is mapped to <code>@Model.ClientId</code>, asks consent if needed.</span></li>
+        <li><span class="sx-route">Ark → app</span><b>Code comes back</b><span>To <code>@Model.RedirectUri</code> — handled by the library, never by a controller.</span></li>
+        <li><span class="sx-route">App → Ark, back channel</span><b>Code exchanged</b><span>At <code>@(Model.TokenEndpoint ?? "/oauth2/token")</code>; the ID token is checked against JWKS.</span></li>
+        <li><span class="sx-route">App</span><b>Session starts</b><span>A cookie session; <code>offline_access</code> lets tokens refresh silently.</span></li>
+    </ol>
+</section>
 
-<h2>Step 4 — Configure this application</h2>
-<div class="card">
-    <p style="margin-top:0">
-        Two lines of code and one section of configuration. Nothing else in the application knows
-        that OAuth exists.
-    </p>
-    <pre>// Program.cs
+<div class="sx-guide">
+    <nav class="sx-toc" aria-label="Setup steps">
+        <p>Setup</p>
+        <ol>
+            <li><a href="#step-1">@{ Dot(step1, 1); } Run the provider</a></li>
+            <li><a href="#step-2">@{ Dot(step2, 2); } Register the client</a></li>
+            <li><a href="#step-3">@{ Dot(step3, 3); } Grant access</a></li>
+            <li><a href="#step-4">@{ Dot(step4, 4); } Configure the app</a></li>
+            <li><a href="#step-5">@{ Dot(step5, 5); } Verify</a></li>
+        </ol>
+        <ol class="sx-toc-sub">
+            <li><a href="#demos">Explore the demos</a></li>
+            @if (Model.DiscoveryOk)
+            {
+                <li><a href="#metadata">Provider metadata</a></li>
+            }
+        </ol>
+    </nav>
+
+    <div>
+        <section class="sx-step" id="step-1">
+            <div class="sx-step-head">
+                @{ Dot(step1, 1); }
+                <h2>Run the identity provider</h2>
+                @if (issuerOk) { <span class="pill ok">reachable</span> } else { <span class="pill bad">@(Model.DiscoveryOk ? "issuer mismatch" : "not reachable")</span> }
+            </div>
+            <div class="card">
+                <p style="margin-top:0">
+                    From the solution root, set the administrator's password once — the provider ships
+                    no default — then start it:
+                </p>
+                <pre>dotnet user-secrets set "ark_oauth_server:AdminUser:Password" "&lt;choose-one&gt;" --project Ark.oAuth.Oidc.Host
+dotnet run --project Ark.oAuth.Oidc.Host</pre>
+                <p>
+                    On first run it creates its database, generates a signing key, seeds the scope
+                    catalogue and creates the administrator from <code>ark_oauth_server:AdminUser</code>
+                    (username <code>admin</code> unless you changed it).
+                </p>
+                <div class="kv">
+                    <div>Configured Authority</div><div>@{ Val(Model.Authority); }</div>
+                    <div>Discovery document</div><div>@{ Val(Model.DiscoveryUrl); }</div>
+                    <div>Reachable</div>
+                    <div>
+                        @if (Model.DiscoveryOk)
+                        {
+                            <span class="pill ok">yes</span>
+                        }
+                        else
+                        {
+                            <span class="pill bad">no</span> <span style="color:var(--fg-muted)">@Model.DiscoveryError</span>
+                        }
+                    </div>
+                </div>
+
+                @if (!Model.DiscoveryOk)
+                {
+                    <div class="note bad">
+                        Until this succeeds nothing else can work — the OpenID Connect handler fetches the same
+                        document on its first challenge. Check that the provider is running, that the port in
+                        <code>Authority</code> matches, and that its development certificate is trusted
+                        (<code>dotnet dev-certs https --trust</code>).
+                    </div>
+                }
+                else if (Model.IssuerMismatch)
+                {
+                    <div class="note bad">
+                        <strong>Issuer mismatch.</strong> The document declares
+                        <code>@Model.Issuer</code> but this app is configured with
+                        <code>@Model.Authority</code>. Token validation rejects a mismatched issuer, so
+                        sign-in will fail at the callback. Usually this means the tenant segment is wrong.
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="sx-step" id="step-2">
+            <div class="sx-step-head">
+                @{ Dot(step2, 2); }
+                <h2>Register this application as a client</h2>
+                @if (Model.IsAuthenticated) { <span class="pill ok">proven by sign-in</span> } else { <span class="pill">in the admin console</span> }
+            </div>
+            <div class="card">
+                <p style="margin-top:0">
+                    Sign in to the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
+                    at <code>@Model.AdminConsoleUrl</code> and add a client under
+                    <strong>Clients</strong> with exactly these values. Redirect URIs are matched
+                    <em>exactly</em> — no wildcards, no prefix matching, no trailing-slash tolerance.
+                </p>
+                <div class="kv">
+                    <div>client_id</div><div>@{ Val(Model.ClientId); }</div>
+                    <div>application_type</div><div><code>web</code></div>
+                    <div>token_endpoint_auth_method</div>
+                    <div>
+                        <code>@(Model.IsConfidential ? "client_secret_post" : "none")</code>
+                        <span class="pill">@(Model.IsConfidential ? "confidential client" : "public client")</span>
+                    </div>
+                    <div>redirect_uris</div><div>@{ Val(Model.RedirectUri); }</div>
+                    <div>post_logout_redirect_uris</div><div>@{ Val(Model.PostLogoutRedirectUri); }</div>
+                    <div>grant_types</div><div><code>authorization_code</code>, <code>refresh_token</code></div>
+                    <div>scopes</div><div>@{ Val(string.Join(" ", Model.Scopes)); }</div>
+                    <div>require_pkce</div><div><code>true</code></div>
+                    <div>is_active</div><div><code>true</code></div>
+                </div>
+
+                @if (Model.UnsupportedScopes.Count > 0)
+                {
+                    <div class="note warn">
+                        The provider does not advertise <code>@string.Join(", ", Model.UnsupportedScopes)</code>
+                        in <code>scopes_supported</code>. A scope the client is not registered for is rejected
+                        outright rather than silently dropped, so add it to the client's scope list — or stop
+                        requesting it here.
+                    </div>
+                }
+
+                @if (Model.IsConfidential)
+                {
+                    <div class="note">
+                        This app is configured with a client secret. Generate it with
+                        <strong>Regenerate secret</strong> on the client record — it is shown once and stored
+                        only as a PBKDF2 hash, so it cannot be read back. Keep it in user-secrets or an
+                        environment variable, not in <code>appsettings.json</code>.
+                    </div>
+                }
+                else
+                {
+                    <div class="note">
+                        A public client has no secret, which is why PKCE is mandatory for it: the
+                        <code>code_verifier</code> is what proves the caller redeeming the code is the one that
+                        started the flow. The handler generates and sends it automatically.
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="sx-step" id="step-3">
+            <div class="sx-step-head">
+                @{ Dot(step3, 3); }
+                <h2>Grant a user access to the client</h2>
+                @if (Model.IsAuthenticated) { <span class="pill ok">proven by sign-in</span> } else { <span class="pill warn">easy to miss</span> }
+            </div>
+            <div class="card">
+                <p style="margin-top:0">
+                    This step is not optional. Ark authorizes <strong>per user, per client</strong>: a user
+                    with no mapping to this client cannot sign in to it at all, and the sign-in page reports
+                    only that the credentials were not recognised.
+                </p>
+                <p>
+                    In the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
+                    open <strong>Access mapping</strong>, pick the user, pick
+                    <code>@Model.ClientId</code>, and add the claims they should carry. Identity claims
+                    (<code>name</code>, <code>email</code>, …) control what appears in the ID token and
+                    UserInfo; anything else becomes an authorization claim, delivered in the access token as
+                    <code>ark_claims</code> and projected onto <code>@Model.RoleClaimType</code>
+                    so <code>[Authorize(Roles = "…")]</code> works against it.
+                </p>
+                <div class="note">
+                    Add <code>sample.admin</code> to the mapping to see the <a href="/home/roles">Roles</a> page
+                    flip from denied to granted. Claim changes take effect at the next sign-in, because they
+                    are written into the token when it is issued.
+                </div>
+            </div>
+        </section>
+
+        <section class="sx-step" id="step-4">
+            <div class="sx-step-head">
+                @{ Dot(step4, 4); }
+                <h2>Configure the application</h2>
+                <span class="pill">2 settings</span>
+            </div>
+            <div class="card">
+                <p style="margin-top:0">
+                    Two lines of code and one section of configuration — nothing else in the application
+                    knows OAuth exists. The same client ships for Python and Node with the same version
+                    number, so this translates almost line for line:
+                </p>
+                <div class="sx-code" data-tabs>
+                    <div class="sx-tabs" role="tablist">
+                        <button type="button" role="tab" aria-selected="true" data-tab="net" data-file="Program.cs + appsettings.json">.NET</button>
+                        <button type="button" role="tab" aria-selected="false" data-tab="py" data-file="app.py">Python</button>
+                        <button type="button" role="tab" aria-selected="false" data-tab="node" data-file="server.js">Node</button>
+                        <span class="sx-file">Program.cs + appsettings.json</span>
+                    </div>
+<pre data-panel="net"><span class="c">// Program.cs — dotnet add package Ark.oAuth.Client</span>
 builder.Services.AddArkOidcClient(builder.Configuration);
 ...
-app.UseRouting();          // must come first
+app.UseRouting();          <span class="c">// must come first</span>
 app.UseAuthentication();
 app.UseAuthorization();
 
-// appsettings.json
+<span class="c">// appsettings.json</span>
 "ark_oauth_client": {
   "Authority": "@Model.Authority",
-  "ClientId": "@Model.ClientId",@Html.Raw(Model.IsConfidential ? "\n  \"ClientSecret\": \"<from user-secrets>\"," : "")
-  "Scopes": [@Html.Raw(string.Join(", ", Model.Scopes.Select(s => $"\"{s}\"")))],
-  "CallbackPath": "@(Model.RedirectUri.Substring(Model.RedirectUri.LastIndexOf('/')))",
-  "SignedOutCallbackPath": "@(Model.PostLogoutRedirectUri.Substring(Model.PostLogoutRedirectUri.LastIndexOf('/')))"
+  "ClientId": "@Model.ClientId",@Html.Raw(Model.IsConfidential ? "\n  \"ClientSecret\": \"&lt;from user-secrets&gt;\"," : "")
+  "Scopes": [@Html.Raw(string.Join(", ", Model.Scopes.Select(s => $"\"{System.Net.WebUtility.HtmlEncode(s)}\"")))],
+  "CallbackPath": "@callbackPath",
+  "SignedOutCallbackPath": "@signedOutPath"
 }</pre>
-    <div class="note">
-        <code>CallbackPath</code> and <code>SignedOutCallbackPath</code> are handled by the OIDC
-        handler itself. Do not add controller actions for them — an action at
-        <code>@(Model.RedirectUri.Substring(Model.RedirectUri.LastIndexOf('/')))</code>
-        shadows the handler and the callback never completes.
+<pre data-panel="py" hidden><span class="c"># pip install "ark-oauth-client[flask]"</span>
+from ark_oauth_client.flask import add_ark_oidc_client, current_ark
+
+auth = add_ark_oidc_client(app, {
+    "authority": "@Model.Authority",
+    "client_id": "@Model.ClientId",@Html.Raw(Model.IsConfidential ? "\n    \"client_secret\": os.environ[\"ARK_CLIENT_SECRET\"]," : "")
+})
+
+@@app.get("/admin")
+@@auth.require_claims("sample.admin")      <span class="c"># Ark claims, not scopes</span>
+def admin(): return current_ark.user["name"]</pre>
+<pre data-panel="node" hidden><span class="c">// npm install ark-oauth-client</span>
+import { arkExpress } from 'ark-oauth-client';
+
+const auth = arkExpress({
+  authority: '@Model.Authority',
+  clientId: '@Model.ClientId',
+  redirectUri: '@Model.RedirectUri',
+  secret: process.env.SESSION_SECRET,
+});
+app.use(auth);
+app.get('/admin', auth.requireClaims('sample.admin'), handler);</pre>
+                </div>
+                <div class="note">
+                    <code>CallbackPath</code> and <code>SignedOutCallbackPath</code> are handled by the OIDC
+                    handler itself. Do not add controller actions for them — an action at
+                    <code>@callbackPath</code> shadows the handler and the callback never completes.
+                </div>
+            </div>
+        </section>
+
+        <section class="sx-step" id="step-5">
+            <div class="sx-step-head">
+                @{ Dot(step5, 5); }
+                <h2>Verify</h2>
+                @if (Model.IsAuthenticated) { <span class="pill ok">working</span> }
+            </div>
+            <div class="card">
+                @if (Model.IsAuthenticated)
+                {
+                    <div class="note ok" style="margin-top:0">
+                        <strong>Signed in as @(Model.SignedInAs ?? "a user").</strong>
+                        The full round trip works: authorization request → sign-in → code → token exchange →
+                        cookie session.
+                    </div>
+                    <p style="margin-bottom:0">
+                        Next: <a href="/home/profile">inspect the claims and tokens</a>,
+                        <a href="/home/roles">check a role</a>, or
+                        <a href="/home/downstream">call an API with the access token</a>.
+                    </p>
+                }
+                else
+                {
+                    <p style="margin-top:0">
+                        Use <strong>Sign in</strong> above, or just open a protected page —
+                        <a href="/home/secure">/home/secure</a> carries <code>[Authorize]</code>, which starts
+                        the same flow and returns you there afterwards.
+                    </p>
+                    <a class="btn" href="/account/login?returnUrl=%2Fhome%2Fprofile">Sign in and show my profile @Svg(icons["arrow"])</a>
+                }
+            </div>
+        </section>
+
+        <section class="sx-step" id="demos">
+            <div class="sx-step-head"><h2>Explore the demos</h2></div>
+            <p class="sub" style="margin-bottom:14px">
+                Each page runs live against this provider. The first four use the signed-in session;
+                the last three cover cases the web-app flow does not.
+            </p>
+            <div class="sx-demos">
+                <a class="sx-demo" href="/home/secure">
+                    <div class="sx-demo-head"><span class="sx-badge">@Svg(icons["lock"])</span><span class="pill">sign-in</span></div>
+                    <b>Protected page</b>
+                    <span><code>[Authorize]</code> starts the flow and brings you back here.</span>
+                </a>
+                <a class="sx-demo" href="/home/profile">
+                    <div class="sx-demo-head"><span class="sx-badge">@Svg(icons["user"])</span><span class="pill">sign-in</span></div>
+                    <b>Identity and tokens</b>
+                    <span>Every claim, and the ID and access token payloads decoded.</span>
+                </a>
+                <a class="sx-demo" href="/home/roles">
+                    <div class="sx-demo-head"><span class="sx-badge">@Svg(icons["badge"])</span><span class="pill">sign-in</span></div>
+                    <b>Authorization claims</b>
+                    <span>Ark claims as roles — grant <code>sample.admin</code> and watch it flip.</span>
+                </a>
+                <a class="sx-demo" href="/home/downstream">
+                    <div class="sx-demo-head"><span class="sx-badge">@Svg(icons["api"])</span><span class="pill">sign-in</span></div>
+                    <b>Call an API</b>
+                    <span>Send the user's access token, read per call, never cached.</span>
+                </a>
+                <a class="sx-demo" href="/flows/spa">
+                    <div class="sx-demo-head"><span class="sx-badge">@Svg(icons["browser"])</span><span class="pill">public client</span></div>
+                    <b>Single-page app</b>
+                    <span>Code + PKCE in JavaScript. No secret, no server session, tokens in memory.</span>
+                </a>
+                <a class="sx-demo" href="/flows/machine">
+                    <div class="sx-demo-head">
+                        <span class="sx-badge">@Svg(icons["server"])</span>
+                        @if (Model.DiscoveryOk && !Model.SupportsClientCredentials) { <span class="pill warn">not offered</span> } else { <span class="pill">no user</span> }
+                    </div>
+                    <b>Client credentials</b>
+                    <span>A service authenticating as itself, for jobs and service-to-service calls.</span>
+                </a>
+                <a class="sx-demo" href="/flows/register">
+                    <div class="sx-demo-head">
+                        <span class="sx-badge">@Svg(icons["plus"])</span>
+                        @if (Model.DiscoveryOk && !Model.SupportsDynamicRegistration) { <span class="pill warn">disabled here</span> } else { <span class="pill">RFC 7591</span> }
+                    </div>
+                    <b>Dynamic registration</b>
+                    <span>Create a client at runtime instead of by hand in the admin console.</span>
+                </a>
+            </div>
+        </section>
+
+        @if (Model.DiscoveryOk)
+        {
+            <section class="sx-step" id="metadata">
+                <div class="sx-step-head"><h2>What the provider advertises</h2></div>
+                <div class="card">
+                    <div class="kv">
+                        <div>issuer</div><div>@{ Val(Model.Issuer); }</div>
+                        <div>authorization_endpoint</div><div>@{ Val(Model.AuthorizationEndpoint); }</div>
+                        <div>token_endpoint</div><div>@{ Val(Model.TokenEndpoint); }</div>
+                        <div>userinfo_endpoint</div><div>@{ Val(Model.UserInfoEndpoint); }</div>
+                        <div>end_session_endpoint</div><div>@{ Val(Model.EndSessionEndpoint); }</div>
+                        <div>jwks_uri</div><div>@{ Val(Model.JwksUri); }</div>
+                        <div>grant_types_supported</div><div><code>@string.Join(" ", Model.GrantTypesSupported)</code></div>
+                        <div>scopes_supported</div><div><code>@string.Join(" ", Model.ScopesSupported)</code></div>
+                    </div>
+                    <div class="note">
+                        None of these appear in this application's configuration. They are discovered at
+                        startup and refreshed periodically, which is what makes signing-key rotation invisible
+                        to the client and lets the same code point at any compliant provider.
+                    </div>
+                    <p style="margin-bottom:0">
+                        The provider also generates a per-client setup page at
+                        <code>@Model.IntegrationPageUrl</code> (sign in to the tenant first).
+                    </p>
+                </div>
+            </section>
+        }
     </div>
 </div>
-
-<h2>Step 5 — Verify</h2>
-<div class="card">
-    @if (Model.IsAuthenticated)
-    {
-        <div class="note ok">
-            <strong>Signed in as @(Model.SignedInAs ?? "a user").</strong>
-            The full round trip works: authorization request → sign-in → code → token exchange →
-            cookie session.
-        </div>
-        <p style="margin-bottom:0">
-            Next: <a href="/home/profile">inspect the claims and tokens</a>,
-            <a href="/home/roles">check a role</a>, or
-            <a href="/home/downstream">call an API with the access token</a>.
-        </p>
-    }
-    else
-    {
-        <p style="margin-top:0">
-            Use <strong>Sign in</strong> above, or just open a protected page —
-            <a href="/home/secure">/home/secure</a> carries <code>[Authorize]</code>, which starts
-            the same flow and returns you there afterwards.
-        </p>
-        <a class="btn" href="/account/login?returnUrl=%2Fhome%2Fprofile">Sign in and show my profile</a>
-    }
-</div>
-
-<h2>Other flows</h2>
-<div class="card">
-    <p style="margin-top:0">
-        Everything above is the authorization code flow through a web application, where the
-        OpenID Connect handler does the work. Three cases it does not cover have their own pages,
-        each running live against this provider:
-    </p>
-    <div class="kv">
-        <div><a href="/flows/spa">Single-page app</a></div>
-        <div>
-            The same authorization code flow with PKCE, run by JavaScript in a public client. No
-            secret, no server session, tokens in memory only.
-        </div>
-        <div><a href="/flows/machine">Client credentials</a></div>
-        <div>
-            A service authenticating as itself, with no user anywhere in the exchange. For
-            scheduled jobs and service-to-service calls.
-        </div>
-        <div><a href="/flows/register">Dynamic registration</a></div>
-        <div>
-            Creating a client at runtime over RFC 7591 instead of by hand in the admin console
-            @if (Model.DiscoveryOk && !Model.SupportsDynamicRegistration)
-            {
-                <text> — </text><span class="pill warn">disabled on this provider</span>
-            }
-        </div>
-    </div>
-</div>
-
-@if (Model.DiscoveryOk)
-{
-    <h2>What the provider advertises</h2>
-    <div class="card">
-        <div class="kv">
-            <div>issuer</div><div><code>@Model.Issuer</code></div>
-            <div>authorization_endpoint</div><div><code>@Model.AuthorizationEndpoint</code></div>
-            <div>token_endpoint</div><div><code>@Model.TokenEndpoint</code></div>
-            <div>userinfo_endpoint</div><div><code>@Model.UserInfoEndpoint</code></div>
-            <div>end_session_endpoint</div><div><code>@Model.EndSessionEndpoint</code></div>
-            <div>jwks_uri</div><div><code>@Model.JwksUri</code></div>
-            <div>scopes_supported</div><div><code>@string.Join(" ", Model.ScopesSupported)</code></div>
-        </div>
-        <div class="note">
-            None of these appear in this application's configuration. They are discovered at
-            startup and refreshed periodically, which is what makes signing-key rotation invisible
-            to the client and lets the same code point at any compliant provider.
-        </div>
-        <p style="margin-bottom:0">
-            The provider also generates a per-client setup page at
-            <code>@Model.IntegrationPageUrl</code> (sign in to the tenant first).
-        </p>
-    </div>
-}

@@ -133,6 +133,9 @@ jobs:
           client=$(live "https://api.nuget.org/v3-flatcontainer/ark.oauth.client/$VERSION/ark.oauth.client.nuspec")
           pypi=$(live "https://pypi.org/pypi/ark-oauth-client/$VERSION/json")
           npm=$(live "https://registry.npmjs.org/ark-oauth-client/$VERSION")
+          if [ "$(live https://registry.npmjs.org/ark-oauth-client)" = false ]; then
+            echo "::warning::ark-oauth-client has never been published to npm; publish-npm will stop until the first version is published by hand (setup step d)."
+          fi
           # Both NuGet packages are pushed together; --skip-duplicate covers one being live already.
           nuget=$([ "$oidc" = true ] && [ "$client" = true ] && echo true || echo false)
           {
@@ -369,11 +372,29 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      # Trusted Publishing needs npm 11.5.1 or later; provenance is attached automatically.
+      # npm offers a trusted publisher only on a package that already exists, so the very first
+      # version is published by hand (setup step d). Without this check that case fails inside
+      # `npm publish` with ENEEDAUTH, which the run summary shows only as "exit code 1".
+      - name: The package exists on npm
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' https://registry.npmjs.org/ark-oauth-client)
+          if [ "$code" = 404 ]; then
+            echo "::error::ark-oauth-client has never been published to npm, so Trusted Publishing has nothing to attach to. Publish the first version by hand (setup step d at the top of release.yml), add the trusted publisher on npmjs.com, then re-run this job."
+            exit 1
+          fi
+          [ "$code" = 200 ] || { echo "::error::registry.npmjs.org answered HTTP $code"; exit 1; }
+
+      # Trusted Publishing needs npm 11.5.1 or later; provenance is attached automatically. npm's
+      # own reason is raised as an annotation, because raw logs need auth to read.
       - name: Publish
         run: |
+          set -o pipefail
           npm install -g npm@latest
-          npm publish npm/*.tgz --access public
+          if ! npm publish npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
+            reason=$(grep -m1 -E 'npm (error|ERR!) (code |404|403|401)|ENEEDAUTH|E40[134]' "$RUNNER_TEMP/npm.log" || true)
+            echo "::error::npm publish failed: ${reason:-see the job log}. If it is an auth error, check the trusted publisher on npmjs.com: owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release."
+            exit 1
+          fi
 
   release:
     needs: [prepare, build-dotnet, build-python, build-node, publish-nuget, publish-pypi, publish-npm]
@@ -433,13 +454,15 @@ jobs:
               echo
               echo "Already on the registry before this release, so not attached here:$already."
             fi
-            # The Python changelog is the one kept per version; quote its entry when there is one.
-            entry=$(awk -v v="## $VERSION" '$0 == v {on=1; next} on && /^## / {exit} on' ark_oauth_client_py/CHANGELOG.md)
-            if [ -n "$entry" ]; then
-              echo
-              echo "## Changes"
-              echo "$entry"
-            fi
+            # The client changelogs are kept per version; quote each one's entry when there is one.
+            for log in "Python|ark_oauth_client_py/CHANGELOG.md" "Node|ark_oauth_client_nodejs/CHANGELOG.md"; do
+              entry=$(awk -v v="## $VERSION" '$0 == v {on=1; next} on && /^## / {exit} on' "${log#*|}")
+              if [ -n "$entry" ]; then
+                echo
+                echo "## Changes — ${log%%|*} client"
+                echo "$entry"
+              fi
+            done
           } > notes.md
           cat notes.md
 

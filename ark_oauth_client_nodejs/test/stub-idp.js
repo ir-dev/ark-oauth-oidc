@@ -30,6 +30,9 @@ export class StubIdp {
     this.grants = [];
     this.user = { sub: 'alice@example.com', name: 'Alice Example', email: 'alice@example.com', email_verified: true };
     this.arkClaims = ['billing.admin', 'reports.read'];
+    /** Every authorization request's parameters, in order — where a test reads `prompt`. */
+    this.authorizeRequests = [];
+    this.requirePar = false;
     this.clients = clients ?? {
       'web-app': { secret: null, method: 'none', redirectUris: ['http://127.0.0.1:0/signin-oidc'], grants: ['authorization_code', 'refresh_token'] },
       'confidential-app': {
@@ -225,7 +228,7 @@ export class StubIdp {
         token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'private_key_jwt', 'none'],
         code_challenge_methods_supported: ['S256'],
         authorization_response_iss_parameter_supported: true,
-        require_pushed_authorization_requests: false
+        require_pushed_authorization_requests: this.requirePar
       });
     }
 
@@ -243,6 +246,8 @@ export class StubIdp {
         params = new URLSearchParams(pushed);
       }
 
+      this.authorizeRequests.push(Object.fromEntries(params));
+      if (this.requirePar && !p.get('request_uri')) return this.#fail(res, 400, 'invalid_request', 'this tenant requires pushed authorization requests.');
       if (params.get('response_type') !== 'code') return this.#fail(res, 400, 'unsupported_response_type', 'only code is supported.');
       if (!params.get('code_challenge')) return this.#fail(res, 400, 'invalid_request', 'code_challenge is required (PKCE).');
       if ((params.get('code_challenge_method') ?? 'S256') !== 'S256') return this.#fail(res, 400, 'invalid_request', 'code_challenge_method must be S256.');

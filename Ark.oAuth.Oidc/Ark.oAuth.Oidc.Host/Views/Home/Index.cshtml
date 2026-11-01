@@ -1,40 +1,428 @@
-﻿@{
-    ViewData["Title"] = "Start";
+﻿@using Ark.oAuth.Oidc.Protocol
+@{
+    ViewData["Title"] = "Open-source OAuth 2.1 & OpenID Connect identity provider";
     var authError = ViewBag.AuthError as string;
+    var ep = (ArkOidcEndpoints)ViewBag.Endpoints;
+    var oidc = (ArkOidcOptions)ViewBag.Oidc;
+    var provider = (string)ViewBag.Provider;
+    var version = (string)ViewBag.PackageVersion;
+    var signedIn = User.Identity?.IsAuthenticated == true;
+    var consoleUrl = $"/{ViewBag.TenantId}/admin";
+    const string repo = "https://github.com/ir-dev/ark-oauth-oidc";
+
+    // Stroke icons on a 24px grid, drawn inline so the page needs no icon font or CDN.
+    var icons = new Dictionary<string, string>
+    {
+        ["key"] = "<circle cx='8' cy='15' r='4'/><path d='m10.8 12.2 9.2-9.2M17 6l3 3M14 9l2 2'/>",
+        ["refresh"] = "<path d='M20 11a8 8 0 0 0-14.9-4M4 4v4h4M4 13a8 8 0 0 0 14.9 4M20 20v-4h-4'/>",
+        ["server"] = "<rect x='3' y='4' width='18' height='7' rx='2'/><rect x='3' y='13' width='18' height='7' rx='2'/><path d='M7 7.5h.01M7 16.5h.01'/>",
+        ["tv"] = "<rect x='2' y='4' width='20' height='13' rx='2'/><path d='M8 21h8M12 17v4'/>",
+        ["upload"] = "<path d='M12 16V4M7 9l5-5 5 5M4 20h16'/>",
+        ["plus"] = "<rect x='3' y='3' width='18' height='18' rx='3'/><path d='M12 8v8M8 12h8'/>",
+        ["search"] = "<circle cx='11' cy='11' r='7'/><path d='m20 20-4-4'/>",
+        ["globe"] = "<circle cx='12' cy='12' r='9'/><path d='M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18'/>",
+        ["logout"] = "<path d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9'/>",
+        ["badge"] = "<rect x='3' y='5' width='18' height='14' rx='2'/><circle cx='9' cy='12' r='2.5'/><path d='M14 10h4M14 14h3'/>",
+        ["shield"] = "<path d='M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z'/><path d='m9 12 2 2 4-4'/>",
+        ["database"] = "<ellipse cx='12' cy='5' rx='8' ry='3'/><path d='M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3'/>",
+        ["layers"] = "<path d='m12 3 9 5-9 5-9-5z'/><path d='m3 13 9 5 9-5'/>",
+        ["layout"] = "<rect x='3' y='3' width='18' height='18' rx='2'/><path d='M3 9h18M9 9v12'/>",
+        ["users"] = "<circle cx='9' cy='8' r='3.5'/><path d='M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6'/>",
+        ["zap"] = "<path d='M13 2 4 14h7l-1 8 9-12h-7z'/>",
+        ["cloud"] = "<path d='M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1 0 8z'/>",
+        ["lock"] = "<rect x='4' y='11' width='16' height='10' rx='2'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/>",
+        ["copy"] = "<rect x='9' y='9' width='12' height='12' rx='2'/><path d='M5 15V5a2 2 0 0 1 2-2h10'/>",
+        ["code"] = "<path d='m8 6-6 6 6 6M16 6l6 6-6 6'/>",
+        ["arrow"] = "<path d='M5 12h14M13 6l6 6-6 6'/>",
+        ["book"] = "<path d='M4 19V5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h14'/>",
+        ["terminal"] = "<rect x='3' y='4' width='18' height='16' rx='2'/><path d='m7 9 3 3-3 3M13 15h4'/>",
+        ["alert"] = "<path d='M12 3 2 20h20z'/><path d='M12 10v4M12 17h.01'/>"
+    };
+
+    // Each standard: icon, title, spec reference, one line, and whether this deployment has it on
+    // (null = always on — it is not something the server can switch off).
+    var standards = new (string Icon, string Title, string Spec, string Text, bool? On, string? Note)[]
+    {
+        ("key", "Authorization code + PKCE", "RFC 6749 · RFC 7636", "The only interactive flow OAuth 2.1 keeps. S256 only, mandatory for public clients.", null, null),
+        ("refresh", "Refresh tokens", "offline_access", "Long sessions without long-lived access tokens. Clients refresh silently underneath you.", null, null),
+        ("server", "Client credentials", "RFC 6749 §4.4", "Service-to-service calls and scheduled jobs, with no user in the exchange.", null, null),
+        ("tv", "Device authorization", "RFC 8628", "Sign in TVs, kiosks and CLIs by entering a short code on another device.", oidc.EnableDeviceFlow, null),
+        ("upload", "Pushed authorization requests", "RFC 9126", "Authorization parameters sent server-to-server, out of the browser's address bar.", oidc.EnablePushedAuthorizationRequests, oidc.RequirePushedAuthorizationRequests ? "required" : null),
+        ("plus", "Dynamic client registration", "RFC 7591", "Create clients from a pipeline or an app, not only by hand in the console.", oidc.EnableDynamicRegistration, oidc.EnableDynamicRegistration && oidc.RequireRegistrationAccessToken ? "token-protected" : null),
+        ("search", "Introspection & revocation", "RFC 7662 · RFC 7009", "Ask whether a token is still good, or kill it before it expires.", null, null),
+        ("globe", "Discovery & JWKS rotation", "OIDC Discovery · RFC 8414", "Clients configure themselves from one URL. Keys rotate with no redeploy.", null, null),
+        ("logout", "RP-initiated & back-channel logout", "OIDC Logout 1.0", "Sign-out reaches the provider, and every app in the session is told.", oidc.EnableBackChannelLogout, null),
+        ("badge", "Client authentication", "RFC 7523", "client_secret_basic, client_secret_post, private_key_jwt, or none with PKCE.", null, null),
+        ("shield", "Issuer identification", "RFC 9207", "Every authorization response names its issuer, closing the mix-up attack.", null, null),
+        ("lock", "Signed ID tokens", "RS256 · JWT", "Standard JWTs any OIDC library can validate against the published key set.", null, null)
+    };
+
+    var endpoints = new List<(string Name, string Url)>
+    {
+        ("Discovery", ep.Discovery), ("Authorization", ep.Authorization), ("Token", ep.Token),
+        ("UserInfo", ep.UserInfo), ("JWKS", ep.Jwks), ("Introspection", ep.Introspection),
+        ("Revocation", ep.Revocation), ("End session", ep.EndSession)
+    };
+    if (oidc.EnableDeviceFlow) endpoints.Add(("Device authorization", ep.DeviceAuthorization));
+    if (oidc.EnablePushedAuthorizationRequests) endpoints.Add(("Pushed authorization", ep.PushedAuthorizationRequest));
+    if (oidc.EnableDynamicRegistration) endpoints.Add(("Registration", ep.Registration));
+
+    var providerName = provider.ToLowerInvariant() switch
+    {
+        "postgres" => "PostgreSQL", "mysql" => "MySQL", "sqlserver" => "SQL Server", _ => "SQLite"
+    };
+}
+@section Styles {
+    <link rel="stylesheet" href="~/css/ark-landing.css" asp-append-version="true" />
 }
 
-<div class="ark-hero">
-    <h1>@ViewBag.HostName</h1>
-    <p>
-        OAuth 2.1 and OpenID Connect provider. Point any standard OIDC client library at the
-        issuer below and it will configure itself from the discovery document.
-    </p>
+@functions {
+    // Razor local helpers cannot see the dictionary above, so the icon markup is passed in.
+    static Microsoft.AspNetCore.Html.IHtmlContent Svg(string paths, string cls = "lp-i") =>
+        new Microsoft.AspNetCore.Html.HtmlString(
+            $"<svg class=\"{cls}\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">{paths}</svg>");
+}
 
-    @if (!string.IsNullOrEmpty(authError))
-    {
-        <div class="ark-alert">Sign-in failed: @authError</div>
-    }
+<div class="lp">
 
-    <dl class="ark-kv">
-        <dt>Tenant</dt>
-        <dd><code>@ViewBag.TenantId</code></dd>
-        <dt>Issuer</dt>
-        <dd><code>@ViewBag.Issuer</code></dd>
-        <dt>Discovery</dt>
-        <dd><a href="@ViewBag.Discovery" target="_blank" rel="noopener"><code>@ViewBag.Discovery</code></a></dd>
-        <dt>JWKS</dt>
-        <dd><a href="@ViewBag.Jwks" target="_blank" rel="noopener"><code>@ViewBag.Jwks</code></a></dd>
-    </dl>
-
-    <p style="margin-top:26px">
-        @if (User.Identity?.IsAuthenticated == true)
+<header class="lp-nav">
+    <div class="lp-wrap lp-nav-inner">
+        <a class="lp-brand" href="/">
+            <img src="~/img/ark-shield-64.png" alt="" width="32" height="32" />
+            <span>Ark <b>IdP</b></span>
+        </a>
+        <span class="lp-oss">Open source · MIT</span>
+        <nav class="lp-links" aria-label="Sections">
+            <a href="#standards">Standards</a>
+            <a href="#why">Why Ark</a>
+            <a href="#start">Get started</a>
+            <a href="#endpoints">Endpoints</a>
+            <a href="@repo" target="_blank" rel="noopener">@Svg(icons["code"]) GitHub</a>
+        </nav>
+        @if (signedIn)
         {
-            <a class="ark-btn" href="/admin">Open admin console</a>
-            <a class="ark-btn ark-btn-ghost" href="/Home/SignOutAll" style="margin-left:8px">Sign out</a>
+            <a class="lp-btn lp-btn-sm" href="@consoleUrl">Admin console</a>
         }
         else
         {
-            <a class="ark-btn" href="/Home/SignIn">Sign in to the admin console</a>
+            <a class="lp-btn lp-btn-sm" href="/Home/SignIn">Sign in</a>
         }
-    </p>
+    </div>
+</header>
+
+<section class="lp-hero">
+    <div class="lp-wrap lp-hero-grid">
+        <div class="lp-hero-copy">
+            <div class="lp-chips">
+                <span class="lp-chip">OAuth 2.1</span>
+                <span class="lp-chip">OpenID Connect</span>
+                <span class="lp-chip lp-chip-accent">Free &amp; open source</span>
+            </div>
+            <h1>Own your sign-in.<br /><span>Skip the per-user bill.</span></h1>
+            <p class="lp-lede">
+                Ark is an open-source OAuth 2.1 and OpenID Connect identity provider that runs
+                <strong>inside your own ASP.NET Core app</strong> — one NuGet package, your database,
+                your domain. Single sign-on, an admin console and standards-compliant tokens for
+                every app your business runs, without a SaaS contract.
+            </p>
+
+            @if (!string.IsNullOrEmpty(authError))
+            {
+                <div class="lp-alert" role="alert">@Svg(icons["alert"]) Sign-in failed: <code>@authError</code></div>
+            }
+
+            <div class="lp-cta">
+                @if (signedIn)
+                {
+                    <a class="lp-btn" href="@consoleUrl">Open admin console @Svg(icons["arrow"])</a>
+                    <a class="lp-btn lp-btn-ghost" href="/Home/SignOutAll">Sign out</a>
+                }
+                else
+                {
+                    <a class="lp-btn" href="/Home/SignIn">Sign in to the admin console @Svg(icons["arrow"])</a>
+                }
+                <a class="lp-btn lp-btn-ghost" href="#start">@Svg(icons["terminal"]) Integrate an app</a>
+            </div>
+
+            <div class="lp-live" aria-label="This deployment">
+                <div class="lp-live-head">
+                    <span class="lp-dot" data-live-dot></span>
+                    <span data-live-text>Live on this host</span>
+                    <span class="lp-live-tenant">tenant <code>@ViewBag.TenantId</code></span>
+                </div>
+                <dl>
+                    <dt>Issuer</dt>
+                    <dd><code>@ViewBag.Issuer</code><button class="lp-copy" type="button" data-copy="@ViewBag.Issuer" aria-label="Copy issuer">@Svg(icons["copy"])</button></dd>
+                    <dt>Discovery</dt>
+                    <dd><a href="@ViewBag.Discovery" target="_blank" rel="noopener"><code>/.well-known/openid-configuration</code></a><button class="lp-copy" type="button" data-copy="@ViewBag.Discovery" aria-label="Copy discovery URL">@Svg(icons["copy"])</button></dd>
+                    <dt>JWKS</dt>
+                    <dd><a href="@ViewBag.Jwks" target="_blank" rel="noopener"><code>/.well-known/jwks.json</code></a><button class="lp-copy" type="button" data-copy="@ViewBag.Jwks" aria-label="Copy JWKS URL">@Svg(icons["copy"])</button></dd>
+                </dl>
+            </div>
+        </div>
+        <div class="lp-hero-art">
+            <img src="~/img/ark-rapid-lockup.png" alt="ARK RAPID — oAuth2 (OIDC) IdP. Secure identity, trusted access." width="900" height="341" />
+        </div>
+    </div>
+
+    <div class="lp-wrap">
+        <ul class="lp-stats">
+            <li><b>1</b><span>NuGet package to host it</span></li>
+            <li><b>4</b><span>databases supported</span></li>
+            <li><b>3</b><span>client libraries — .NET, Python, Node</span></li>
+            <li><b>0</b><span>per-user licence fees</span></li>
+        </ul>
+    </div>
+</section>
+
+<main>
+
+<section class="lp-section" id="standards">
+    <div class="lp-wrap">
+        <p class="lp-eyebrow">Standards, not lock-in</p>
+        <h2>Everything a modern client library expects</h2>
+        <p class="lp-sub">
+            Point any compliant OIDC library — ASP.NET Core, Spring, Passport, Authlib, oidc-client —
+            at the issuer and it configures itself. Badges show what <em>this</em> deployment has
+            switched on right now.
+        </p>
+        <div class="lp-grid">
+            @foreach (var s in standards)
+            {
+                <article class="lp-card">
+                    <div class="lp-card-head">
+                        <span class="lp-ico">@Svg(icons[s.Icon])</span>
+                        @if (s.On == null)
+                        {
+                            <span class="lp-tag lp-tag-on">built in</span>
+                        }
+                        else if (s.On == true)
+                        {
+                            <span class="lp-tag lp-tag-on">on@(s.Note != null ? " · " + s.Note : "")</span>
+                        }
+                        else
+                        {
+                            <span class="lp-tag lp-tag-off">off here</span>
+                        }
+                    </div>
+                    <h3>@s.Title</h3>
+                    <p>@s.Text</p>
+                    <span class="lp-spec">@s.Spec</span>
+                </article>
+            }
+        </div>
+    </div>
+</section>
+
+<section class="lp-section lp-section-alt" id="why">
+    <div class="lp-wrap">
+        <p class="lp-eyebrow">Built for small teams</p>
+        <h2>Enterprise-grade identity, sized for a small business</h2>
+        <p class="lp-sub">
+            The things you would otherwise pay a hosted identity service for — without handing over
+            your users, your uptime or your budget.
+        </p>
+        <div class="lp-grid lp-grid-3">
+            <article class="lp-feature">
+                <span class="lp-ico">@Svg(icons["cloud"])</span>
+                <div>
+                    <h3>Runs where your app runs</h3>
+                    <p>It is an ASP.NET Core app: Azure App Service, a container, a VM or your own server. Nothing to subscribe to.</p>
+                </div>
+            </article>
+            <article class="lp-feature">
+                <span class="lp-ico">@Svg(icons["database"])</span>
+                <div>
+                    <h3>Your database, your data</h3>
+                    <p>SQLite, MySQL, PostgreSQL or SQL Server. The schema keeps itself in step on start-up. This host uses <b>@providerName</b>.</p>
+                </div>
+            </article>
+            <article class="lp-feature">
+                <span class="lp-ico">@Svg(icons["layout"])</span>
+                <div>
+                    <h3>Admin console included</h3>
+                    <p>Clients, users, access, scopes and signing keys from the browser, shipped inside the package at <code>/{tenant}/admin</code>.</p>
+                </div>
+            </article>
+            <article class="lp-feature">
+                <span class="lp-ico">@Svg(icons["users"])</span>
+                <div>
+                    <h3>Per-app access control</h3>
+                    <p>Users are granted each app explicitly, with their own claims. Those claims arrive as roles, so <code>[Authorize(Roles)]</code> just works.</p>
+                </div>
+            </article>
+            <article class="lp-feature">
+                <span class="lp-ico">@Svg(icons["layers"])</span>
+                <div>
+                    <h3>Multi-tenant by design</h3>
+                    <p>Every tenant is its own issuer, with its own keys. Serve several brands or customers from one deployment and one operator.</p>
+                </div>
+            </article>
+            <article class="lp-feature">
+                <span class="lp-ico">@Svg(icons["zap"])</span>
+                <div>
+                    <h3>Automate onboarding</h3>
+                    <p>A management API provisions tenants, clients and users from a pipeline, so a new app is a script rather than a ticket.</p>
+                </div>
+            </article>
+        </div>
+
+        <div class="lp-defaults">
+            <span class="lp-ico">@Svg(icons["shield"])</span>
+            <div>
+                <h3>Secure defaults, visible here</h3>
+                <ul>
+                    <li>Lockout @(oidc.MaxFailedSignIns > 0 ? $"after {oidc.MaxFailedSignIns} failed sign-ins for {oidc.LockoutMinutes} min" : "disabled")</li>
+                    <li>Sessions last @(oidc.SessionLifetimeMinutes / 60.0) h</li>
+                    <li>Consent @(oidc.AlwaysRequireConsent ? "always asked" : "asked for third-party clients")</li>
+                    <li>No wildcard redirect URIs or CORS origins</li>
+                    <li>Secrets stored only as PBKDF2 hashes</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="lp-section" id="start">
+    <div class="lp-wrap">
+        <p class="lp-eyebrow">Get started</p>
+        <h2>Two minutes to a running provider. Two settings to sign an app in.</h2>
+
+        <div class="lp-steps">
+            <div class="lp-step">
+                <div class="lp-step-head"><span class="lp-num">1</span><h3>Host the identity provider</h3></div>
+                <p>Any ASP.NET Core app becomes the IdP. The views, styles, admin console and schema all ship inside the package.</p>
+                <div class="lp-code">
+                    <div class="lp-code-bar"><span>terminal</span></div>
+<pre><code>dotnet add package Ark.oAuth.Oidc
+dotnet add package Ark.oAuth.Client
+dotnet user-secrets set "ark_oauth_server:AdminUser:Password" "&lt;choose-one&gt;"</code></pre>
+                </div>
+                <div class="lp-code">
+                    <div class="lp-code-bar"><span>Program.cs</span></div>
+<pre><code><span class="c">// the provider, and its admin console (itself a client)</span>
+builder.Services.AddArkOidcServer(builder.Environment);
+builder.Services.AddArkOidcClient(builder.Configuration);
+builder.Services.AddControllersWithViews();
+
+app.UseRouting();        <span class="c">// must come first</span>
+app.UseArkOidcCors();
+app.UseArkAuthData();    <span class="c">// creates the schema, keys and admin on first run</span>
+app.UseAuthentication();
+app.UseAuthorization();</code></pre>
+                </div>
+            </div>
+
+            <div class="lp-step">
+                <div class="lp-step-head"><span class="lp-num">2</span><h3>Sign an app in against it</h3></div>
+                <p>
+                    Only the <b>authority</b> and <b>client_id</b> are required — endpoints and keys
+                    come from discovery. Prefilled for this host:
+                </p>
+                <div class="lp-code lp-tabs" data-tabs>
+                    <div class="lp-code-bar" role="tablist">
+                        <button type="button" role="tab" aria-selected="true" data-tab="net">.NET</button>
+                        <button type="button" role="tab" aria-selected="false" data-tab="py">Python</button>
+                        <button type="button" role="tab" aria-selected="false" data-tab="node">Node</button>
+                    </div>
+<pre data-panel="net"><code><span class="c">// dotnet add package Ark.oAuth.Client</span>
+builder.Services.AddArkOidcClient(builder.Configuration);
+app.UseRouting(); app.UseAuthentication(); app.UseAuthorization();
+
+<span class="c">// appsettings.json</span>
+"ark_oauth_client": {
+  "Authority": "@ViewBag.Issuer",
+  "ClientId": "&lt;your-client-id&gt;"
+}</code></pre>
+<pre data-panel="py" hidden><code><span class="c"># pip install "ark-oauth-client[flask]"</span>
+from ark_oauth_client.flask import add_ark_oidc_client, current_ark
+
+auth = add_ark_oidc_client(app, {
+    "authority": "@ViewBag.Issuer",
+    "client_id": "&lt;your-client-id&gt;",
+})
+
+@@app.get("/billing")
+@@auth.require_claims("billing.admin")
+def billing(): return current_ark.user["name"]</code></pre>
+<pre data-panel="node" hidden><code><span class="c">// npm install ark-oauth-client</span>
+import { arkExpress } from 'ark-oauth-client';
+
+const auth = arkExpress({
+  authority: '@ViewBag.Issuer',
+  clientId: '&lt;your-client-id&gt;',
+  redirectUri, secret,
+});
+app.use(auth);
+app.get('/billing', auth.requireClaims('billing.admin'), handler);</code></pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="lp-gotchas">
+            <h3>@Svg(icons["book"]) Four things that save you an afternoon</h3>
+            <ol>
+                <li><b>Grant the user the app.</b> Without a user-to-client mapping, sign-in fails with what reads exactly like a wrong password.</li>
+                <li><b>Register both redirect URIs</b> — the sign-in and the sign-out callback. They are matched byte for byte.</li>
+                <li><b>Scopes are a whitelist.</b> An unregistered scope is rejected, not dropped. <code>offline_access</code> is what yields a refresh token.</li>
+                <li><b>Shared browsers need an account switch.</b> The client libraries ship a <code>prompt=login</code> switch — turn it on.</li>
+            </ol>
+        </div>
+    </div>
+</section>
+
+<section class="lp-section lp-section-alt" id="endpoints">
+    <div class="lp-wrap">
+        <p class="lp-eyebrow">Reference</p>
+        <h2>Endpoints on this host</h2>
+        <p class="lp-sub">You rarely need these — discovery hands them to your client — but they are here for curl and Postman.</p>
+        <div class="lp-table" role="table">
+            @foreach (var e in endpoints)
+            {
+                <div class="lp-row" role="row">
+                    <span class="lp-row-name" role="cell">@e.Name</span>
+                    <code class="lp-row-url" role="cell">@e.Url</code>
+                    <button class="lp-copy" type="button" data-copy="@e.Url" aria-label="Copy @e.Name URL">@Svg(icons["copy"])</button>
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+</main>
+
+<footer class="lp-footer">
+    <div class="lp-wrap lp-footer-inner">
+        <div class="lp-footer-brand">
+            <img src="~/img/arkoauth-low-resolution-logo-transparent-background.png" alt="ARK oAuth — Immanuel (Developer)" width="1000" height="191" />
+            <p>MIT licensed and free to use, modify and host.@(string.IsNullOrEmpty(version) ? "" : $" Serving Ark.oAuth.Oidc {version}.")</p>
+        </div>
+        <nav class="lp-footer-links" aria-label="Project links">
+            <div>
+                <h4>Project</h4>
+                <a href="@repo" target="_blank" rel="noopener">Source on GitHub</a>
+                <a href="@repo/blob/main/GETTINGSTARTED.md" target="_blank" rel="noopener">Getting started</a>
+                <a href="@repo/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>
+            </div>
+            <div>
+                <h4>Packages</h4>
+                <a href="https://www.nuget.org/packages/Ark.oAuth.Oidc" target="_blank" rel="noopener">Ark.oAuth.Oidc</a>
+                <a href="https://www.nuget.org/packages/Ark.oAuth.Client" target="_blank" rel="noopener">Ark.oAuth.Client</a>
+                <a href="https://pypi.org/project/ark-oauth-client/" target="_blank" rel="noopener">ark-oauth-client (PyPI)</a>
+                <a href="@repo/tree/main/ark_oauth_client_nodejs" target="_blank" rel="noopener">ark-oauth-client (Node)</a>
+            </div>
+            <div>
+                <h4>This host</h4>
+                <a href="@ViewBag.Discovery" target="_blank" rel="noopener">Discovery</a>
+                <a href="@ViewBag.Jwks" target="_blank" rel="noopener">JWKS</a>
+                <a href="@(signedIn ? consoleUrl : "/Home/SignIn")">Admin console</a>
+            </div>
+        </nav>
+    </div>
+</footer>
+
 </div>
+
+@section Scripts {
+    <script src="~/js/ark-landing.js" asp-append-version="true" defer></script>
+}

@@ -2,6 +2,7 @@ import { getJson } from './http.js';
 import { ArkTokenError } from './errors.js';
 
 const KTY_FOR_ALG = { RS: 'RSA', PS: 'RSA', ES: 'EC' };
+const MAX_REMEMBERED_MISSES = 256;
 
 /**
  * The provider's signing keys, cached and refreshed on rotation.
@@ -65,7 +66,12 @@ export class JwksCache {
       if (!this.#missing.has(marker) && Date.now() - this.#fetchedAt >= this.#cooldownMs) {
         candidates = this.#select(await this.keys({ force: true }), kid, alg);
       }
-      if (candidates.length === 0) this.#missing.add(marker);
+      if (candidates.length === 0) {
+        // Bounded, because every entry is a string an unauthenticated caller chose. Forgetting
+        // them costs at most one more refetch, and the cooldown still caps those.
+        if (this.#missing.size >= MAX_REMEMBERED_MISSES) this.#missing.clear();
+        this.#missing.add(marker);
+      }
     }
 
     if (candidates.length === 0) {

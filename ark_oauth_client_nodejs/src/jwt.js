@@ -48,6 +48,10 @@ export function decodeJwt(token) {
   } catch (cause) {
     throw new ArkTokenError('the token header or payload is not valid JSON.', { cause });
   }
+  const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!isObject(header) || !isObject(payload)) {
+    throw new ArkTokenError('the token header and payload must both be JSON objects.');
+  }
 
   return {
     header,
@@ -151,6 +155,14 @@ export function validateClaims(payload, options = {}) {
     if (requireExp) fail('the token has no `exp` claim.', 'exp');
   } else if (typeof payload.exp !== 'number' || now >= payload.exp + clockToleranceSeconds) {
     fail(`the token expired at ${new Date((payload.exp ?? 0) * 1000).toISOString()}.`, 'exp');
+  }
+
+  // A time claim that is not a number compares false against everything, so it would pass every
+  // check below unnoticed. RFC 7519 §2 makes them NumericDate; anything else is a malformed token.
+  for (const claim of ['nbf', 'iat']) {
+    if (payload[claim] !== undefined && (typeof payload[claim] !== 'number' || !Number.isFinite(payload[claim]))) {
+      fail(`the token's \`${claim}\` is not a NumericDate.`, claim);
+    }
   }
 
   if (payload.nbf !== undefined && now + clockToleranceSeconds < payload.nbf) {
