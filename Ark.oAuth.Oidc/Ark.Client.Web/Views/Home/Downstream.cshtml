@@ -1,0 +1,70 @@
+@model DownstreamModel
+@{
+    ViewData["Title"] = "Downstream API";
+}
+
+<h1>Calling an API with the user's token</h1>
+<p class="sub">
+    The provider's UserInfo endpoint stands in for a protected API here, but the calling pattern is
+    the one to copy.
+</p>
+
+<div class="card">
+    <pre>var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+await request.WithArkTokenAsync(HttpContext);   // attaches the current access token
+
+using var response = await httpClient.SendAsync(request);</pre>
+    <div class="note">
+        <code>WithArkTokenAsync</code> reads the token from the authentication cookie at call time,
+        which matters: the cookie handler may have refreshed it since the page began rendering.
+        Capturing the token into a field or a static client is the usual cause of a call that
+        works for an hour and then starts returning 401.
+    </div>
+</div>
+
+<h2>Result</h2>
+<div class="card">
+    <div class="kv">
+        <div>Endpoint</div><div><code>@Model.Endpoint</code></div>
+        <div>Status</div>
+        <div>
+            @if (Model.Error != null)
+            {
+                <span class="pill bad">failed</span>
+            }
+            else if (Model.StatusCode is >= 200 and < 300)
+            {
+                <span class="pill ok">@Model.StatusCode</span>
+            }
+            else
+            {
+                <span class="pill warn">@Model.StatusCode</span>
+            }
+        </div>
+    </div>
+
+    @if (Model.Error != null)
+    {
+        <div class="note bad">@Model.Error</div>
+    }
+    else if (!string.IsNullOrEmpty(Model.Body))
+    {
+        <div style="margin-top:12px"><pre>@Model.Body</pre></div>
+    }
+</div>
+
+<h2>Protecting an API of your own</h2>
+<div class="card">
+    <p style="margin-top:0">
+        The receiving side is the mirror image — validate the bearer token against the same
+        provider, with signing keys taken from its JWKS document rather than a configured public
+        key:
+    </p>
+    <pre>builder.Services
+    .AddAuthentication()
+    .AddArkOidcApi(arkConfig);   // JWT bearer, keys discovered from {Authority}/.well-known/jwks.json</pre>
+    <div class="note">
+        Set <code>Audience</code> in the API's own <code>ark_oauth_client</code> section so a token
+        minted for a different application cannot be replayed against it.
+    </div>
+</div>

@@ -1,0 +1,46 @@
+@model Ark.oAuth.Oidc.Endpoints.FormPostModel
+@*
+    response_mode=form_post (OAuth 2.0 Form Post Response Mode).
+
+    The response is POSTed to the client rather than appended to the redirect URL, which keeps
+    the authorization code out of browser history, referrer headers and server access logs.
+    The form self-submits; the button exists only for the no-JavaScript case.
+*@
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Signing you in…</title>
+    <style>
+        body {
+            margin: 0; min-height: 100dvh;
+            display: flex; align-items: center; justify-content: center;
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background: #f4f6fb; color: #16192b;
+        }
+        @@media (prefers-color-scheme: dark) { body { background: #0d1017; color: #e8ecf5; } }
+        .box { text-align: center; }
+        button {
+            font: inherit; padding: 10px 18px; border-radius: 9px; cursor: pointer;
+            border: 1px solid currentColor; background: transparent; color: inherit; margin-top: 14px;
+        }
+    </style>
+</head>
+<body onload="document.forms[0].submit()">
+    <div class="box">
+        <p>Signing you in…</p>
+        <form method="post" action="@Model.RedirectUri">
+            @foreach (var field in Model.Fields)
+            {
+                <input type="hidden" name="@field.Key" value="@field.Value" />
+            }
+            <noscript><button type="submit">Continue</button></noscript>
+        </form>
+    </div>
+</body>
+</html>

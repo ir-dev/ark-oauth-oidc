@@ -1,0 +1,67 @@
+@model Ark.oAuth.Oidc.Endpoints.ConsentPageModel
+@{
+    Layout = "~/Views/Oidc/_ArkLayout.cshtml";
+    ViewBag.Brand = Model.Brand;
+    ViewBag.PageTitle = $"Authorize {Model.ClientDisplay}";
+    ViewBag.CardClass = "ark-card--wide";
+}
+
+<h1>Authorize @Model.ClientDisplay</h1>
+<p class="ark-sub">
+    signed in as <strong>@Model.Subject</strong>
+</p>
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="ark-alert ark-alert-error" role="alert"><span>@Model.Error</span></div>
+}
+
+<form method="post" action="@Model.ActionUrl">
+    @Html.AntiForgeryToken()
+
+    <p style="font-size:13.5px;color:var(--ark-fg-muted);margin:0 0 12px;">
+        @Model.ClientDisplay is requesting permission to:
+    </p>
+
+    <ul class="ark-scopes">
+        @foreach (var scope in Model.Scopes)
+        {
+            <li class="ark-scope">
+                @if (scope.Required)
+                {
+                    @* protocol scopes are not optional, so they are shown but not deselectable *@
+                    <input type="hidden" name="scope" value="@scope.Name" />
+                    <input type="checkbox" checked disabled aria-label="@scope.Display (required)" />
+                }
+                else
+                {
+                    <input type="checkbox" name="scope" value="@scope.Name" id="ark-scope-@scope.Name" checked />
+                }
+                <span>
+                    <label class="ark-scope-name" for="ark-scope-@scope.Name">@scope.Display</label>
+                    @if (!string.IsNullOrEmpty(scope.Description))
+                    {
+                        <span class="ark-scope-desc">@scope.Description</span>
+                    }
+                    @if (scope.Required)
+                    {
+                        <span class="ark-scope-required">required</span>
+                    }
+                </span>
+            </li>
+        }
+    </ul>
+
+    <div class="ark-actions">
+        <button class="ark-btn ark-btn-secondary" type="submit" name="ark_action" value="deny">Cancel</button>
+        <button class="ark-btn ark-btn-primary" type="submit" name="ark_action" value="consent">Allow</button>
+    </div>
+</form>
+
+<p class="ark-meta">
+    @if (!string.IsNullOrEmpty(Model.ClientUri))
+    {
+        <a href="@Model.ClientUri" rel="noopener" style="color:inherit;">@Model.ClientUri</a><br />
+    }
+    You can withdraw this permission at any time.
+</p>

@@ -1,33 +1,237 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
+	<!--
+		Ark.oAuth.Client — the OAuth 2.1 / OpenID Connect client, packaged for nuget.org.
+
+		Sdk="Microsoft.NET.Sdk.Web" with OutputType=Library is deliberate. The output is a class
+		library, but it ships an MVC controller and a Razor view (the legacy callback page), so it
+		needs the Web SDK's Razor compilation and its implicit FrameworkReference to
+		Microsoft.AspNetCore.App. The price is that the Web SDK also treats appsettings/wwwroot as
+		*application* content and would pack it into every consuming project — see the
+		"Package payload" group below, which turns that off.
+	-->
+
+	<!-- ============================== Compilation ============================== -->
 	<PropertyGroup>
 		<TargetFramework>net9.0</TargetFramework>
-		<Version>1.0.5.45</Version>
-		<Description>oAuth oidc client implementation</Description>
+		<OutputType>Library</OutputType>
+		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<OutputType>Library</OutputType>
-		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<NeutralLanguage>en</NeutralLanguage>
+		<RootNamespace>Ark.oAuth.Client</RootNamespace>
+		<AssemblyName>Ark.oAuth.Client</AssemblyName>
+	</PropertyGroup>
+
+	<!-- ============================== Version ============================== -->
+	<PropertyGroup>
+		<Version>2.0.14</Version>
+		<AssemblyVersion>2.0.14.0</AssemblyVersion>
+		<FileVersion>2.0.14.0</FileVersion>
+	</PropertyGroup>
+
+	<!-- ============================== Package identity ============================== -->
+	<PropertyGroup>
 		<IsPackable>true</IsPackable>
-		<PackageIcon>ark_logo.png</PackageIcon>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<PackageId>Ark.oAuth.Client</PackageId>
+		<Title>Ark Identity Client — OAuth 2.1 / OpenID Connect for ASP.NET Core</Title>
+		<Description>The OAuth 2.1 / OpenID Connect client for ASP.NET Core applications. One call in Program.cs plus an Authority and a ClientId, and [Authorize] works. It configures ASP.NET Core's own OpenID Connect and cookie handlers rather than hand-rolling the protocol, so PKCE, state, nonce, JWKS rollover and token refresh come from the framework. Also provides the flows outside interactive sign-in: a setup probe that checks local configuration against the provider's live metadata, the client credentials grant, and dynamic client registration (RFC 7591/7592). Built for Ark.oAuth.Oidc, but because it is the stock handler underneath, changing Authority and ClientId points the same application at Entra ID, Okta, Auth0 or Keycloak.</Description>
 		<Authors>Immanuel R</Authors>
-		<Title>Ark's IdP oAuth2 oidc client implementation</Title>
-		<PackageTags>oauth2-oidc; identity server; oauth2 client</PackageTags>
-		<PackageReleaseNotes>trying to do oauth2 a simpler for developers</PackageReleaseNotes>
+		<Company>Immanuel</Company>
+		<Product>Ark Identity Server</Product>
+		<Copyright>Copyright © 2022-2026 Immanuel</Copyright>
+		<PackageTags>oauth oauth2 oauth2.1 oidc openid openid-connect oauth2-client oidc-client identity authentication authorization jwt pkce sso single-sign-on aspnetcore security</PackageTags>
+		<PackageProjectUrl>https://github.com/ir-dev/ark-oauth-oidc</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<PackageIcon>ark_logo.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<DevelopmentDependency>false</DevelopmentDependency>
+		<PackageReleaseNotes>
+2.1.0 — account switching on a shared browser.
+
+Fixes the case where two people use one browser. Single sign-on is browser-wide, so once the first
+person has signed in anywhere, the provider's session answers the authorize request of every other
+client in that browser. The second person opens a different application, is silently signed in as
+the first, is told they do not have access — and has no way back, because the sign-in link returns
+to the same session and gives the same answer.
+
+* ark_oauth_client:AccountSwitch:RequireArkClaims moves the entitlement check to the callback. An
+  account with no ark_claims for this client is refused before the authentication cookie is
+  written, so the browser never holds a session for somebody who cannot use the application.
+* A built-in access-denied page at /ark/no-access names the account that is signed in and offers
+  "Sign in as a different user", which challenges with prompt=login so the provider draws its
+  sign-in form instead of answering from its session. It also replaces the framework's
+  /Account/AccessDenied default for ordinary [Authorize] 403s, which most applications never
+  create and which therefore renders as a 404.
+* HttpContext.ArkSwitchUserAsync / ArkSignOutEverywhereAsync / ArkSignOutLocallyAsync, and
+  ArkChallengeProperties.SwitchUser for a challenge you issue yourself — prompt, login_hint and
+  max_age now reach the authorize request through the authentication properties.
+* An AddArkOidcClient(configuration, options) overload carrying ArkClientEvents: OnEvaluateAccess
+  for an entitlement rule of your own, OnAccessDenied to log it or render your own page.
+
+The page and its two POST endpoints register themselves, so Program.cs needs no edit. Every part is
+off or unchanged by default: consumers on 2.0.3 who set nothing get identical behaviour except that
+an [Authorize] 403 now reaches an explanation instead of a 404.
+
+2.0.3 — version alignment.
+
+No API change over 2.0.2. Rebuilt and republished alongside Ark.oAuth.Oidc 2.0.3 so the two halves
+carry the same version. Consumers on 2.0.2 can upgrade with no code change; the notes for the
+earlier versions apply unchanged and are kept below.
+
+Worth knowing if you are upgrading the provider at the same time: 2.0.3 of Ark.oAuth.Oidc adds
+back-channel logout, and this package does not host the receiving endpoint. An application that
+wants its own cookie dropped when the IdP session ends registers a backchannel_logout_uri and
+implements that endpoint itself — validate the posted logout_token against the provider's JWKS
+(typ "logout+jwt", matching iss and aud, an events claim, no nonce), end the session it names, and
+answer 200 or 204. Applications that register no URI are unaffected and keep behaving exactly as
+they do on 2.0.2.
+
+2.0.2 — version alignment.
+
+No API change over 2.0.1. Rebuilt and republished alongside Ark.oAuth.Oidc 2.0.2 so the two halves
+carry the same version. Consumers on 2.0.1 can upgrade with no code change; the 2.0.1 and 2.0.0
+notes apply unchanged and are kept below.
+
+2.0.1 — maintenance release.
+
+No API change over 2.0.0. Rebuilt and republished alongside Ark.oAuth.Oidc 2.0.1 to keep the two
+halves on the same version, and to carry the packaging fixes below. Consumers on 2.0.0 can upgrade
+with no code change; the 2.0.0 notes apply unchanged and are kept below.
+
+Packaging: the package icon (ark_logo.png) and the readme are packed at the root of the .nupkg, so
+nuget.org and the Visual Studio package manager show both. The icon is referenced through
+PackageIcon rather than the deprecated PackageIconUrl, and is included with an empty PackagePath so
+it lands at the package root on a non-Windows build too.
+
+2.0.0 — the standards release.
+
+* AddArkOidcClient now configures ASP.NET Core's OpenID Connect and cookie handlers against the
+  provider's discovery document. Real PKCE, state and nonce validation, JWKS rollover and silent
+  refresh all come from the framework instead of being hand-rolled.
+* Authority and ClientId are the only required settings — no pasted rsaPublic, no issuer/audience
+  to mirror, no per-tenant key table to keep in step with rotation.
+* AddArkOidcApi for protecting an API with bearer tokens from the same provider.
+* Ark authorization claims (ark_claims) are projected onto the principal as role claims, so
+  [Authorize(Roles = "...")] and policies work directly.
+* GetArkAccessTokenAsync / WithArkTokenAsync read the current token per call, so a token refreshed
+  by the cookie handler is picked up automatically.
+* New services for the non-interactive flows: ArkSetupProbe (configuration vs. live metadata),
+  ArkClientCredentials (client credentials grant with caching) and ArkRegistration (RFC 7591/7592).
+
+Breaking / migration: the standard flow is now the default. Set ark_oauth_client:UseLegacyFlow to
+true to keep the original cookie/bearer middleware while migrating — it does not validate state or
+nonce and should be treated as a migration aid, not a supported configuration.
+
+Packaging: the package no longer ships a sample appsettings file into consuming projects, and now
+carries a readme, an SPDX license expression and a symbol package.
+		</PackageReleaseNotes>
+	</PropertyGroup>
+
+	<!-- ============================== Repository / Source Link ============================== -->
+	<PropertyGroup>
 		<RepositoryUrl>https://github.com/ir-dev/ark-oauth-oidc</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<RepositoryBranch>main</RepositoryBranch>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<DebugType>portable</DebugType>
+		<!-- Deterministic paths only on a CI build; locally they make stack traces unreadable. -->
+		<ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true' or '$(TF_BUILD)' == 'true'">true</ContinuousIntegrationBuild>
 	</PropertyGroup>
 
+	<!-- ============================== API documentation ============================== -->
+	<PropertyGroup>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<!-- Ship IntelliSense for what is documented without demanding a doc comment on every
+		     public member before the package can build. -->
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
+	</PropertyGroup>
+
+	<!-- ============================== Package payload ============================== -->
+	<PropertyGroup>
+		<!-- No wwwroot here, so there is nothing to serve from _content/Ark.oAuth.Client/ and no
+		     reason to emit the static web asset props into the package. -->
+		<StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+		<!--
+			IncludeContentInPack is deliberately NOT set to false here. It reads like the switch for
+			"do not ship application content", but in NuGet.Build.Tasks.Pack.targets it gates the
+			whole _GetPackageFiles target — which is also what collects None items marked
+			Pack="true". Setting it false silently drops the icon and the readme and the build fails
+			with NU5046. Unwanted content is excluded item by item instead.
+		-->
+	</PropertyGroup>
+
+	<!-- ==============================================================================
+		Package root files. PackagePath is empty, not "\" — on a non-Windows build MSBuild takes
+		the backslash literally and the icon lands in a directory called "\", which pack then
+		reports as NU5046 "the icon file does not exist in the package".
+	     ============================================================================== -->
 	<ItemGroup>
-		<PackageReference Include="ark.net.util" Version="1.0.4.14" />
-		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.15" />
-		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.8.0" />
+		<None Include="Icon\ark_logo.png" Pack="true" PackagePath="" Visible="false" />
+		<None Include="README.md" Pack="true" PackagePath="" />
 	</ItemGroup>
 
+	<!-- ==============================================================================
+		AI-prompt-first developer documentation, packed at the .nupkg root beside the
+		README so it travels with the package. nuget.org renders only PackageReadmeFile
+		(README.md), so README links to these; they are here for a developer or an AI
+		coding agent that has the package in hand (unpack, or browse the repo).
+
+		Same Pack="true" PackagePath="" pattern as README: it lands in the package but is
+		NOT contentFiles, so — unlike the appsettings mistake below — it is never copied
+		into a consuming project's tree. PackagePath is empty, not "\", for the non-Windows
+		build reason documented above.
+	     ============================================================================== -->
 	<ItemGroup>
-		<None Include="Icon\ark_logo.png" Pack="true" PackagePath="" />
+		<None Include="AI-PROMPT.md" Pack="true" PackagePath="" />
+		<None Include="AI-RECIPES.md" Pack="true" PackagePath="" />
+		<None Include="API-GUIDE.md" Pack="true" PackagePath="" />
+		<None Include="TROUBLESHOOTING.md" Pack="true" PackagePath="" />
+		<None Include="MIGRATION.md" Pack="true" PackagePath="" />
+	</ItemGroup>
+
+	<!-- ==============================================================================
+		Local development files.
+
+		The Web SDK claims appsettings*.json as Content, and pack copies Content into content/ and
+		contentFiles/ — which is how every release up to 1.0.5.45 shipped appsettings.local.json,
+		a stale v1-era sample complete with a pasted RSA public key and localhost URLs, into every
+		application that referenced this package. Nothing in this library belongs in a consumer's
+		project tree.
+	     ============================================================================== -->
+	<ItemGroup>
+		<Content Remove="appsettings*.json" />
+		<None Include="appsettings*.json" Pack="false" />
+	</ItemGroup>
+
+	<!-- ============================== Dependencies ============================== -->
+	<ItemGroup>
+		<PackageReference Include="ark.net.util" Version="1.0.4.15" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.15" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.15" />
+		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.8.0" />
+		<!--
+			Pinned deliberately, and they must stay on the same version as JsonWebTokens above.
+
+			Microsoft.AspNetCore.Authentication.OpenIdConnect 8.0.15 brings
+			Microsoft.IdentityModel.Protocols[.OpenIdConnect] 7.x, while JsonWebTokens 8.8.0 lifts
+			Microsoft.IdentityModel.Tokens to 8.8.0. The halves do not run together: the 7.x
+			ConfigurationManager fails against 8.x Tokens, GetConfigurationAsync yields no
+			configuration, and every sign-in dies at the challenge with "Cannot redirect to the
+			authorization endpoint, the configuration may be missing or invalid." Nothing warns at
+			build time — the mismatch only shows up on the first challenge.
+
+			Because these are direct references they are also listed as package dependencies, so a
+			consumer inherits the same aligned graph instead of re-deriving the broken one.
+		-->
+		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.8.0" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.8.0" />
 	</ItemGroup>
 
 </Project>

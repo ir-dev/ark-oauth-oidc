@@ -1,0 +1,206 @@
+@model MachineModel
+@{
+    ViewData["Title"] = "Client credentials";
+}
+
+<h1>Client credentials</h1>
+<p class="sub">
+    A service authenticating as itself. No user, no browser, no redirect — the client posts its own
+    credentials to the token endpoint and gets back an access token that represents the service.
+</p>
+
+@if (!Model.DiscoveryOk)
+{
+    <div class="note bad">
+        <strong>The provider's discovery document could not be read.</strong>
+        <code>@Model.DiscoveryError</code>
+    </div>
+}
+else if (!Model.SupportsClientCredentials)
+{
+    <div class="note warn">
+        This provider does not list <code>client_credentials</code> in
+        <code>grant_types_supported</code>.
+    </div>
+}
+
+<h2>When this is the right flow — and when it is not</h2>
+<div class="card">
+    <p style="margin-top:0">
+        Use it for work that belongs to the service: a nightly reconciliation job, one internal API
+        calling another, a webhook processor. The token's <code>sub</code> is the client itself,
+        and there is no user identity anywhere in it.
+    </p>
+    <div class="note bad">
+        <strong>Never use it to act for a signed-in user.</strong> It is tempting when a downstream
+        call fails an authorization check: swap the user's token for the service's and the call
+        succeeds. It succeeds because the service is more privileged than the user, and every audit
+        record downstream now says the service did it. If a request is on behalf of a user, carry
+        that user's token — see <a href="/home/downstream">Downstream API</a>.
+    </div>
+    <p style="margin-bottom:0">
+        There is also no refresh token, by design (RFC 6749 §4.4.3): the client holds its own
+        credentials, so it can simply ask again. Cache the token until shortly before it expires
+        rather than requesting one per call.
+    </p>
+</div>
+
+<h2>Configuration</h2>
+<div class="card">
+    <div class="kv">
+        <div>client_id</div><div><code>@Model.ClientId</code></div>
+        <div>client_secret</div>
+        <div>
+            @if (Model.SecretConfigured)
+            {
+                <span class="pill ok">configured</span>
+            }
+            else
+            {
+                <span class="pill bad">not set</span>
+            }
+        </div>
+        <div>scope</div><div><code>@string.Join(" ", Model.Scopes)</code></div>
+        <div>token_endpoint</div><div><code>@(Model.TokenEndpoint ?? "—")</code></div>
+        <div>grant_type</div><div><code>client_credentials</code></div>
+    </div>
+
+    @if (!Model.SecretConfigured)
+    {
+        <div class="note warn">
+            <strong>The secret is not configured, so the request below will fail.</strong>
+            <p style="margin-bottom:6px">
+                The provider seeds <code>@Model.ClientId</code> without one — a secret committed to
+                source would be the same secret on every deployment. Give it one:
+            </p>
+            <ol style="margin:0 0 8px 18px;padding:0">
+                <li>
+                    Open the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
+                    (<code>@Model.AdminConsoleUrl</code>), find <code>@Model.ClientId</code> under
+                    <strong>Clients</strong>, and press <strong>Regenerate secret</strong>. It is shown
+                    once and stored only as a PBKDF2 hash, so it cannot be read back.
+                </li>
+                <li>
+                    Hand it to this app at start-up, not in <code>appsettings.json</code> (which is in
+                    source control) — or paste it on <a href="/flows/register">dynamic registration</a>
+                    for a single use:
+                </li>
+            </ol>
+            <pre>export sample__Machine__ClientSecret='&lt;the secret&gt;'   # then restart this app</pre>
+        </div>
+    }
+</div>
+
+<h2>Run it</h2>
+<div class="card">
+    <form method="post" action="/flows/machine">
+        @Html.AntiForgeryToken()
+        <button class="btn" type="submit">Request a token</button>
+        <span style="color:var(--fg-muted);font-size:13.5px;margin-left:8px">
+            Bypasses the cache so the exchange is visible.
+        </span>
+    </form>
+</div>
+
+@if (Model.Result != null)
+{
+    var result = Model.Result;
+
+    <h2>The request</h2>
+    <div class="card">
+        <div class="kv">
+            <div>POST</div><div><code>@(string.IsNullOrEmpty(result.TokenEndpoint) ? (Model.TokenEndpoint ?? "—") : result.TokenEndpoint)</code></div>
+            @foreach (var field in result.RequestForm)
+            {
+                <div>@field.Key</div><div><code>@field.Value</code></div>
+            }
+        </div>
+        <div class="note">
+            <code>client_secret_post</code> — the credentials go in the form body. HTTP Basic
+            (<code>client_secret_basic</code>) is equally standard and Ark accepts both; this one is
+            easier to read in a trace. What matters is that the secret goes over TLS and never into
+            a URL, where it would land in logs.
+        </div>
+    </div>
+
+    <h2>The response</h2>
+    <div class="card">
+        @if (result.Succeeded)
+        {
+            <div class="note ok">
+                <strong>@result.StatusCode — token issued.</strong>
+                Valid for @result.ExpiresIn seconds (until @result.ExpiresAt.ToString("u")).
+                @if (!string.IsNullOrEmpty(result.Scope))
+                {
+                    <text>Granted scope: <code>@result.Scope</code>.</text>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="note bad">
+                <strong>@(result.StatusCode == 0 ? "Request failed" : result.StatusCode.ToString()) — @result.Error</strong><br />
+                @result.ErrorDescription
+                @if (result.Error == "invalid_client")
+                {
+                    <div style="margin-top:6px">
+                        The client id is unknown, the secret is wrong, or the client has no secret
+                        yet. A public client (<code>token_endpoint_auth_method: none</code>) is
+                        rejected outright here — this grant has no user to authenticate, so the
+                        secret is the whole of the client's identity.
+                    </div>
+                }
+                else if (result.Error == "invalid_scope")
+                {
+                    <div style="margin-top:6px">
+                        The scope is not registered for this client. Add it to the client's scope
+                        list in the admin console; a scope a client is not registered for is
+                        rejected rather than silently dropped.
+                    </div>
+                }
+                else if (result.Error == "unauthorized_client")
+                {
+                    <div style="margin-top:6px">
+                        The client exists but is not registered for the
+                        <code>client_credentials</code> grant.
+                    </div>
+                }
+            </div>
+        }
+        <pre>@result.RawResponse</pre>
+    </div>
+
+    @if (result.Succeeded && result.AccessTokenPayload != null)
+    {
+        <h2>Access token payload</h2>
+        <div class="card">
+            <pre>@result.AccessTokenPayload</pre>
+            <div class="note">
+                <code>sub</code> is the client id, not a user — that is the signature of this flow.
+                There is no <code>id_token</code> either: an ID token describes an authenticated
+                person, and there is no person here.
+            </div>
+        </div>
+    }
+}
+
+<h2>The code</h2>
+<div class="card">
+    <pre>// Ark.oAuth.Client provides the grant; the token endpoint comes from discovery.
+public class ReconciliationJob(ArkClientCredentials credentials, IConfiguration config)
+{
+    public async Task RunAsync()
+    {
+        // GetTokenAsync caches until shortly before expiry. RequestTokenAsync always
+        // goes to the network - this page uses it so the exchange is visible.
+        var token = await credentials.GetTokenAsync(
+            config["sample:Machine:ClientId"]!,
+            config["sample:Machine:ClientSecret"]!,
+            new[] { "@string.Join(" ", Model.Scopes)" });
+
+        if (!token.Succeeded) throw new InvalidOperationException(token.ErrorDescription);
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
+    }
+}</pre>
+</div>

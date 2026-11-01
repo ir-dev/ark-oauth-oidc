@@ -1,0 +1,60 @@
+@{
+    ViewData["Title"] = "Protected page";
+}
+
+<h1>You are signed in</h1>
+<p class="sub">
+    This page is protected. Reaching it means the whole authorization code flow completed.
+</p>
+
+<div class="card">
+    <h2 style="margin-top:0">What it took</h2>
+    <pre>[Authorize]
+public IActionResult Secure() => View();</pre>
+    <p style="margin-bottom:0">
+        That is the entire protection. When an anonymous request reaches this action the
+        authorization middleware issues a challenge, the OpenID Connect handler builds the
+        authorization request — <code>state</code>, <code>nonce</code>, <code>code_challenge</code>
+        and all — and after sign-in it exchanges the code, validates the ID token against the
+        provider's published keys, and writes an encrypted cookie. Then the request is replayed
+        here.
+    </p>
+</div>
+
+<div class="card">
+    <h2 style="margin-top:0">Things worth not doing</h2>
+    <table>
+        <tr>
+            <td class="k">Reading the token from a cookie</td>
+            <td class="v">
+                Use <code>HttpContext.GetArkAccessTokenAsync()</code>. The token lives inside the
+                encrypted authentication cookie, not in a readable one, and copying a bearer token
+                into an <code>Authorization</code> header on every request is what makes an
+                application CSRF-able.
+            </td>
+        </tr>
+        <tr>
+            <td class="k">Caching the access token</td>
+            <td class="v">
+                The cookie handler refreshes it in the background shortly before it expires, so a
+                cached copy goes stale and starts returning 401s.
+            </td>
+        </tr>
+        <tr>
+            <td class="k">Validating the token yourself</td>
+            <td class="v">
+                Already done, against the provider's JWKS, with issuer, audience, lifetime and
+                <code>nonce</code> all checked. Re-validating by hand is how key rotation breaks.
+            </td>
+        </tr>
+        <tr>
+            <td class="k">Adding an action at the callback path</td>
+            <td class="v">
+                <code>/signin-oidc</code> belongs to the handler. A controller action there
+                shadows it and the callback never completes.
+            </td>
+        </tr>
+    </table>
+</div>
+
+<p><a class="btn ghost" href="/home/profile">See what the sign-in produced</a></p>

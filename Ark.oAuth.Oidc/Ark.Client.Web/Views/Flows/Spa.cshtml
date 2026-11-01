@@ -1,0 +1,382 @@
+@model SpaModel
+@{
+    ViewData["Title"] = "SPA flow";
+
+    // Handed to the page's script as data, not as generated JavaScript. Everything below comes
+    // from configuration or the provider's discovery document, and System.Text.Json escapes it
+    // for embedding, so there is no path from a value to executable code.
+    var config = System.Text.Json.JsonSerializer.Serialize(new
+    {
+        clientId = Model.ClientId,
+        redirectUri = Model.RedirectUri,
+        scope = string.Join(" ", Model.Scopes),
+        authorizationEndpoint = Model.Provider.AuthorizationEndpoint,
+        tokenEndpoint = Model.Provider.TokenEndpoint,
+        userInfoEndpoint = Model.Provider.UserInfoEndpoint,
+        endSessionEndpoint = Model.Provider.EndSessionEndpoint,
+        issuer = Model.Provider.Issuer
+    });
+}
+
+<h1>Single-page application</h1>
+<p class="sub">
+    The authorization code flow with PKCE, run entirely by the browser. No secret, no server-side
+    session, no cookie — this page holds its tokens in a JavaScript variable and loses them on
+    reload.
+</p>
+
+@if (!Model.DiscoveryOk)
+{
+    <div class="note bad">
+        <strong>The provider's discovery document could not be read.</strong>
+        <code>@Model.DiscoveryError</code><br />
+        Nothing on this page can run until it can: the endpoints below come from that document.
+    </div>
+}
+
+<h2>How this differs from the rest of the sample</h2>
+<div class="card">
+    <p style="margin-top:0">
+        A server-side web application keeps a client secret and an encrypted session cookie. A SPA
+        has neither. Its code is downloaded to every visitor, so anything embedded in it is public
+        — which is why it registers as a <strong>public client</strong> and authenticates with
+        nothing at the token endpoint.
+    </p>
+    <p>
+        That leaves PKCE doing the real work. The browser generates a random
+        <code>code_verifier</code>, sends only its SHA-256 hash with the authorization request, and
+        presents the original when it redeems the code. An attacker who intercepts the code — from
+        the address bar, the browser history, a referrer header — cannot use it without the
+        verifier, which never left this tab.
+    </p>
+    <div class="note">
+        <strong>Tokens live in memory only.</strong> <code>localStorage</code> is readable by any
+        script that ends up on the page, including one pulled in by a compromised dependency, and a
+        token there survives the tab. The only thing this page persists is the PKCE verifier and
+        <code>state</code>, in <code>sessionStorage</code>, because the redirect unloads the page —
+        and both are cleared the moment the callback returns.
+    </div>
+    <div class="note warn">
+        <strong>No <code>offline_access</code>.</strong> A refresh token is a long-lived credential
+        and a browser has nowhere safe to keep one. When this access token expires the user
+        re-authenticates — silently, if they still have a session at the provider. An application
+        that needs durable sessions should put a backend in front of the flow (the pattern the rest
+        of this sample uses) rather than keeping a refresh token in the browser.
+    </div>
+</div>
+
+<h2>Register this page as a client</h2>
+<div class="card">
+    <p style="margin-top:0">
+        In the admin console add a client with these values, or create one from the
+        <a href="/flows/register">dynamic registration</a> page.
+    </p>
+    <div class="kv">
+        <div>client_id</div><div><code>@Model.ClientId</code></div>
+        <div>application_type</div><div><code>web</code></div>
+        <div>token_endpoint_auth_method</div><div><code>none</code> <span class="pill">public client</span></div>
+        <div>redirect_uris</div><div><code>@Model.RedirectUri</code></div>
+        <div>grant_types</div><div><code>authorization_code</code></div>
+        <div>scopes</div><div><code>@string.Join(" ", Model.Scopes)</code></div>
+        <div>require_pkce</div><div><code>true</code></div>
+    </div>
+    <div class="note">
+        The redirect URI is this page itself. The provider sends the browser back here with
+        <code>?code=</code> and the script below finishes the exchange — which is why this action is
+        anonymous on the server: an <code>[Authorize]</code> attribute here would start a second,
+        server-side sign-in the moment the callback arrived.
+    </div>
+</div>
+
+<h2>The server must allow this origin</h2>
+<div class="card">
+    <p style="margin-top:0">
+        A SPA redeems its code with <code>fetch</code>, so the token endpoint is called
+        cross-origin. Browsers send a preflight first and refuse the real request unless the server
+        answers it — this is the one part of the SPA flow that fails outside the application
+        entirely, with a console error and no server-side trace.
+    </p>
+    <pre>// Ark.oAuth.Oidc.Host/appsettings.json
+"ark_oauth_server": {
+  "Oidc": {
+    "CorsOrigins": [ "@Model.Origin" ]
+  }
+}</pre>
+    <div class="note">
+        Exact origins only — there is no wildcard, because these endpoints hand out tokens. The
+        policy covers the token, userinfo, discovery and JWKS endpoints; the authorization endpoint
+        is a browser redirect and needs nothing.
+    </div>
+    @if (Model.DiscoveryOk && !Model.SupportsS256)
+    {
+        <div class="note bad">
+            The provider does not advertise <code>S256</code> in
+            <code>code_challenge_methods_supported</code>. A public client cannot safely proceed
+            without it.
+        </div>
+    }
+</div>
+
+<h2>Run it</h2>
+<div class="card">
+    <div id="spa-status" class="note">Not signed in. Nothing has been requested yet.</div>
+    <p style="margin-bottom:0">
+        <button class="btn" id="spa-login" type="button">Start sign-in</button>
+        <button class="btn ghost" id="spa-userinfo" type="button" disabled>Call /userinfo</button>
+        <button class="btn ghost" id="spa-logout" type="button" disabled>Sign out</button>
+    </p>
+</div>
+
+<div id="spa-output" style="display:none">
+    <h2>What came back</h2>
+    <div class="card">
+        <div class="kv">
+            <div>token_type</div><div><code id="out-token-type">—</code></div>
+            <div>expires_in</div><div><code id="out-expires">—</code></div>
+            <div>scope</div><div><code id="out-scope">—</code></div>
+            <div>nonce check</div><div id="out-nonce">—</div>
+        </div>
+        <h2 style="margin-top:22px">ID token payload</h2>
+        <pre id="out-idtoken">—</pre>
+        <h2 style="margin-top:22px">Access token payload</h2>
+        <pre id="out-accesstoken">—</pre>
+        <div id="out-userinfo-wrap" style="display:none">
+            <h2 style="margin-top:22px">/userinfo response</h2>
+            <pre id="out-userinfo">—</pre>
+        </div>
+        <div class="note">
+            Decoded for display, not validated here. An ID token received straight from the token
+            endpoint over TLS may skip signature validation (OIDC Core §3.1.3.7) — the channel and
+            the code exchange already establish where it came from. The <code>nonce</code> check
+            above is the one that still matters: it ties this ID token to the request this tab made.
+        </div>
+    </div>
+</div>
+
+<h2>The whole client, in the page</h2>
+<div class="card">
+    <p style="margin-top:0">
+        No library, no build step. The flow is a redirect, a hash and a form post — the script
+        below is all of it, and it is the same code a framework SDK runs on your behalf.
+    </p>
+</div>
+
+<script type="application/json" id="spa-config">@Html.Raw(config)</script>
+<script>
+(function () {
+    "use strict";
+
+    var cfg = JSON.parse(document.getElementById("spa-config").textContent);
+
+    // In memory only. A reload loses these, deliberately.
+    var tokens = null;
+
+    var statusEl = document.getElementById("spa-status");
+    var outputEl = document.getElementById("spa-output");
+    var loginBtn = document.getElementById("spa-login");
+    var userinfoBtn = document.getElementById("spa-userinfo");
+    var logoutBtn = document.getElementById("spa-logout");
+
+    function status(message, kind) {
+        statusEl.textContent = message;
+        statusEl.className = "note" + (kind ? " " + kind : "");
+    }
+
+    function randomString(bytes) {
+        var buffer = new Uint8Array(bytes);
+        crypto.getRandomValues(buffer);
+        return base64Url(buffer);
+    }
+
+    function base64Url(bytes) {
+        var binary = "";
+        for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    }
+
+    // S256: the authorization request carries the hash, the token request carries the original.
+    async function challengeFor(verifier) {
+        var digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+        return base64Url(new Uint8Array(digest));
+    }
+
+    function decodeJwt(token) {
+        try {
+            var payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+            return JSON.stringify(JSON.parse(atob(payload)), null, 2);
+        } catch (e) {
+            return "(could not decode)";
+        }
+    }
+
+    async function startLogin() {
+        if (!cfg.authorizationEndpoint) {
+            status("The provider's authorization_endpoint is unknown — discovery failed.", "bad");
+            return;
+        }
+
+        var verifier = randomString(32);
+        var state = randomString(16);
+        var nonce = randomString(16);
+
+        // The redirect unloads this page, so the three values that have to survive it go in
+        // sessionStorage — scoped to this tab, and cleared as soon as the callback returns.
+        sessionStorage.setItem("ark_spa_verifier", verifier);
+        sessionStorage.setItem("ark_spa_state", state);
+        sessionStorage.setItem("ark_spa_nonce", nonce);
+
+        var params = new URLSearchParams({
+            response_type: "code",
+            client_id: cfg.clientId,
+            redirect_uri: cfg.redirectUri,
+            scope: cfg.scope,
+            state: state,
+            nonce: nonce,
+            code_challenge: await challengeFor(verifier),
+            code_challenge_method: "S256"
+        });
+
+        window.location.assign(cfg.authorizationEndpoint + "?" + params.toString());
+    }
+
+    async function completeLogin(code, state) {
+        var expectedState = sessionStorage.getItem("ark_spa_state");
+        var verifier = sessionStorage.getItem("ark_spa_verifier");
+        var nonce = sessionStorage.getItem("ark_spa_nonce");
+        sessionStorage.removeItem("ark_spa_state");
+        sessionStorage.removeItem("ark_spa_verifier");
+
+        // Rejecting a mismatched state is what stops someone else's authorization code being
+        // planted in this user's session.
+        if (!expectedState || state !== expectedState) {
+            status("state did not match the value this tab sent — the response was discarded.", "bad");
+            return;
+        }
+        if (!verifier) {
+            status("No code_verifier in this tab. Start the sign-in from this page.", "bad");
+            return;
+        }
+
+        status("Exchanging the authorization code…");
+
+        var body = new URLSearchParams({
+            grant_type: "authorization_code",
+            code: code,
+            redirect_uri: cfg.redirectUri,
+            client_id: cfg.clientId,
+            code_verifier: verifier
+        });
+
+        var response;
+        try {
+            response = await fetch(cfg.tokenEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: body.toString()
+            });
+        } catch (e) {
+            // A cross-origin request the server does not allow fails here, before any status
+            // code exists — the browser blocked it, so there is nothing to read.
+            status("The token request was blocked by the browser. Add this origin to "
+                 + "ark_oauth_server:Oidc:CorsOrigins on the provider and restart it.", "bad");
+            return;
+        }
+
+        var payload = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+            status("Token request failed: " + (payload.error || response.status) + " — "
+                 + (payload.error_description || "no description"), "bad");
+            return;
+        }
+
+        tokens = payload;
+        render(nonce);
+        status("Signed in. Tokens are held in memory in this tab only.", "ok");
+    }
+
+    function render(expectedNonce) {
+        outputEl.style.display = "";
+        document.getElementById("out-token-type").textContent = tokens.token_type || "—";
+        document.getElementById("out-expires").textContent = (tokens.expires_in || "—") + " seconds";
+        document.getElementById("out-scope").textContent = tokens.scope || "—";
+        document.getElementById("out-accesstoken").textContent =
+            tokens.access_token ? decodeJwt(tokens.access_token) : "—";
+
+        var nonceEl = document.getElementById("out-nonce");
+        if (tokens.id_token) {
+            document.getElementById("out-idtoken").textContent = decodeJwt(tokens.id_token);
+            var claims = {};
+            try { claims = JSON.parse(decodeJwt(tokens.id_token)); } catch (e) { }
+            var ok = expectedNonce && claims.nonce === expectedNonce;
+            nonceEl.innerHTML = ok
+                ? '<span class="pill ok">matches</span>'
+                : '<span class="pill bad">does not match</span>';
+        } else {
+            document.getElementById("out-idtoken").textContent = "(no id_token — was openid requested?)";
+            nonceEl.textContent = "—";
+        }
+
+        userinfoBtn.disabled = !tokens.access_token;
+        logoutBtn.disabled = false;
+        loginBtn.disabled = true;
+    }
+
+    async function callUserInfo() {
+        if (!tokens || !tokens.access_token) return;
+        status("Calling /userinfo with the access token…");
+        try {
+            var response = await fetch(cfg.userInfoEndpoint, {
+                headers: { "Authorization": "Bearer " + tokens.access_token }
+            });
+            var text = await response.text();
+            document.getElementById("out-userinfo-wrap").style.display = "";
+            try {
+                document.getElementById("out-userinfo").textContent =
+                    JSON.stringify(JSON.parse(text), null, 2);
+            } catch (e) {
+                document.getElementById("out-userinfo").textContent = text;
+            }
+            status(response.ok
+                ? "Signed in. /userinfo answered " + response.status + "."
+                : "/userinfo answered " + response.status + ".", response.ok ? "ok" : "warn");
+        } catch (e) {
+            status("The /userinfo request was blocked by the browser — the same CORS origin list "
+                 + "covers it.", "bad");
+        }
+    }
+
+    function logout() {
+        // Dropping the tokens ends this application's session. The user still has a session at
+        // the provider, so sending them to end_session_endpoint is what actually signs them out.
+        tokens = null;
+        outputEl.style.display = "none";
+        userinfoBtn.disabled = true;
+        logoutBtn.disabled = true;
+        loginBtn.disabled = false;
+        status("Tokens discarded.", "");
+        if (cfg.endSessionEndpoint) {
+            var params = new URLSearchParams({ post_logout_redirect_uri: cfg.redirectUri });
+            window.location.assign(cfg.endSessionEndpoint + "?" + params.toString());
+        }
+    }
+
+    loginBtn.addEventListener("click", startLogin);
+    userinfoBtn.addEventListener("click", callUserInfo);
+    logoutBtn.addEventListener("click", logout);
+
+    // Callback handling: the provider returns here with ?code= or ?error=.
+    var query = new URLSearchParams(window.location.search);
+    if (query.has("error")) {
+        status("The provider refused the authorization request: " + query.get("error") + " — "
+             + (query.get("error_description") || "no description"), "bad");
+        history.replaceState({}, "", cfg.redirectUri);
+    } else if (query.has("code")) {
+        // Clear the code out of the address bar before doing anything else: it is a credential,
+        // and it should not survive in history, a bookmark or a referrer header.
+        var code = query.get("code");
+        var state = query.get("state");
+        history.replaceState({}, "", cfg.redirectUri);
+        completeLogin(code, state);
+    }
+})();
+</script>

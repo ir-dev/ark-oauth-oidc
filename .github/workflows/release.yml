@@ -1,0 +1,417 @@
+# Release: build, test and publish the reusable packages at ONE version, then record it as a
+# GitHub release.
+#
+#   NuGet  Ark.oAuth.Oidc, Ark.oAuth.Client   Ark.oAuth.Oidc/Ark.oAuth.{Oidc,Client}
+#   PyPI   ark-oauth-client                    ark_oauth_client_py
+#   npm    ark-oauth-client                    ark_oauth_client_nodejs
+#
+# HOW TO RELEASE
+#   1. scripts/version.sh set X.Y.Z, write the notes (CHANGELOG.md, <PackageReleaseNotes>),
+#      commit and push. The commit is what Source Link stamps into the .nupkg, so bump first.
+#   2. Actions -> Release -> Run workflow, on that branch. Tick "dry run" to build and test
+#      without publishing.
+#
+# The version comes from the manifests, never from the run: `scripts/version.sh check` fails the
+# run unless every csproj, pyproject.toml, __init__.py and package.json agree. A registry that
+# already has the version is skipped, not failed, so a half-finished release can be finished by
+# re-running ("Re-run failed jobs" reuses the artifacts already built and published). The tag
+# vX.Y.Z is created by the GitHub release, LAST, so a tag never names something unpublished.
+#
+# ONE-TIME SETUP -- no tokens anywhere; all three registries use Trusted Publishing (OIDC).
+# Every registry is given the same four values: owner ir-dev, repository ark-oauth-oidc,
+# workflow release.yml, environment release.
+#   a. GitHub: Settings -> Environments -> New environment "release". Add yourself as a required
+#      reviewer and/or restrict it to main if you want a click before anything leaves.
+#   b. nuget.org: your profile menu -> Trusted Publishing -> Create policy.
+#      Then GitHub: Settings -> Secrets and variables -> Actions -> Variables ->
+#      NUGET_USER = your nuget.org profile name (the user name, not the email).
+#   c. PyPI: pypi.org/manage/project/ark-oauth-client/settings/publishing -> add a GitHub publisher.
+#   d. npm: ark-oauth-client has never been published, and npm offers a trusted publisher only on
+#      a package that exists. Publish the first version by hand (`npm publish --access public` in
+#      ark_oauth_client_nodejs), then npmjs.com -> the package -> Settings -> Trusted publisher.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Expected version (optional). The run fails unless the manifests already say it."
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run: build, test and verify only; publish nothing, tag nothing."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      nuget_live: ${{ steps.live.outputs.nuget }}
+      pypi_live: ${{ steps.live.outputs.pypi }}
+      npm_live: ${{ steps.live.outputs.npm }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Every manifest carries the same version
+        id: version
+        env:
+          EXPECTED: ${{ inputs.version }}
+        run: echo "version=$(scripts/version.sh check "$EXPECTED")" >> "$GITHUB_OUTPUT"
+
+      - name: Not released yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          tag="v$VERSION"
+          problem=""
+          if gh release view "$tag" >/dev/null 2>&1; then
+            problem="GitHub release $tag already exists. Bump with scripts/version.sh set."
+          else
+            at=$(git ls-remote origin "refs/tags/$tag^{}" "refs/tags/$tag" | head -1 | cut -f1)
+            if [ -n "$at" ] && [ "$at" != "$GITHUB_SHA" ]; then
+              problem="tag $tag already exists at $at, not at $GITHUB_SHA."
+            fi
+          fi
+          if [ -n "$problem" ]; then
+            if [ "$DRY_RUN" = "true" ]; then echo "::warning::$problem"; else echo "::error::$problem"; exit 1; fi
+          fi
+          if [ "$GITHUB_REF_NAME" != "main" ]; then
+            echo "::warning::Releasing from $GITHUB_REF_NAME, not main. The csproj files declare RepositoryBranch=main."
+          fi
+
+      - name: What the registries already have
+        id: live
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # 200 -> true, 404 -> false, anything else stops the run rather than guessing.
+          live() {
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "$1")
+            case "$code" in
+              200) echo true ;;
+              404) echo false ;;
+              *) echo "::error::$1 answered HTTP $code" >&2; return 1 ;;
+            esac
+          }
+          oidc=$(live "https://api.nuget.org/v3-flatcontainer/ark.oauth.oidc/$VERSION/ark.oauth.oidc.nuspec")
+          client=$(live "https://api.nuget.org/v3-flatcontainer/ark.oauth.client/$VERSION/ark.oauth.client.nuspec")
+          pypi=$(live "https://pypi.org/pypi/ark-oauth-client/$VERSION/json")
+          npm=$(live "https://registry.npmjs.org/ark-oauth-client/$VERSION")
+          # Both NuGet packages are pushed together; --skip-duplicate covers one being live already.
+          nuget=$([ "$oidc" = true ] && [ "$client" = true ] && echo true || echo false)
+          {
+            echo "nuget=$nuget"
+            echo "pypi=$pypi"
+            echo "npm=$npm"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Release $VERSION from \`${GITHUB_SHA::7}\` ($GITHUB_REF_NAME)"
+            echo
+            echo "| Package | Already on the registry? |"
+            echo "|---|---|"
+            echo "| NuGet Ark.oAuth.Oidc | $oidc |"
+            echo "| NuGet Ark.oAuth.Client | $client |"
+            echo "| PyPI ark-oauth-client | $pypi |"
+            echo "| npm ark-oauth-client | $npm |"
+            echo
+            echo "Packages already live are built and tested, but not published or attached again."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build-dotnet:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 9.0.x
+
+      # Each project is named explicitly: a plain-SDK project added later defaults IsPackable to
+      # true and would otherwise ship a junk package. --source replaces Ark.oAuth.Oidc/nuget.config,
+      # whose local Debug feed does not exist on a runner. GeneratePackageOnBuild=false because,
+      # left on, the build step packs before the DLL is on disk and pack fails with NU5026.
+      - name: Pack
+        working-directory: Ark.oAuth.Oidc
+        run: |
+          for p in Ark.oAuth.Oidc/Ark.oAuth.Oidc.csproj Ark.oAuth.Client/Ark.oAuth.Client.csproj; do
+            dotnet restore "$p" --source https://api.nuget.org/v3/index.json
+            dotnet pack "$p" -c Release --no-restore -p:GeneratePackageOnBuild=false \
+              -o "$GITHUB_WORKSPACE/out/nuget"
+          done
+
+      # nuget_deploy.txt STEP 5: the right files, and no application content leaking into consumers.
+      - name: Verify packages
+        working-directory: out/nuget
+        run: |
+          ls -l
+          for id in Ark.oAuth.Oidc Ark.oAuth.Client; do
+            for ext in nupkg snupkg; do
+              [ -f "$id.$VERSION.$ext" ] || { echo "::error::missing $id.$VERSION.$ext"; exit 1; }
+            done
+            leaked=$(unzip -l "$id.$VERSION.nupkg" | grep -icE "content/|contentFiles/|staticwebassets" || true)
+            [ "$leaked" = 0 ] || { echo "::error::$id ships $leaked content entries"; exit 1; }
+            unzip -l "$id.$VERSION.nupkg" | grep -q " README.md$" || { echo "::error::$id has no README"; exit 1; }
+          done
+          [ "$(ls | wc -l)" = 4 ] || { echo "::error::expected exactly 4 files"; exit 1; }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nuget
+          path: out/nuget/
+          if-no-files-found: error
+
+  build-python:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    defaults:
+      run:
+        working-directory: ark_oauth_client_py
+    steps:
+      - uses: actions/checkout@v7
+
+      # uv.lock is gitignored, so the cache keys on pyproject.toml.
+      - uses: astral-sh/setup-uv@v10
+        with:
+          cache-dependency-glob: ark_oauth_client_py/pyproject.toml
+
+      - name: Test
+        run: uv run --extra dev pytest -q
+
+      - name: Build
+        run: |
+          rm -rf dist
+          uv build
+          ls -l dist
+          [ -f "dist/ark_oauth_client-$VERSION-py3-none-any.whl" ] && [ -f "dist/ark_oauth_client-$VERSION.tar.gz" ]
+
+      - name: README renders on PyPI
+        run: uvx twine check dist/*
+
+      # pip_deploy.txt STEP 5e: run the suite against the INSTALLED wheel, which catches a module
+      # left out of the wheel that the source tree would hide.
+      - name: Test the built wheel
+        run: |
+          check="$RUNNER_TEMP/wheelcheck"
+          mkdir -p "$check" && cp -r tests "$check/"
+          wheel="$PWD/dist/ark_oauth_client-$VERSION-py3-none-any.whl"
+          cd "$check"
+          uv run --no-project --with "${wheel}[flask]" --with pytest -- pytest tests -q
+          uv run --no-project --with "$wheel" -- python -c \
+            "import ark_oauth_client as a, sys; sys.exit(0 if a.__version__ == '$VERSION' else 'wheel says ' + a.__version__)"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python
+          path: ark_oauth_client_py/dist/
+          if-no-files-found: error
+
+  build-node:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    defaults:
+      run:
+        working-directory: ark_oauth_client_nodejs
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # No runtime dependencies, so nothing to install before testing.
+      - name: Test
+        run: npm test
+
+      - name: Pack
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/out/npm"
+          npm pack --pack-destination "$GITHUB_WORKSPACE/out/npm"
+          ls -l "$GITHUB_WORKSPACE/out/npm"
+          [ -f "$GITHUB_WORKSPACE/out/npm/ark-oauth-client-$VERSION.tgz" ]
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: npm
+          path: out/npm/
+          if-no-files-found: error
+
+  publish-nuget:
+    needs: [prepare, build-dotnet, build-python, build-node]
+    if: ${{ !inputs.dry_run && needs.prepare.outputs.nuget_live == 'false' }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: nuget
+          path: nuget
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 9.0.x
+
+      - name: NUGET_USER is set
+        env:
+          NUGET_USER: ${{ vars.NUGET_USER }}
+        run: '[ -n "$NUGET_USER" ] || { echo "::error::Set the NUGET_USER repository variable (see the setup notes at the top of release.yml)"; exit 1; }'
+
+      # Trusted Publishing: swaps this run's OIDC token for an API key that lives about an hour.
+      - uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      # Pushing X.nupkg pushes X.snupkg beside it; pushing the .snupkg separately is a 409.
+      - name: Push
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          for pkg in nuget/*.nupkg; do
+            dotnet nuget push "$pkg" --api-key "$NUGET_API_KEY" \
+              --source https://api.nuget.org/v3/index.json --skip-duplicate
+          done
+
+  publish-pypi:
+    needs: [prepare, build-dotnet, build-python, build-node]
+    if: ${{ !inputs.dry_run && needs.prepare.outputs.pypi_live == 'false' }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: python
+          path: dist
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: false
+
+      - name: Publish
+        run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/*
+
+  publish-npm:
+    needs: [prepare, build-dotnet, build-python, build-node]
+    if: ${{ !inputs.dry_run && needs.prepare.outputs.npm_live == 'false' }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: npm
+          path: npm
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted Publishing needs npm 11.5.1 or later; provenance is attached automatically.
+      - name: Publish
+        run: |
+          npm install -g npm@latest
+          npm publish npm/*.tgz --access public
+
+  release:
+    needs: [prepare, build-dotnet, build-python, build-node, publish-nuget, publish-pypi, publish-npm]
+    # Skipped publish jobs (already live) are fine; a failed or cancelled one stops the release.
+    if: ${{ !cancelled() && !failure() && !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      NUGET_LIVE: ${{ needs.prepare.outputs.nuget_live }}
+      PYPI_LIVE: ${{ needs.prepare.outputs.pypi_live }}
+      NPM_LIVE: ${{ needs.prepare.outputs.npm_live }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: built
+
+      # Attach only what this run published. A package that was live before the run was rebuilt
+      # here, and the rebuild is not byte-identical to what the registry serves.
+      - name: Collect assets
+        run: |
+          mkdir assets
+          [ "$NUGET_LIVE" = true ] || cp built/nuget/* assets/
+          [ "$PYPI_LIVE" = true ]  || cp built/python/* assets/
+          [ "$NPM_LIVE" = true ]   || cp built/npm/* assets/
+          if [ -n "$(ls assets)" ]; then
+            (cd assets && sha256sum * > SHA256SUMS.txt)
+          fi
+          ls -l assets
+
+      - uses: actions/attest-build-provenance@v4
+        if: ${{ hashFiles('assets/*') != '' }}
+        with:
+          subject-path: assets/*
+
+      - name: Release notes
+        run: |
+          {
+            echo "All packages at **$VERSION**, built from \`$GITHUB_SHA\`."
+            echo
+            echo "| Package | Registry | Install |"
+            echo "|---|---|---|"
+            echo "| Ark.oAuth.Oidc (IdP) | [nuget.org](https://www.nuget.org/packages/Ark.oAuth.Oidc/$VERSION) | \`dotnet add package Ark.oAuth.Oidc --version $VERSION\` |"
+            echo "| Ark.oAuth.Client (.NET) | [nuget.org](https://www.nuget.org/packages/Ark.oAuth.Client/$VERSION) | \`dotnet add package Ark.oAuth.Client --version $VERSION\` |"
+            echo "| ark-oauth-client (Python) | [PyPI](https://pypi.org/project/ark-oauth-client/$VERSION/) | \`pip install \"ark-oauth-client[flask]==$VERSION\"\` |"
+            echo "| ark-oauth-client (Node) | [npm](https://www.npmjs.com/package/ark-oauth-client/v/$VERSION) | \`npm install ark-oauth-client@$VERSION\` |"
+            already=""
+            [ "$NUGET_LIVE" = true ] && already="$already NuGet"
+            [ "$PYPI_LIVE" = true ]  && already="$already PyPI"
+            [ "$NPM_LIVE" = true ]   && already="$already npm"
+            if [ -n "$already" ]; then
+              echo
+              echo "Already on the registry before this release, so not attached here:$already."
+            fi
+            # The Python changelog is the one kept per version; quote its entry when there is one.
+            entry=$(awk -v v="## $VERSION" '$0 == v {on=1; next} on && /^## / {exit} on' ark_oauth_client_py/CHANGELOG.md)
+            if [ -n "$entry" ]; then
+              echo
+              echo "## Changes"
+              echo "$entry"
+            fi
+          } > notes.md
+          cat notes.md
+
+      - name: Create the release and the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          gh release create "v$VERSION" assets/* \
+            --target "$GITHUB_SHA" \
+            --title "$VERSION" \
+            --notes-file notes.md \
+            --generate-notes
+          echo "Released [v$VERSION]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/v$VERSION)" >> "$GITHUB_STEP_SUMMARY"

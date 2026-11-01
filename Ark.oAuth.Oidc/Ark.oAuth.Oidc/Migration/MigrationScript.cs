@@ -1,7 +1,6 @@
 ﻿using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Mysqlx.Expr;
 
 namespace Ark.oAuth.Oidc
 {
@@ -34,26 +33,40 @@ namespace Ark.oAuth.Oidc
                 }
             }
         }
-        public void Rollback(DataAccess da, string name)
+        /// <summary>The reason a run failed, for the caller to report. Null after a run that worked.</summary>
+        public string? Error { get; private set; }
+
+        public bool Rollback(DataAccess da, string name)
         {
             try
             {
-                Down(da, name); //Ark.oAuth.Oidc.Migration.Sql.down.00001_sql.sql - rollback embedded name
+                Down(da, name).GetAwaiter().GetResult(); //Ark.oAuth.Oidc.Migration.Sql.down.00001_sql.sql - rollback embedded name
+                da.Log("migration_rollback", $"{name}", "rollback successful", "");
+                return true;
             }
-            catch { }
+            catch (Exception exp)
+            {
+                Error = exp.Message;
+                da.LogError(exp, "migration_rollback", $"{name}", "rollback failed with exception.");
+                return false;
+            }
         }
         public bool Migrate(DataAccess da, string name)
         {
             try
             {
+                // Awaited. Up() is async, and firing it without awaiting meant the caller was told
+                // the migration had run while the statements were still on their way to the
+                // database — and a failure surfaced on a thread nobody was watching.
                 //name = "Ark.oAuth.Oidc.Migration.Sql.up.00001_sql.sql"; //embedded file name
-                Up(da, name);
-                da.Log("migrattion_failed", $"{name}", $"migration successful", "");
+                Up(da, name).GetAwaiter().GetResult();
+                da.Log("migration", $"{name}", $"migration successful", "");
                 return true;
             }
             catch (Exception exp)
             {
-                da.LogError(exp, "migrattion_failed", $"{name}", $"migration files with exception.");
+                Error = exp.Message;
+                da.LogError(exp, "migration_failed", $"{name}", $"migration failed with exception.");
                 return false;
             }
         }
@@ -61,48 +74,20 @@ namespace Ark.oAuth.Oidc
         protected async Task Up(DataAccess da, string name)
         {
             var pn = da.GetCtx().Database.ProviderName;
-            var nn = "Ark.oAuth.Oidc.Migration.{0}.up." + name;
-            switch (pn)
-            {
-                case "Microsoft.EntityFrameworkCore.SqlServer":
-                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Sqlserver"));
-                    break;
-                case "Npgsql.EntityFrameworkCore.PostgreSQL":
-                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Postgres"));
-                    break;
-                case "MySql.EntityFrameworkCore":
-                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Mysql")); 
-                    break;
-                case "Microsoft.EntityFrameworkCore.Sqlite":
-                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Sqlite"));
-                    break;
-                default:
-                    throw new NotSupportedException($"Up failed: {pn}, {name}");
-            }
+            // Same provider-to-folder mapping the start-up updater uses, so a script run by hand
+            // and the same script run automatically can never come from different folders.
+            var folder = ArkSchemaUpdater.ProviderFolder(pn) ?? throw new NotSupportedException($"Up failed: {pn}, {name}");
+            sqlScript = ReadEmbeddedResource($"Ark.oAuth.Oidc.Migration.{folder}.up.{name}")
+                ?? throw new FileNotFoundException($"no embedded script '{name}' for provider {pn}.");
             await da.ExecuteRaw(sqlScript);
         }
 
         protected async Task Down(DataAccess da, string name)
         {
             var pn = da.GetCtx().Database.ProviderName;
-            var nn = "Ark.oAuth.Oidc.Migration.{0}.down." + name;
-            switch (pn)
-            {
-                case "Microsoft.EntityFrameworkCore.SqlServer":
-                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Sqlserver"));
-                    break;
-                case "Npgsql.EntityFrameworkCore.PostgreSQL":
-                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Postgres"));
-                    break;
-                case "MySql.EntityFrameworkCore":
-                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Mysql"));
-                    break;
-                case "Microsoft.EntityFrameworkCore.Sqlite":
-                    sqlScript = ReadEmbeddedResource(string.Format(nn, "Sqlite"));
-                    break;
-                default:
-                    throw new NotSupportedException($"Down failed: {pn}, {name}");
-            }
+            var folder = ArkSchemaUpdater.ProviderFolder(pn) ?? throw new NotSupportedException($"Down failed: {pn}, {name}");
+            sqlScript = ReadEmbeddedResource($"Ark.oAuth.Oidc.Migration.{folder}.down.{name}")
+                ?? throw new FileNotFoundException($"no embedded rollback script '{name}' for provider {pn}.");
             await da.ExecuteRaw(sqlScript);
         }
     }

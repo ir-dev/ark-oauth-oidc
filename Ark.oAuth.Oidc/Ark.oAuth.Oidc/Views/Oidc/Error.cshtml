@@ -1,0 +1,25 @@
+@model Ark.oAuth.Oidc.Endpoints.OidcErrorPageModel
+@{
+    Layout = "~/Views/Oidc/_ArkLayout.cshtml";
+    ViewBag.Brand = Model.Brand;
+    ViewBag.PageTitle = $"Sign-in problem · {Model.Brand.HostName}";
+}
+
+<div class="ark-icon-badge ark-icon-badge--error" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="10" r="8.5" stroke="currentColor" stroke-width="1.6" />
+        <path d="M10 5.8v5M10 13.6h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+    </svg>
+</div>
+
+<h1>We couldn't complete that request</h1>
+<p class="ark-sub">@(Model.Description ?? "The application's sign-in request was not valid.")</p>
+
+@*
+    The error code is shown because it is what a developer needs to diagnose the problem, and
+    it is never sensitive — it is the same value the spec would return to the client.
+*@
+<p class="ark-meta">
+    Error code <code>@Model.Error</code><br />
+    If this keeps happening, pass this code to whoever supports the application.
+</p>

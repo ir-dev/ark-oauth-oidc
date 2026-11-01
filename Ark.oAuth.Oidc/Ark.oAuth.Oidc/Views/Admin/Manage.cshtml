@@ -1,0 +1,390 @@
+﻿@*
+    The v2 admin console, shipped inside the server package.
+
+    Self-contained on purpose: Layout is null and the page brings its own shell, because a view
+    that renders inside a NuGet package cannot assume the host has a layout, a _ViewStart, tag
+    helpers, or a wwwroot serving its stylesheet. The CSS and JS come from AdminController.Asset,
+    which reads them straight out of this assembly — so a host that references the package and
+    calls nothing else still gets the console at /{tenant}/admin.
+
+    A host that wants a different console can still override this file by placing its own
+    Views/Admin/Manage.cshtml in the application; application views win over package views.
+
+    Provisioning and activation are not here: they are on Provisioning.cshtml, reached from the
+    navigation in the shared header and restricted to the operator account. Both pages are driven
+    by the same ark-admin.js, which wires each section only where its elements exist.
+*@
+@{
+    Layout = null;
+    var tenant = ViewBag.Tenant as Ark.oAuth.ArkTenant;
+    var title = tenant?.display ?? tenant?.name ?? (ViewBag.TenantId as string);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin" />
+    <title>Admin console — @title</title>
+    @* Pinned. The v1 console loaded three copies of Tabulator from an unpinned URL, so it
+       silently took whatever version was published that day. *@
+    <link href="https://unpkg.com/tabulator-tables@@5.5.2/dist/css/tabulator.min.css" rel="stylesheet" />
+    <link href="@ViewBag.ConsoleCss" rel="stylesheet" />
+</head>
+<body>
+@await Html.PartialAsync("_ConsoleHeader")
+
+<main class="ark-main"
+      id="ark-admin"
+      data-page="console"
+      data-app-root="@ViewBag.AppRoot"
+      data-user-password-mode="@ViewBag.UserPasswordMode"
+      data-tenant-id="@ViewBag.TenantId">
+
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Tenants</h2>
+            <span class="ark-hint">issuer, audience and session lifetime — one signing key each, published at JWKS</span>
+            <span class="ark-spacer"></span>
+            <button id="tenant-add" type="button">Add tenant</button>
+        </div>
+        <div class="ark-panel-body"><div id="tbl_tenant"></div></div>
+    </section>
+
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Clients</h2>
+            <span class="ark-hint">applications allowed to request tokens</span>
+            <span class="ark-spacer"></span>
+            <button id="client-add" type="button">Add client</button>
+        </div>
+        <div class="ark-panel-body"><div id="tbl_client"></div></div>
+    </section>
+
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Users</h2>
+            <span class="ark-hint">accounts that can sign in</span>
+            <span class="ark-spacer"></span>
+            <button id="user-add" type="button">Add user</button>
+        </div>
+        <div class="ark-panel-body"><div id="tbl_user"></div></div>
+    </section>
+
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Scopes</h2>
+            <span class="ark-hint">what a client may ask for, and the identity claims each one unlocks</span>
+            <span class="ark-spacer"></span>
+            <button id="scope-add" type="button">Add scope</button>
+        </div>
+        <div class="ark-panel-body"><div id="tbl_scope"></div></div>
+    </section>
+
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Access mapping</h2>
+            <span class="ark-hint">authorization claims a user carries for a given client — these ride in the access token as <code>ark_claims</code></span>
+            <span class="ark-spacer"></span>
+            <select id="sel-user" aria-label="User"><option value="">Select user</option></select>
+            <select id="sel-tenant" aria-label="Tenant"><option value="">Select tenant</option></select>
+            <button id="mapping-add" type="button">Add mapping</button>
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-map">
+                <div class="ark-map-table"><div id="tbl_mapping"></div></div>
+                <aside class="ark-palette">
+                    <h4>Claims</h4>
+                    <input type="text" id="claim-new" placeholder="Add a claim…" aria-label="New claim" />
+                    <div class="ark-tag-list" id="claim-list"><!-- draggable claims --></div>
+                </aside>
+            </div>
+        </div>
+    </section>
+</main>
+
+@await Html.PartialAsync("_ConsoleFooter")
+
+@* ---------- client editor ---------- *@
+<div class="ark-drawer-backdrop" id="client-drawer-backdrop"></div>
+<aside class="ark-drawer" id="client-drawer" aria-label="Client editor">
+    <div class="ark-drawer-head">
+        <h3 id="client-drawer-title">Client</h3>
+        <span class="ark-topbar-spacer"></span>
+        <button type="button" class="ark-btn-ghost" id="client-drawer-close">Close</button>
+    </div>
+    <div class="ark-drawer-body">
+        <fieldset>
+            <legend>Identity</legend>
+            <div class="ark-grid-2">
+                <div class="ark-field">
+                    <label for="cl-tenant_id">Tenant</label>
+                    <select id="cl-tenant_id"></select>
+                </div>
+                <div class="ark-field">
+                    <label for="cl-client_id">client_id</label>
+                    <input type="text" id="cl-client_id" autocomplete="off" />
+                    <div class="ark-note">Immutable in practice — clients are configured against it.</div>
+                </div>
+                <div class="ark-field">
+                    <label for="cl-client_name">client_name</label>
+                    <input type="text" id="cl-client_name" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-display">display</label>
+                    <input type="text" id="cl-display" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-name">name</label>
+                    <input type="text" id="cl-name" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-domain">domain</label>
+                    <input type="text" id="cl-domain" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-application_type">application_type</label>
+                    <select id="cl-application_type">
+                        <option value="web">web</option>
+                        <option value="spa">spa</option>
+                        <option value="native">native</option>
+                        <option value="service">service</option>
+                    </select>
+                </div>
+                <div class="ark-field">
+                    <label for="cl-token_endpoint_auth_method">token_endpoint_auth_method</label>
+                    <select id="cl-token_endpoint_auth_method">
+                        <option value="client_secret_basic">client_secret_basic</option>
+                        <option value="client_secret_post">client_secret_post</option>
+                        <option value="private_key_jwt">private_key_jwt</option>
+                        <option value="none">none (public client)</option>
+                    </select>
+                    <div class="ark-note">A client with no secret is public and must use PKCE.</div>
+                </div>
+            </div>
+            <div class="ark-field">
+                <label for="cl-client_logo">client_logo</label>
+                <div class="ark-logo-edit">
+                    <span class="ark-logo-preview" id="cl-logo-preview" data-empty="true"></span>
+                    <div class="ark-logo-edit-main">
+                        <input type="text" id="cl-client_logo" placeholder="https://… or a data: URI" />
+                        <div class="ark-note">
+                            <button type="button" class="ark-btn-ghost ark-btn-sm" id="cl-logo-pick">Upload image…</button>
+                            <button type="button" class="ark-btn-ghost ark-btn-sm" id="cl-logo-clear">Remove</button>
+                            <input type="file" id="cl-logo-file" accept="image/*" hidden />
+                            Uploaded images are inlined as a data URI, so nothing has to be hosted
+                            anywhere — keep them under 256&nbsp;KB. Shown on the sign-in page beside
+                            the host's own logo; with none set the page lays itself out around the
+                            host mark alone.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Redirect URIs</legend>
+            <div class="ark-field">
+                <label for="cl-redirect_uris">redirect_uris</label>
+                <textarea id="cl-redirect_uris" spellcheck="false" placeholder="https://app.example.com/signin-oidc"></textarea>
+                <div class="ark-note">One per line. Matched exactly — no wildcards or prefix matching.</div>
+            </div>
+            <div class="ark-field">
+                <label for="cl-post_logout_redirect_uris">post_logout_redirect_uris</label>
+                <textarea id="cl-post_logout_redirect_uris" spellcheck="false"></textarea>
+                <div class="ark-note">One per line.</div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Back-channel logout</legend>
+            <div class="ark-field">
+                <label for="cl-backchannel_logout_uri">backchannel_logout_uri</label>
+                <input type="text" id="cl-backchannel_logout_uri" placeholder="https://app.example.com/backchannel-logout" />
+                <div class="ark-note">
+                    Server-to-server. When a session this client took part in ends, a signed
+                    <code>logout_token</code> is POSTed here as
+                    <code>application/x-www-form-urlencoded</code>; answer 200 or 204. Leave it
+                    blank and the client is never told, so its own sign-in outlives the one here.
+                    https only, except on loopback.
+                </div>
+            </div>
+            <div class="ark-check">
+                <input type="checkbox" id="cl-backchannel_logout_session_required" />
+                <label for="cl-backchannel_logout_session_required">backchannel_logout_session_required</label>
+            </div>
+            <div class="ark-note">
+                On: the logout token carries <code>sid</code>, so the client ends exactly the
+                session that ended here. Off: it carries only <code>sub</code>, and the client is
+                expected to end every session it holds for that user.
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Grants and scopes</legend>
+            <div class="ark-grid-2">
+                <div class="ark-field">
+                    <label>grant_types</label>
+                    <div id="cl-grant_types"></div>
+                </div>
+                <div class="ark-field">
+                    <label>response_types</label>
+                    <div id="cl-response_types"></div>
+                </div>
+            </div>
+            <div class="ark-field">
+                <label>scopes</label>
+                <div id="cl-scopes"></div>
+                <div class="ark-note">Drawn from the scope catalogue above.</div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Policy</legend>
+            <div class="ark-grid-2">
+                <div>
+                    <div class="ark-check"><input type="checkbox" id="cl-is_active" /><label for="cl-is_active">is_active</label></div>
+                    <div class="ark-check"><input type="checkbox" id="cl-require_pkce" /><label for="cl-require_pkce">require_pkce</label></div>
+                    <div class="ark-check"><input type="checkbox" id="cl-require_par" /><label for="cl-require_par">require_par</label></div>
+                </div>
+                <div>
+                    <div class="ark-check"><input type="checkbox" id="cl-require_consent" /><label for="cl-require_consent">require_consent</label></div>
+                    <div class="ark-check"><input type="checkbox" id="cl-refresh_token_rotation" /><label for="cl-refresh_token_rotation">refresh_token_rotation</label></div>
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Lifetimes (seconds)</legend>
+            <div class="ark-grid-2">
+                <div class="ark-field">
+                    <label for="cl-access_token_lifetime_seconds">access_token</label>
+                    <input type="number" id="cl-access_token_lifetime_seconds" min="30" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-id_token_lifetime_seconds">id_token</label>
+                    <input type="number" id="cl-id_token_lifetime_seconds" min="30" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-refresh_token_lifetime_seconds">refresh_token</label>
+                    <input type="number" id="cl-refresh_token_lifetime_seconds" min="60" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-authorization_code_lifetime_seconds">authorization_code</label>
+                    <input type="number" id="cl-authorization_code_lifetime_seconds" min="10" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-expire_mins">expire_mins (v1 sessions)</label>
+                    <input type="number" id="cl-expire_mins" min="1" />
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Client metadata</legend>
+            <div class="ark-grid-2">
+                <div class="ark-field">
+                    <label for="cl-client_uri">client_uri</label>
+                    <input type="text" id="cl-client_uri" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-policy_uri">policy_uri</label>
+                    <input type="text" id="cl-policy_uri" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-tos_uri">tos_uri</label>
+                    <input type="text" id="cl-tos_uri" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-jwks_uri">jwks_uri</label>
+                    <input type="text" id="cl-jwks_uri" />
+                    <div class="ark-note">Used to verify <code>private_key_jwt</code> assertions.</div>
+                </div>
+            </div>
+            <div class="ark-field">
+                <label for="cl-contacts">contacts</label>
+                <textarea id="cl-contacts" spellcheck="false"></textarea>
+                <div class="ark-note">One per line.</div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Client secret</legend>
+            <div class="ark-field">
+                <div id="cl-secret-state" class="ark-note" style="margin:0 0 8px"></div>
+                <button type="button" class="ark-btn-ghost" id="cl-secret-reset">Regenerate secret</button>
+                <div class="ark-note">
+                    Only the PBKDF2 hash is stored, so the value is shown once and cannot be read back.
+                    Save the client first if you have just changed its authentication method.
+                </div>
+                <div id="cl-secret-value" hidden style="margin-top:10px"></div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>v1 compatibility</legend>
+            <div class="ark-note" style="margin-bottom:12px">
+                Only used by the deprecated <code>/oauth/{tenant}/v1/…</code> endpoints. New
+                integrations discover everything from the issuer and do not need these.
+            </div>
+            <div class="ark-grid-2">
+                <div class="ark-field">
+                    <label for="cl-redirect_url">redirect_url</label>
+                    <input type="text" id="cl-redirect_url" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-logout_url">logout_url</label>
+                    <input type="text" id="cl-logout_url" />
+                </div>
+                <div class="ark-field">
+                    <label for="cl-redirect_relative">redirect_relative</label>
+                    <input type="text" id="cl-redirect_relative" />
+                </div>
+            </div>
+        </fieldset>
+    </div>
+    <div class="ark-drawer-foot">
+        <button type="button" id="client-save">Save client</button>
+        <button type="button" class="ark-btn-ghost" id="client-integrate">Setup page</button>
+        <span class="ark-topbar-spacer"></span>
+        <button type="button" class="ark-btn-danger" id="client-delete">Delete</button>
+    </div>
+</aside>
+
+<div class="ark-modal-backdrop" id="user-password-modal-backdrop" hidden></div>
+<section class="ark-modal" id="user-password-modal" aria-labelledby="user-password-title" hidden>
+    <div class="ark-modal-head">
+        <h3 id="user-password-title">Set password</h3>
+        <button type="button" class="ark-btn-ghost ark-btn-sm" id="user-password-cancel-top">Close</button>
+    </div>
+    <div class="ark-modal-body">
+        <div class="ark-field">
+            <label for="user-password-login">User</label>
+            <input type="text" id="user-password-login" readonly />
+            <div class="ark-note">This updates the password immediately and clears any pending email reset state.</div>
+        </div>
+        <div class="ark-grid-2">
+            <div class="ark-field">
+                <label for="user-password-value">New password</label>
+                <input type="password" id="user-password-value" autocomplete="new-password" />
+            </div>
+            <div class="ark-field">
+                <label for="user-password-confirm">Confirm password</label>
+                <input type="password" id="user-password-confirm" autocomplete="new-password" />
+            </div>
+        </div>
+        <div class="ark-note" id="user-password-status"></div>
+    </div>
+    <div class="ark-modal-foot">
+        <button type="button" id="user-password-save">Update password</button>
+        <button type="button" class="ark-btn-ghost" id="user-password-cancel">Cancel</button>
+    </div>
+</section>
+
+<div class="ark-toasts" id="ark-toasts" aria-live="polite"></div>
+
+<script src="https://unpkg.com/tabulator-tables@@5.5.2/dist/js/tabulator.min.js"></script>
+<script src="@ViewBag.ConsoleJs"></script>
+</body>
+</html>

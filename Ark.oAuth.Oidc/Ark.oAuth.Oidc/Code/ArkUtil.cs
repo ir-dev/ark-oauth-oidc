@@ -1,9 +1,21 @@
 ﻿using Ark.oAuth.Oidc;
 using System.Security.Cryptography;
-using System.Text.Json.Nodes;
 
 namespace Ark.oAuth
 {
+    /// <summary>
+    /// An RSA signing pair, base64 SubjectPublicKeyInfo / PKCS#8.
+    ///
+    /// Named rather than anonymous because <see cref="ArkUtil.GetKeys"/> is typed
+    /// <c>dynamic</c>: anonymous types are internal, so `dd.private_key` binds inside this
+    /// assembly but throws RuntimeBinderException for anyone consuming the package.
+    /// </summary>
+    public class ArkKeyPair
+    {
+        public string private_key { get; set; } = "";
+        public string public_key { get; set; } = "";
+    }
+
     public class ArkUtil
     {
         private readonly IConfiguration _config;
@@ -22,18 +34,26 @@ namespace Ark.oAuth
                 _ser.EmailConfig.port);
         }
         public ArkAuthServerConfig ServerConfig { get { return _ser; } }
-        //https://rsa-key-gen.immanuel.co/api/keys
-        public async Task<dynamic> GetKeys()
+        /// <summary>
+        /// Mints an RSA signing pair for a tenant, base64 SubjectPublicKeyInfo / PKCS#8 — the
+        /// same shape <see cref="Oidc.Protocol.ArkCrypto.GenerateRsaKeyPair"/> writes into
+        /// signing_keys, so a tenant created here and one created by the bootstrap seed are
+        /// indistinguishable.
+        ///
+        /// This used to GET https://rsa-key-gen.immanuel.co/api/keys. That service is a single
+        /// point of failure the server cannot do without — while it is down (it currently answers
+        /// 503) creating a tenant fails outright — and it put the tenant's *private* key on the
+        /// wire and on a third-party machine. Seeding and key rotation were already moved
+        /// in-process; this was the last caller left behind.
+        /// </summary>
+        public Task<dynamic> GetKeys()
         {
-            HttpClient httpClient = new HttpClient();
-            httpClient.BaseAddress = new Uri(@"https://rsa-key-gen.immanuel.co");
-            var resp = await httpClient.GetStringAsync("api/keys");
-            var jo = System.Text.Json.JsonSerializer.Deserialize<JsonObject>(resp);
-            return new
+            var (publicKey, privateKey) = Oidc.Protocol.ArkCrypto.GenerateRsaKeyPair();
+            return Task.FromResult<dynamic>(new ArkKeyPair
             {
-                private_key = jo["private_key"]?.GetValue<string>(),
-                public_key = jo["public_key"]?.GetValue<string>()
-            };
+                private_key = privateKey,
+                public_key = publicKey
+            });
         }
         //public async Task<string> GetActivationEmail(ArkTenantConfig tc, string uid)
         //{

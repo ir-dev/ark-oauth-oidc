@@ -1,0 +1,18 @@
+@model ErrorViewModel
+@{
+    ViewData["Title"] = "Error";
+}
+
+<h1>Something went wrong</h1>
+<p class="sub">The request could not be completed.</p>
+
+@if (Model.ShowRequestId)
+{
+    <div class="card">
+        <div class="kv">
+            <div>Request ID</div><div><code>@Model.RequestId</code></div>
+        </div>
+    </div>
+}
+
+<p><a class="btn ghost" href="/">Back to setup</a></p>

@@ -1,0 +1,201 @@
+﻿@*
+    No third-party CSS or scripts. The styles are inlined so the app runs offline and under a
+    strict Content-Security-Policy, matching the sign-in and consent pages it redirects to.
+*@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] — Ark client sample</title>
+    <style>
+        :root {
+            --bg: #f7f7f8;
+            --surface: #ffffff;
+            --surface-2: #f2f2f4;
+            --border: #e2e2e6;
+            --fg: #17171a;
+            --fg-muted: #6a6a73;
+            --accent: #4f46e5;
+            --accent-soft: #eef0ff;
+            --ok: #0d7a4a;
+            --ok-soft: #e6f5ee;
+            --warn: #9a6200;
+            --warn-soft: #fdf3e0;
+            --bad: #b3261e;
+            --bad-soft: #fdecea;
+            --radius: 10px;
+        }
+
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #111114;
+                --surface: #1a1a1f;
+                --surface-2: #222228;
+                --border: #313139;
+                --fg: #ececf1;
+                --fg-muted: #9a9aa5;
+                --accent: #8b85ff;
+                --accent-soft: #23213a;
+                --ok: #4ade80;
+                --ok-soft: #16281f;
+                --warn: #fbbf24;
+                --warn-soft: #2a2113;
+                --bad: #f87171;
+                --bad-soft: #2c1a1a;
+            }
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--fg);
+            font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 15px;
+            line-height: 1.55;
+        }
+
+        header.nav {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 20px;
+        }
+
+        .nav-inner {
+            max-width: 940px; margin: 0 auto;
+            display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+            min-height: 56px;
+        }
+
+        .brand { font-weight: 650; letter-spacing: -.01em; margin-right: 6px; }
+        .nav a { color: var(--fg-muted); text-decoration: none; font-size: 14px; }
+        .nav a:hover { color: var(--fg); }
+        .nav .spacer { margin-left: auto; }
+
+        main { max-width: 940px; margin: 0 auto; padding: 28px 20px 60px; }
+
+        h1 { font-size: 23px; letter-spacing: -.02em; margin: 0 0 6px; }
+        h2 {
+            font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em;
+            color: var(--fg-muted); margin: 30px 0 10px;
+        }
+        p.sub { color: var(--fg-muted); margin: 0 0 24px; }
+
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 18px 20px; margin-bottom: 14px;
+        }
+
+        code {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 12.8px; word-break: break-all;
+        }
+
+        pre {
+            margin: 0; padding: 14px; overflow-x: auto;
+            background: var(--surface-2); border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 12.5px; line-height: 1.6;
+        }
+
+        .kv {
+            display: grid; grid-template-columns: minmax(150px, auto) 1fr; gap: 1px;
+            border: 1px solid var(--border); border-radius: var(--radius);
+            overflow: hidden; background: var(--border);
+        }
+        .kv > div { background: var(--surface); padding: 9px 12px; font-size: 13.5px; min-width: 0; }
+        .kv > div:nth-child(odd) { background: var(--surface-2); font-weight: 560; }
+        .kv > div:nth-child(even) { overflow-wrap: anywhere; }
+
+        .pill {
+            display: inline-block; padding: 2px 9px; border-radius: 99px;
+            font-size: 11.5px; font-weight: 600;
+            background: var(--accent-soft); color: var(--accent);
+        }
+        .pill.ok { background: var(--ok-soft); color: var(--ok); }
+        .pill.warn { background: var(--warn-soft); color: var(--warn); }
+        .pill.bad { background: var(--bad-soft); color: var(--bad); }
+
+        .note {
+            border-left: 3px solid var(--accent); background: var(--accent-soft);
+            padding: 11px 14px; border-radius: 0 var(--radius) var(--radius) 0;
+            font-size: 13.5px; margin: 12px 0;
+        }
+        .note.ok { border-color: var(--ok); background: var(--ok-soft); }
+        .note.warn { border-color: var(--warn); background: var(--warn-soft); }
+        .note.bad { border-color: var(--bad); background: var(--bad-soft); }
+
+        .btn {
+            display: inline-block; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent;
+            background: var(--accent); color: #fff; font-size: 14px; font-weight: 560;
+            text-decoration: none; cursor: pointer; font-family: inherit;
+        }
+        .btn.ghost { background: transparent; color: var(--fg); border-color: var(--border); }
+
+        ol.steps { padding-left: 20px; margin: 0; }
+        ol.steps > li { margin-bottom: 18px; }
+        ol.steps > li::marker { color: var(--fg-muted); font-weight: 650; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+        th { color: var(--fg-muted); font-weight: 560; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+        td.k { white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+        td.v { overflow-wrap: anywhere; }
+        .scroll-x { overflow-x: auto; }
+
+        form.inline { display: inline; margin: 0; }
+
+        input[type=text], input:not([type]), select {
+            font: inherit; font-size: 13.5px; padding: 5px 8px;
+            background: var(--bg); color: var(--fg);
+            border: 1px solid var(--border); border-radius: 7px;
+        }
+        input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    </style>
+</head>
+<body>
+    <header class="nav">
+        <div class="nav-inner">
+            <span class="brand">Ark client sample</span>
+            <a href="/">Setup</a>
+            <a href="/home/secure">Protected page</a>
+            <a href="/home/profile">Profile</a>
+            <a href="/home/roles">Roles</a>
+            <a href="/home/downstream">Downstream API</a>
+            <span style="color:var(--border)">|</span>
+            <a href="/flows/spa">SPA</a>
+            <a href="/flows/machine">Machine</a>
+            <a href="/flows/register">Registration</a>
+            <span class="spacer"></span>
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <span style="font-size:13.5px;color:var(--fg-muted)">
+                    @(User.FindFirst("name")?.Value ?? User.FindFirst("email")?.Value ?? "signed in")
+                </span>
+                @* On a shared browser the name above may not belong to the person reading it.
+                   This posts to the client library's switch-user endpoint, which drops this
+                   application's cookie and challenges with prompt=login, so the provider draws
+                   its sign-in form instead of answering from the session it already has. *@
+                <form class="inline" method="post" action="/ark/switch-user">
+                    <input type="hidden" name="returnUrl" value="@(Context.Request.Path + Context.Request.QueryString)" />
+                    <button class="btn ghost" type="submit">Not you?</button>
+                </form>
+                <form class="inline" method="post" action="/account/logout">
+                    @Html.AntiForgeryToken()
+                    <button class="btn ghost" type="submit">Sign out</button>
+                </form>
+            }
+            else
+            {
+                <a class="btn" href="/account/login?returnUrl=@Uri.EscapeDataString(Context.Request.Path + Context.Request.QueryString)">Sign in</a>
+            }
+        </div>
+    </header>
+    <main>
+        @RenderBody()
+    </main>
+</body>
+</html>

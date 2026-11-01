@@ -1,0 +1,40 @@
+@model Ark.oAuth.Oidc.Endpoints.LoginPageModel
+@{
+    Layout = "~/Views/Oidc/_ArkLayout.cshtml";
+    ViewBag.Brand = Model.Brand;
+    ViewBag.PageTitle = $"Sign in · {Model.Brand.HostName}";
+}
+
+<h1>Sign in</h1>
+<p class="ark-sub">to continue to <strong>@Model.ClientDisplay</strong></p>
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="ark-alert ark-alert-error" role="alert">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
+            <path d="M8 4.6v4.2M8 11.2h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
+        <span>@Model.Error</span>
+    </div>
+}
+
+<form method="post" action="@Model.ActionUrl" autocomplete="on" novalidate>
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="ark_action" value="signin" />
+
+    <div class="ark-field">
+        <label for="ark-username">Username</label>
+        <input id="ark-username" class="ark-input" type="text" name="username" value="@Model.Username"
+               autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"
+               required autofocus placeholder="you@@example.com" />
+    </div>
+
+    <div class="ark-field">
+        <label for="ark-password">Password</label>
+        <input id="ark-password" class="ark-input" type="password" name="password"
+               autocomplete="current-password" required placeholder="••••••••" />
+    </div>
+
+    <button class="ark-btn ark-btn-primary" type="submit" style="margin-top:6px;">Sign in</button>
+</form>

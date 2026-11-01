@@ -56,6 +56,152 @@ namespace Ark.oAuth
         public ArkTenant tenant { get; set; }
         public int expire_mins { get; set; } = 480; // durations
         public string at { get; set; }
+
+        // ---------------------------------------------------------------------
+        // Standard OAuth 2.1 / OIDC client registration metadata (RFC 7591 names).
+        // The legacy single-valued redirect_url / logout_url above are retained so the
+        // v1 compatibility endpoints keep working; the plural forms win when populated.
+        // ---------------------------------------------------------------------
+
+        /// <summary>RFC 7591 client_name. Falls back to <see cref="display"/> / <see cref="name"/> when unset.</summary>
+        public string? client_name { get; set; }
+        /// <summary>
+        /// PBKDF2 hash of the client secret. Null for public clients.
+        ///
+        /// Never serialised, in either direction: the management API used to return it to the
+        /// console's browser in every client listing, and accept a replacement from any posted
+        /// row. <see cref="has_client_secret"/> is what the console reads instead, and the stored
+        /// value survives a save that does not carry it (see <c>DataAccess.UpsertClient</c>).
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? client_secret_hash { get; set; }
+        /// <summary>Whether a secret is set — the one fact about it the console needs.</summary>
+        [NotMapped]
+        public bool has_client_secret => !string.IsNullOrEmpty(client_secret_hash);
+        public DateTime? client_secret_expires_at { get; set; }
+        /// <summary>client_secret_basic | client_secret_post | private_key_jwt | none</summary>
+        public string token_endpoint_auth_method { get; set; } = "client_secret_basic";
+        /// <summary>web | native | spa | service</summary>
+        public string application_type { get; set; } = "web";
+        public string? client_uri { get; set; }
+        public string? policy_uri { get; set; }
+        public string? tos_uri { get; set; }
+        /// <summary>Client's own JWKS endpoint, used to verify private_key_jwt assertions.</summary>
+        public string? jwks_uri { get; set; }
+
+        public string? redirect_uris_ { get; set; }
+        [NotMapped]
+        public List<string> redirect_uris
+        {
+            get => JsonList.Read(redirect_uris_);
+            set => redirect_uris_ = JsonList.Write(value);
+        }
+        public string? post_logout_redirect_uris_ { get; set; }
+        [NotMapped]
+        public List<string> post_logout_redirect_uris
+        {
+            get => JsonList.Read(post_logout_redirect_uris_);
+            set => post_logout_redirect_uris_ = JsonList.Write(value);
+        }
+        public string? grant_types_ { get; set; }
+        [NotMapped]
+        public List<string> grant_types
+        {
+            get => JsonList.Read(grant_types_);
+            set => grant_types_ = JsonList.Write(value);
+        }
+        public string? response_types_ { get; set; }
+        [NotMapped]
+        public List<string> response_types
+        {
+            get => JsonList.Read(response_types_);
+            set => response_types_ = JsonList.Write(value);
+        }
+        public string? scopes_ { get; set; }
+        [NotMapped]
+        public List<string> scopes
+        {
+            get => JsonList.Read(scopes_);
+            set => scopes_ = JsonList.Write(value);
+        }
+        public string? contacts_ { get; set; }
+        [NotMapped]
+        public List<string> contacts
+        {
+            get => JsonList.Read(contacts_);
+            set => contacts_ = JsonList.Write(value);
+        }
+
+        public bool require_pkce { get; set; } = true;
+        public bool require_par { get; set; }
+        public bool require_consent { get; set; }
+        public bool refresh_token_rotation { get; set; } = true;
+        public bool is_active { get; set; } = true;
+
+        public int access_token_lifetime_seconds { get; set; } = 3600;
+        public int id_token_lifetime_seconds { get; set; } = 3600;
+        public int refresh_token_lifetime_seconds { get; set; } = 1209600; // 14 days
+        public int authorization_code_lifetime_seconds { get; set; } = 60;
+
+        /// <summary>Hash of the registration access token issued by dynamic client registration (RFC 7591).</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? registration_access_token_hash { get; set; }
+
+        /// <summary>
+        /// Where to POST a logout token when a session this client took part in ends
+        /// (OIDC Back-Channel Logout 1.0 §2.2). Empty means the client is not notified — its own
+        /// application cookie then outlives the IdP session, which is the whole problem
+        /// back-channel logout exists to solve.
+        /// </summary>
+        public string? backchannel_logout_uri { get; set; }
+
+        /// <summary>
+        /// Whether the logout token has to carry a <c>sid</c>. On by default, matching how this
+        /// server signs users in: every browser session has a session id and puts it in the
+        /// id_token, so a client can end exactly the session that was named rather than every
+        /// session it holds for that subject.
+        /// </summary>
+        public bool backchannel_logout_session_required { get; set; } = true;
+
+        /// <summary>True when this client has somewhere to receive a logout token.</summary>
+        [NotMapped]
+        public bool SupportsBackChannelLogout => !string.IsNullOrWhiteSpace(backchannel_logout_uri);
+
+        // --- effective views: fall back to the legacy single-valued columns ---
+
+        [NotMapped]
+        public List<string> EffectiveRedirectUris =>
+            redirect_uris.Count > 0
+                ? redirect_uris
+                : (string.IsNullOrWhiteSpace(redirect_url) ? new List<string>() : new List<string> { redirect_url });
+
+        [NotMapped]
+        public List<string> EffectivePostLogoutRedirectUris =>
+            post_logout_redirect_uris.Count > 0
+                ? post_logout_redirect_uris
+                : (string.IsNullOrWhiteSpace(logout_url) ? new List<string>() : new List<string> { logout_url });
+
+        [NotMapped]
+        public List<string> EffectiveGrantTypes =>
+            grant_types.Count > 0
+                ? grant_types
+                : new List<string> { "authorization_code", "refresh_token" };
+
+        [NotMapped]
+        public List<string> EffectiveResponseTypes =>
+            response_types.Count > 0 ? response_types : new List<string> { "code" };
+
+        [NotMapped]
+        public List<string> EffectiveScopes =>
+            scopes.Count > 0
+                ? scopes
+                : new List<string> { "openid", "profile", "email", "offline_access" };
+
+        /// <summary>A client with no secret is public and must therefore use PKCE.</summary>
+        [NotMapped]
+        public bool IsPublicClient =>
+            string.IsNullOrEmpty(client_secret_hash) ||
+            string.Equals(token_endpoint_auth_method, "none", StringComparison.OrdinalIgnoreCase);
     }
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     [Index(nameof(email), IsUnique = true)]
@@ -65,12 +211,31 @@ namespace Ark.oAuth
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public string id { get; set; } 
         public string email { get; set; } // used for login
+        /// <summary>
+        /// The password hash — or, for a service account, its long-lived bearer token. Neither is
+        /// serialised: the user listing used to send both to the console's browser.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
         public string? hash_pw { get; set; }
+        /// <summary>
+        /// The activation / reset link's secret. Whoever holds it sets the password on the
+        /// anonymous reset page, so it goes out by email only, never through the API.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
         public string? ref_uid { get; set; } // referecee uid, used in url sent to email
         public bool? reset_mode { get; set; } = false; // password reset mode is in enabled sate, if false, all is well
         public bool? emailed { get; set; } = false; // set to true, once email is sent successful 
         public string name { get; set; } // full name
         public string type { get; set; } = "user"; // type of account - defaul: null, 'user', 'service'
+        /// <summary>
+        /// Whether the account may sign in at all, anywhere on the server.
+        ///
+        /// The client-level switch is <see cref="ArkClient.is_active"/>; this is the user-level
+        /// one, and the two are reported separately at sign-in so the person in front of the
+        /// screen is told which of the two is off rather than being handed a credentials error
+        /// for something their password cannot fix.
+        /// </summary>
+        public bool is_active { get; set; } = true;
         public string at { get; set; }
     }
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]

@@ -1,0 +1,67 @@
+@{
+    ViewData["Title"] = "Roles";
+    var required = (string)ViewBag.RequiredRole;
+    var granted = (bool)ViewBag.Granted;
+    var roles = (List<string>)ViewBag.Roles;
+}
+
+<h1>Authorization claims</h1>
+<p class="sub">
+    Ark's per-user-per-client claims ride in the access token as <code>ark_claims</code> and are
+    projected onto the role claim type, so ordinary role checks work against them.
+</p>
+
+<div class="card">
+    @if (granted)
+    {
+        <div class="note ok" style="margin-top:0">
+            <strong>Granted.</strong> This user holds <code>@required</code> for this client, so
+            <code>[Authorize(Roles = "@required")]</code> would let the request through.
+        </div>
+    }
+    else
+    {
+        <div class="note warn" style="margin-top:0">
+            <strong>Not granted.</strong> This user does not hold <code>@required</code> for this
+            client. Add it under <strong>Access mapping</strong> in the admin console, then sign
+            out and back in — claims are written into the token when it is issued, so an existing
+            session will not pick them up.
+        </div>
+    }
+
+    <div class="kv">
+        <div>Required claim</div><div><code>@required</code></div>
+        <div>Claims held</div>
+        <div>
+            @if (roles.Count == 0)
+            {
+                <span style="color:var(--fg-muted)">none</span>
+            }
+            else
+            {
+                foreach (var role in roles)
+                {
+                    <span class="pill">@role</span>
+                    <text> </text>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+<h2>How to use them</h2>
+<div class="card">
+    <pre>// role check
+[Authorize(Roles = "@required")]
+public IActionResult Billing() => View();
+
+// or as a policy, when the rule is more than one claim
+builder.Services.AddAuthorization(options =&gt;
+    options.AddPolicy("CanRefund", p =&gt; p.RequireRole("billing.admin", "billing.supervisor")));</pre>
+    <div class="note">
+        The projection happens in <code>OnTokenValidated</code>: <code>ark_claims</code> values are
+        read from the access token and added to the identity as
+        <code>ark_oauth_client:RoleClaimType</code> claims. Change that setting and the checks
+        above change with it, so pick one convention per organisation and keep it.
+    </div>
+</div>

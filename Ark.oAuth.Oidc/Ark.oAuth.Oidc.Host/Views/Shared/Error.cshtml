@@ -1,0 +1,16 @@
+﻿@model ErrorViewModel
+@{
+    ViewData["Title"] = "Error";
+}
+
+<div class="ark-hero">
+    <h1>Something went wrong</h1>
+    <p>An unexpected error occurred while processing your request.</p>
+
+    @if (Model.ShowRequestId)
+    {
+        <p><strong>Request ID:</strong> <code>@Model.RequestId</code></p>
+    }
+
+    <p><a class="ark-btn" href="/">Back to start</a></p>
+</div>

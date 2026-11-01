@@ -1,0 +1,25 @@
+Sample prompt to use this from claude code
+
+Sample prompts
+
+Standing up a new provider
+
+"Build me a new IdP server using the Ark OIDC packages, tenant foo, Postgres."
+"Scaffold an OAuth 2.1 / OpenID Connect provider the way we did ark-cms-auth."
+"Set up an Ark IdP for this project — what's the wiring order again?"
+
+Adding a client app
+
+"Add OIDC login to this app against our Ark IdP."
+"Wire this ASP.NET app up as a relying party using Ark.oAuth.Client."
+"Register a new application against the IdP and give a user access to it."
+
+Debugging — these hit the traps section
+
+"The IdP host crashes on a fresh deploy and never recovers." → the UseArkAuthData startup-ordering deadlock
+"Sign-in fails with what looks like a wrong password but the password is right." → missing user↔client access mapping
+"OIDC redirect_uri comes back as http:// behind App Service." → forwarded headers
+"NullReferenceException in ArkUtil's constructor." → missing EmailConfig
+"Console shows an empty grid and /api/oauth/v1/user/list 500s." → the non-SQLite schema-updater no-op
+
+One caveat worth stating: the recipe is written against 2.0.3 and verified on this repo's SQLite path. If you reuse it after a package upgrade, the wiring order and traps are the parts most likely to need re-checking — the internals note records how to decompile the packages when the docs run out.

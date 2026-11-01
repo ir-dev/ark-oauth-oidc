@@ -1,0 +1,40 @@
+﻿@{
+    ViewData["Title"] = "Start";
+    var authError = ViewBag.AuthError as string;
+}
+
+<div class="ark-hero">
+    <h1>@ViewBag.HostName</h1>
+    <p>
+        OAuth 2.1 and OpenID Connect provider. Point any standard OIDC client library at the
+        issuer below and it will configure itself from the discovery document.
+    </p>
+
+    @if (!string.IsNullOrEmpty(authError))
+    {
+        <div class="ark-alert">Sign-in failed: @authError</div>
+    }
+
+    <dl class="ark-kv">
+        <dt>Tenant</dt>
+        <dd><code>@ViewBag.TenantId</code></dd>
+        <dt>Issuer</dt>
+        <dd><code>@ViewBag.Issuer</code></dd>
+        <dt>Discovery</dt>
+        <dd><a href="@ViewBag.Discovery" target="_blank" rel="noopener"><code>@ViewBag.Discovery</code></a></dd>
+        <dt>JWKS</dt>
+        <dd><a href="@ViewBag.Jwks" target="_blank" rel="noopener"><code>@ViewBag.Jwks</code></a></dd>
+    </dl>
+
+    <p style="margin-top:26px">
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <a class="ark-btn" href="/admin">Open admin console</a>
+            <a class="ark-btn ark-btn-ghost" href="/Home/SignOutAll" style="margin-left:8px">Sign out</a>
+        }
+        else
+        {
+            <a class="ark-btn" href="/Home/SignIn">Sign in to the admin console</a>
+        }
+    </p>
+</div>

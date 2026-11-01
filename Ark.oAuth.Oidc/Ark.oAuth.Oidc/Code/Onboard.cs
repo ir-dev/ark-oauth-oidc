@@ -1,5 +1,7 @@
 ﻿
 using System.Text;
+using ark.net.util;
+using ZstdSharp;
 using ZstdSharp.Unsafe;
 
 namespace Ark.oAuth
@@ -31,6 +33,17 @@ namespace Ark.oAuth
             await PopulateUserClaims(ten_id, client_id, user_email, claim_keys);
             return _error.ToString();
         }
+        public async Task<ArkUser?> UserOnboard(string ten_id, 
+            string client_id,
+            List<string> claim_keys,
+            string user_email,
+            string pw,
+            string full_name,
+            string user_type)
+        {
+            await PopulateClaim(claim_keys);
+            return await PopulateUser(ten_id, client_id, user_email, pw, full_name, utype: user_type);
+        }
         async Task PopulateUserClaims(string ten_id, string client_id, string user_email, List<string> claim_keys)
         {
             var cll = await _da.GetClient(ten_id, client_id);
@@ -44,10 +57,16 @@ namespace Ark.oAuth
                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
             });
         }
-        async Task PopulateUser(string ten_id, string client_id, string user_email, string default_pw, string suffix = $"", string utype = "user")
+        async Task<ArkUser?> PopulateUser(string ten_id, 
+            string client_id,
+            string user_email,
+            string default_pw,
+            string full_name = $"",
+            string suffix = $"",
+            string utype = "user")
         {
             var cll = await _da.GetClient(ten_id, client_id);
-            if (cll == null) return;
+            if (cll == null) throw new ApplicationException($"invalid {client_id}/{ten_id}");
             var usr = await _da.UpsertUser(new ArkUser()
             {
                 email = user_email,
@@ -56,9 +75,10 @@ namespace Ark.oAuth
                 reset_mode = false,
                 type = utype,
                 //name = $"{user_email} [Admin]",
-                name = $"{user_email}{suffix}",
+                name = full_name.AnyNull() ? $"{user_email}{suffix}" : full_name,
                 at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
             });
+            return usr;
         }
         async Task PopulateClaim(List<string> claim_keys)
         {

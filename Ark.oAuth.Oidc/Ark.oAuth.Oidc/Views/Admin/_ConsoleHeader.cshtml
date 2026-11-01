@@ -1,0 +1,72 @@
+﻿@*
+    The console's top bar, shared by the console and the provisioning page.
+
+    A partial rather than a layout: these views set Layout = null on purpose — a view rendering
+    out of a NuGet package cannot assume the host has a layout, a _ViewStart or tag helpers — so
+    the one piece that would otherwise drift between the two pages is the piece shared here.
+*@
+@{
+    var page = (ViewBag.Page as string) ?? "console";
+    var isOperator = ViewBag.IsOperator == true;
+    var userName = (ViewBag.UserName as string) ?? "";
+    var initial = string.IsNullOrEmpty(userName) ? "?" : userName.Substring(0, 1).ToUpperInvariant();
+    var tenant = ViewBag.Tenant as Ark.oAuth.ArkTenant;
+    var title = tenant?.display ?? tenant?.name ?? (ViewBag.TenantId as string);
+    var hostLogo = ViewBag.HostLogo as string;
+    var clientLogo = ViewBag.ClientLogo as string;
+    var logoCount = (string.IsNullOrWhiteSpace(hostLogo) ? 0 : 1) + (string.IsNullOrWhiteSpace(clientLogo) ? 0 : 1);
+}
+<header class="ark-topbar">
+    @*
+        Host mark, divider, client mark — the same lockup the sign-in page draws, so the console
+        and the pages it configures are recognisably one product. Each half is drawn only if it
+        is configured, and the divider only if both are, so a deployment that sets one, both or
+        neither all end up aligned rather than with a hole where an image would have been.
+    *@
+    @if (logoCount > 0)
+    {
+        <span class="ark-lockup">
+            @if (!string.IsNullOrWhiteSpace(hostLogo))
+            {
+                <img src="@hostLogo" alt="@ViewBag.HostName" />
+            }
+            @if (logoCount == 2)
+            {
+                <span class="ark-lockup-sep" aria-hidden="true"></span>
+            }
+            @if (!string.IsNullOrWhiteSpace(clientLogo))
+            {
+                <img src="@clientLogo" alt="" />
+            }
+        </span>
+    }
+    <div>
+        <div class="ark-topbar-title">@title</div>
+        <div class="ark-topbar-sub"><code>@ViewBag.Issuer</code></div>
+    </div>
+
+    @*
+        Navigation. Provisioning and Data are drawn only for the operator account, because the
+        routes themselves refuse everybody else — a link that answers 403 teaches nothing except that the page
+        exists.
+    *@
+    <nav class="ark-nav" aria-label="Console">
+        <a class="ark-nav-link" href="@ViewBag.ConsoleUrl" aria-current="@(page == "console" ? "page" : null)">Manage</a>
+        @if (isOperator)
+        {
+            <a class="ark-nav-link" href="@ViewBag.ProvisioningUrl" aria-current="@(page == "provisioning" ? "page" : null)">Provisioning</a>
+            @if (ViewBag.DataToolsEnabled == true)
+            {
+                <a class="ark-nav-link" href="@ViewBag.DataUrl" aria-current="@(page == "data" ? "page" : null)">Data</a>
+            }
+        }
+    </nav>
+
+    <span class="ark-topbar-spacer"></span>
+    <div class="ark-topbar-user">
+        <a class="ark-btn ark-btn-ghost ark-btn-sm" href="@ViewBag.Discovery" target="_blank" rel="noopener">Discovery</a>
+        <span class="ark-avatar">@initial</span>
+        <span>@userName</span>
+        <a class="ark-btn ark-btn-ghost" href="@ViewBag.SignOutUrl">Sign out</a>
+    </div>
+</header>

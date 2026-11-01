@@ -1,0 +1,444 @@
+@model Ark.oAuth.Oidc.Endpoints.IntegrationPageModel
+@{
+    Layout = "~/Views/Oidc/_ArkLayout.cshtml";
+    ViewBag.Brand = Model.Brand;
+    ViewBag.PageTitle = $"Set up {Model.Client.client_id}";
+    ViewBag.CardClass = "ark-card--doc";
+
+    var c = Model.Client;
+    var ep = Model.Endpoints;
+    var isPublic = c.IsPublicClient;
+    var redirects = c.EffectiveRedirectUris;
+    var scopes = string.Join(" ", c.EffectiveScopes);
+}
+
+<style>
+    .ark-card--doc { max-width: 860px; text-align: left; }
+    .ark-card--doc h1 { text-align: left; }
+    .ark-doc-sub { color: var(--ark-fg-muted); margin: 0 0 26px; font-size: 14px; }
+    .ark-sec { margin-top: 30px; }
+    .ark-sec h2 {
+        font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em;
+        color: var(--ark-fg-muted); margin: 0 0 10px;
+    }
+    .ark-kv { display: grid; grid-template-columns: minmax(140px, auto) 1fr; gap: 1px; border: 1px solid var(--ark-border); border-radius: var(--ark-radius-sm); overflow: hidden; background: var(--ark-border); }
+    .ark-kv > div { background: var(--ark-surface); padding: 9px 12px; font-size: 13.5px; }
+    .ark-kv > div:nth-child(odd) { background: var(--ark-surface-2); font-weight: 560; }
+    .ark-kv code { background: none; border: none; padding: 0; word-break: break-all; }
+    pre {
+        margin: 0; padding: 14px; overflow-x: auto;
+        background: var(--ark-surface-2); border: 1px solid var(--ark-border);
+        border-radius: var(--ark-radius-sm);
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 12.5px; line-height: 1.6;
+    }
+    .ark-note {
+        border-left: 3px solid var(--ark-accent); background: var(--ark-accent-soft);
+        padding: 11px 14px; border-radius: 0 var(--ark-radius-sm) var(--ark-radius-sm) 0;
+        font-size: 13.5px; margin-top: 12px;
+    }
+    .ark-pill {
+        display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11.5px;
+        font-weight: 600; background: var(--ark-accent-soft); color: var(--ark-accent);
+        border: 1px solid color-mix(in srgb, var(--ark-accent) 30%, transparent);
+    }
+
+    /* ---------- live flow ---------- */
+    .ark-try { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-bottom: 12px; }
+    .ark-try label { font-size: 12.5px; color: var(--ark-fg-muted); display: block; margin-bottom: 4px; }
+    .ark-try select {
+        font: inherit; font-size: 13px; padding: 8px 10px; max-width: 100%;
+        color: var(--ark-fg); background: var(--ark-surface-2);
+        border: 1px solid var(--ark-border-strong); border-radius: var(--ark-radius-sm);
+    }
+    .ark-try .ark-try-field { flex: 1 1 320px; min-width: 0; }
+    .ark-try .ark-try-field select { width: 100%; }
+    .ark-try button {
+        font: inherit; font-size: 13px; font-weight: 600; padding: 9px 15px; cursor: pointer;
+        border-radius: var(--ark-radius-sm); border: 1px solid transparent;
+        background: var(--ark-accent); color: var(--ark-accent-fg);
+    }
+    .ark-try button.ark-try-ghost {
+        background: var(--ark-surface); color: var(--ark-fg); border-color: var(--ark-border-strong);
+    }
+    .ark-try button[disabled] { opacity: .5; cursor: not-allowed; }
+    .ark-try-toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ark-fg); }
+    .ark-try-toggle input { accent-color: var(--ark-accent); width: 15px; height: 15px; margin: 0; }
+    .ark-try-toggle label { margin: 0; color: inherit; font-size: inherit; }
+
+    .ark-frame {
+        width: 100%; height: 560px; border: 1px solid var(--ark-border);
+        border-radius: var(--ark-radius-sm); background: var(--ark-surface-2);
+        display: block; color-scheme: light dark;
+    }
+    .ark-frame-bar {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        font-size: 12px; color: var(--ark-fg-muted); margin: 8px 2px 0;
+    }
+</style>
+
+<h1>Set up @(!string.IsNullOrWhiteSpace(c.client_name) ? c.client_name : c.client_id)</h1>
+<p class="ark-doc-sub">
+    Everything below is generated from this client's registration.
+    <span class="ark-pill">@(isPublic ? "public client" : "confidential client")</span>
+</p>
+
+<div class="ark-sec">
+    <h2>Start here — the only URL you need</h2>
+    <pre>@ep.Discovery</pre>
+    <div class="ark-note">
+        Point any OpenID Connect library at the <strong>issuer</strong> below and it will fetch this
+        document and configure every endpoint, signing key and supported feature by itself.
+        There is no need to copy public keys or endpoint URLs by hand.
+    </div>
+</div>
+
+<div class="ark-sec">
+    <h2>Core values</h2>
+    <div class="ark-kv">
+        <div>Issuer / Authority</div><div><code>@ep.Issuer</code></div>
+        <div>Client ID</div><div><code>@c.client_id</code></div>
+        <div>Client authentication</div><div><code>@c.token_endpoint_auth_method</code></div>
+        <div>Scopes</div><div><code>@scopes</code></div>
+        <div>Redirect URIs</div>
+        <div>
+            @foreach (var uri in redirects)
+            {
+                <code>@uri</code><br />
+            }
+        </div>
+        <div>PKCE</div><div><code>@(c.require_pkce ? "required (S256)" : "optional")</code></div>
+    </div>
+</div>
+
+<div class="ark-sec">
+    <h2>ASP.NET Core — using the Ark client package</h2>
+    <pre>// Program.cs
+builder.Services.AddArkOidcClient(builder.Configuration);
+
+app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
+
+// appsettings.json
+"ark_oauth_client": {
+  "Authority": "@ep.Issuer",
+  "ClientId": "@c.client_id",@(isPublic ? "" : "\n  \"ClientSecret\": \"<your client secret>\",")
+  "Scopes": [@string.Join(", ", c.EffectiveScopes.Select(s => $"\"{s}\""))],
+  "CallbackPath": "/signin-oidc",
+  "SignedOutCallbackPath": "/signout-callback-oidc"
+}</pre>
+</div>
+
+<div class="ark-sec">
+    <h2>ASP.NET Core — using the built-in handler directly</h2>
+    <pre>builder.Services
+    .AddAuthentication(o =&gt; {
+        o.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        o.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+    })
+    .AddCookie()
+    .AddOpenIdConnect(o =&gt; {
+        o.Authority = "@ep.Issuer";
+        o.ClientId  = "@c.client_id";@(isPublic ? "" : "\n        o.ClientSecret = \"<your client secret>\";")
+        o.ResponseType = "code";
+        o.UsePkce = true;
+        o.SaveTokens = true;
+        o.GetClaimsFromUserInfoEndpoint = true;
+        o.MapInboundClaims = false;
+@string.Join("\n", c.EffectiveScopes.Select(s => $"        o.Scope.Add(\"{s}\");"))
+    });</pre>
+</div>
+
+<div class="ark-sec">
+    <h2>Any other language</h2>
+    <p class="ark-doc-sub" style="margin-bottom:10px;">
+        These libraries all take the issuer and discover the rest:
+    </p>
+    <pre>// JavaScript / TypeScript  (oidc-client-ts)
+new UserManager({
+  authority: "@ep.Issuer",
+  client_id: "@c.client_id",
+  redirect_uri: "@(redirects.FirstOrDefault() ?? "https://your-app/callback")",
+  scope: "@scopes",
+  response_type: "code"
+});
+
+# Python  (authlib)
+oauth.register(
+    name="ark",
+    server_metadata_url="@ep.Discovery",
+    client_id="@c.client_id",
+    client_kwargs={"scope": "@scopes"},
+)
+
+// Go  (coreos/go-oidc)
+provider, _ := oidc.NewProvider(ctx, "@ep.Issuer")</pre>
+</div>
+
+<div class="ark-sec">
+    <h2>Try it from the command line</h2>
+    <pre>curl -s @ep.Discovery | jq .
+curl -s @ep.Jwks | jq .
+@if (!isPublic)
+{
+    @* Encoded, not Html.Raw: client ids and scopes are registration data, not markup. *@
+    @($@"
+# client_credentials, for service-to-service calls
+curl -s -X POST {ep.Token} \
+  -u '{c.client_id}:<client secret>' \
+  -d 'grant_type=client_credentials' \
+  -d 'scope={scopes.Replace("openid ", "").Replace(" offline_access", "")}'")
+}</pre>
+</div>
+
+<div class="ark-sec">
+    <h2>Endpoints</h2>
+    <div class="ark-kv">
+        <div>Authorization</div><div><code>@ep.Authorization</code></div>
+        <div>Token</div><div><code>@ep.Token</code></div>
+        <div>UserInfo</div><div><code>@ep.UserInfo</code></div>
+        <div>JWKS</div><div><code>@ep.Jwks</code></div>
+        <div>Introspection</div><div><code>@ep.Introspection</code></div>
+        <div>Revocation</div><div><code>@ep.Revocation</code></div>
+        <div>End session</div><div><code>@ep.EndSession</code></div>
+        @if (Model.DeviceFlowEnabled)
+        {
+            <div>Device authorization</div><div><code>@ep.DeviceAuthorization</code></div>
+        }
+        @if (Model.ParEnabled)
+        {
+            <div>Pushed authorization</div><div><code>@ep.PushedAuthorizationRequest</code></div>
+        }
+    </div>
+</div>
+
+@{
+    var canTryFlow = redirects.Count > 0
+        && c.EffectiveGrantTypes.Contains("authorization_code", StringComparer.OrdinalIgnoreCase);
+    var tryConfig = System.Text.Json.JsonSerializer.Serialize(new
+    {
+        authorize = ep.Authorization,
+        token = ep.Token,
+        issuer = ep.Issuer,
+        client_id = c.client_id,
+        scope = scopes,
+        redirect_uris = redirects,
+        is_public = isPublic
+    });
+}
+
+@if (canTryFlow)
+{
+    <div class="ark-sec">
+        <h2>Try it here — authorization code + PKCE, live</h2>
+        <p class="ark-doc-sub" style="margin-bottom:14px;">
+            Runs a real authorization request for this client, in the frame below, ending at the
+            <code>redirect_uri</code> you pick. The verifier and challenge are generated in your
+            browser with <code>S256</code>, exactly as a client library would; nothing here is
+            simulated, so what you see is what your application will get.
+        </p>
+
+        <div class="ark-try">
+            <div class="ark-try-field">
+                <label for="try-redirect">redirect_uri</label>
+                <select id="try-redirect">
+                    @foreach (var uri in redirects)
+                    {
+                        <option value="@uri">@uri</option>
+                    }
+                </select>
+            </div>
+            <button type="button" id="try-start">Start the flow</button>
+            <button type="button" class="ark-try-ghost" id="try-tab">Open in a new tab</button>
+            <button type="button" class="ark-try-ghost" id="try-reset" disabled>Reset</button>
+            <span class="ark-try-toggle">
+                <input type="checkbox" id="try-prompt" />
+                <label for="try-prompt">Force the sign-in screen</label>
+            </span>
+        </div>
+
+        <div class="ark-note" style="margin-top:0;margin-bottom:14px;">
+            This issues a real authorization code for <strong>your own</strong> signed-in identity and
+            delivers it to the application, which will sign you in there. Leave
+            <em>Force the sign-in screen</em> off to reuse your existing session
+            (<code>prompt=login</code> otherwise, which asks you to re-authenticate and replaces that
+            session). The frame ends up on the application's own origin, so if it refuses to be framed
+            — many do — use <em>Open in a new tab</em> instead; the flow is identical either way.
+        </div>
+
+        <div id="try-params" hidden>
+            <div class="ark-kv" style="margin-bottom:12px;">
+                <div>code_verifier</div><div><code id="try-verifier"></code></div>
+                <div>code_challenge</div><div><code id="try-challenge"></code></div>
+                <div>state</div><div><code id="try-state"></code></div>
+                <div>nonce</div><div><code id="try-nonce"></code></div>
+            </div>
+            <pre id="try-url" style="margin-bottom:12px;"></pre>
+        </div>
+
+        <iframe id="try-frame" class="ark-frame" title="Authorization request" src="about:blank"
+                referrerpolicy="strict-origin"></iframe>
+        <div class="ark-frame-bar" id="try-status">Nothing running yet.</div>
+
+        <div id="try-exchange" hidden style="margin-top:14px;">
+            <h2>Then redeem the code</h2>
+            <p class="ark-doc-sub" style="margin-bottom:10px;">
+                The code lands on your <code>redirect_uri</code> as <code>?code=…&amp;state=…</code>.
+                It is single-use, expires in @c.authorization_code_lifetime_seconds seconds, and is
+                bound to the verifier above — which is the whole point of PKCE, and why this command
+                only works with the verifier from this run.
+            </p>
+            <pre id="try-curl"></pre>
+        </div>
+    </div>
+
+    <script type="application/json" id="try-config">@Html.Raw(tryConfig)</script>
+    <script>
+        (function () {
+            "use strict";
+            var cfg = JSON.parse(document.getElementById("try-config").textContent);
+            var frame = document.getElementById("try-frame");
+            var status = document.getElementById("try-status");
+            var params = document.getElementById("try-params");
+            var exchange = document.getElementById("try-exchange");
+            var startBtn = document.getElementById("try-start");
+            var tabBtn = document.getElementById("try-tab");
+            var resetBtn = document.getElementById("try-reset");
+            var current = null;
+
+            // RFC 7636 wants the verifier and the challenge's base64 to be URL-safe and unpadded.
+            // Getting that wrong is the classic PKCE bug: the challenge still looks plausible and
+            // the token endpoint simply says invalid_grant.
+            function b64url(bytes) {
+                var s = "";
+                for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+                return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+            }
+            function random(n) {
+                var b = new Uint8Array(n);
+                crypto.getRandomValues(b);
+                return b64url(b);
+            }
+            function challengeFor(verifier) {
+                var data = new TextEncoder().encode(verifier);
+                return crypto.subtle.digest("SHA-256", data).then(function (hash) {
+                    return b64url(new Uint8Array(hash));
+                });
+            }
+
+            function build() {
+                var verifier = random(32);
+                return challengeFor(verifier).then(function (challenge) {
+                    var state = random(16);
+                    var nonce = random(16);
+                    var redirect = document.getElementById("try-redirect").value;
+                    var q = new URLSearchParams({
+                        response_type: "code",
+                        client_id: cfg.client_id,
+                        redirect_uri: redirect,
+                        scope: cfg.scope,
+                        state: state,
+                        nonce: nonce,
+                        code_challenge: challenge,
+                        code_challenge_method: "S256"
+                    });
+                    if (document.getElementById("try-prompt").checked) q.set("prompt", "login");
+                    return {
+                        verifier: verifier, challenge: challenge, state: state,
+                        nonce: nonce, redirect: redirect,
+                        url: cfg.authorize + "?" + q.toString()
+                    };
+                });
+            }
+
+            function render(run) {
+                current = run;
+                document.getElementById("try-verifier").textContent = run.verifier;
+                document.getElementById("try-challenge").textContent = run.challenge;
+                document.getElementById("try-state").textContent = run.state;
+                document.getElementById("try-nonce").textContent = run.nonce;
+                document.getElementById("try-url").textContent = run.url;
+                params.hidden = false;
+
+                var lines = [
+                    "curl -s -X POST " + cfg.token + " \\",
+                    "  -d 'grant_type=authorization_code' \\",
+                    "  -d 'code=<the code from your redirect_uri>' \\",
+                    "  -d 'redirect_uri=" + run.redirect + "' \\",
+                    "  -d 'client_id=" + cfg.client_id + "' \\"
+                ];
+                if (!cfg.is_public) lines.push("  -u '" + cfg.client_id + ":<client secret>' \\");
+                lines.push("  -d 'code_verifier=" + run.verifier + "'");
+                document.getElementById("try-curl").textContent = lines.join("\n");
+                exchange.hidden = false;
+                resetBtn.disabled = false;
+            }
+
+            function start(openInTab) {
+                if (!window.crypto || !crypto.subtle) {
+                    status.textContent = "This browser exposes no WebCrypto here, so the challenge " +
+                        "cannot be generated. WebCrypto needs a secure context — https, or localhost.";
+                    return;
+                }
+                startBtn.disabled = true;
+                build().then(function (run) {
+                    render(run);
+                    if (openInTab) {
+                        window.open(run.url, "_blank", "noopener");
+                        status.textContent = "Opened in a new tab. Its address bar will show the code " +
+                            "on your redirect_uri once you are through the sign-in screen.";
+                    } else {
+                        frame.src = run.url;
+                        status.textContent = "Running. The frame ends on your redirect_uri; the code and " +
+                            "state are in its query string. The frame is cross-origin at that point, so " +
+                            "this page cannot read them — that is the browser doing its job, not a fault.";
+                    }
+                    startBtn.disabled = false;
+                }).catch(function (err) {
+                    startBtn.disabled = false;
+                    status.textContent = "Could not start the flow: " + err.message;
+                });
+            }
+
+            startBtn.addEventListener("click", function () { start(false); });
+            tabBtn.addEventListener("click", function () { start(true); });
+            resetBtn.addEventListener("click", function () {
+                frame.src = "about:blank";
+                params.hidden = true;
+                exchange.hidden = true;
+                resetBtn.disabled = true;
+                current = null;
+                status.textContent = "Nothing running yet.";
+            });
+        })();
+    </script>
+}
+else
+{
+    <div class="ark-sec">
+        <h2>Try it here — authorization code + PKCE, live</h2>
+        <div class="ark-note">
+            @if (redirects.Count == 0)
+            {
+                <text>
+                    This client has no <code>redirect_uri</code> registered, so there is nowhere for an
+                    authorization code to be delivered. Add one in the admin console and this section
+                    becomes a working flow.
+                </text>
+            }
+            else
+            {
+                <text>
+                    This client is not registered for the <code>authorization_code</code> grant, so
+                    there is no interactive flow to run. Machine-to-machine clients use
+                    <code>client_credentials</code> — see the command line section above.
+                </text>
+            }
+        </div>
+    </div>
+}
+
+<p class="ark-meta">
+    Grants enabled for this client: <code>@string.Join("</code> <code>", c.EffectiveGrantTypes)</code>
+</p>

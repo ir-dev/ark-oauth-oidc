@@ -1,0 +1,363 @@
+@*
+    Shared shell for every interactive IdP page (sign-in, consent, device, logout, errors).
+
+    The CSS is inlined deliberately. This view ships inside a NuGet package, so relying on the
+    host app to serve a stylesheet — or on a CDN, as the previous UI did — makes the login page
+    depend on things outside its control. Inlining keeps it drop-in, works offline, survives a
+    strict Content-Security-Policy, and costs one small payload on a page shown once per session.
+*@
+@{
+    Layout = null;
+    var brand = ViewBag.Brand as Ark.oAuth.Oidc.Endpoints.OidcBrandModel ?? new Ark.oAuth.Oidc.Endpoints.OidcBrandModel();
+    var pageTitle = ViewBag.PageTitle as string ?? brand.HostName;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin" />
+    <title>@pageTitle</title>
+    <style>
+        /* ---------- design tokens ---------- */
+        :root {
+            color-scheme: light dark;
+
+            --ark-bg: #f4f6fb;
+            --ark-bg-accent: #e8edf9;
+            --ark-surface: #ffffff;
+            --ark-surface-2: #f7f9fc;
+            --ark-fg: #16192b;
+            --ark-fg-muted: #5b6478;
+            --ark-border: #dfe4ee;
+            --ark-border-strong: #c6cddc;
+            --ark-accent: #3457d5;
+            --ark-accent-hover: #2b48b4;
+            --ark-accent-fg: #ffffff;
+            --ark-accent-soft: #eef2fe;
+            --ark-danger: #c0362c;
+            --ark-danger-soft: #fdecea;
+            --ark-success: #1c7a4a;
+            --ark-success-soft: #e7f6ee;
+            --ark-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 12px 32px -8px rgba(16, 24, 40, .12);
+            --ark-radius: 14px;
+            --ark-radius-sm: 9px;
+        }
+
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --ark-bg: #0d1017;
+                --ark-bg-accent: #131826;
+                --ark-surface: #171c28;
+                --ark-surface-2: #1e2432;
+                --ark-fg: #e8ecf5;
+                --ark-fg-muted: #99a3b8;
+                --ark-border: #2a3244;
+                --ark-border-strong: #3a445c;
+                --ark-accent: #7b96ff;
+                --ark-accent-hover: #93a9ff;
+                --ark-accent-fg: #0d1017;
+                --ark-accent-soft: #1b2440;
+                --ark-danger: #ff8b80;
+                --ark-danger-soft: #2c1a1a;
+                --ark-success: #6ede9f;
+                --ark-success-soft: #14271e;
+                --ark-shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 16px 40px -12px rgba(0, 0, 0, .6);
+            }
+        }
+
+        /* ---------- reset ---------- */
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; }
+
+        body {
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 28px 18px;
+            background: var(--ark-bg);
+            background-image:
+                radial-gradient(900px 500px at 12% -8%, var(--ark-bg-accent), transparent 70%),
+                radial-gradient(760px 460px at 108% 8%, var(--ark-accent-soft), transparent 66%);
+            color: var(--ark-fg);
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-size: 15px;
+            line-height: 1.55;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ---------- card ---------- */
+        .ark-card {
+            width: 100%;
+            max-width: 420px;
+            background: var(--ark-surface);
+            border: 1px solid var(--ark-border);
+            border-radius: var(--ark-radius);
+            box-shadow: var(--ark-shadow);
+            padding: 32px;
+        }
+        .ark-card--wide { max-width: 520px; }
+
+        .ark-brand {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .ark-brand-name { font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--ark-fg-muted); }
+
+        /* Host mark | divider | client mark. */
+        .ark-lockup {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            max-width: 100%;
+        }
+        .ark-lockup img {
+            max-height: 38px;
+            max-width: 150px;
+            object-fit: contain;
+            display: block;
+        }
+        .ark-lockup-sep {
+            width: 1px;
+            align-self: stretch;
+            min-height: 26px;
+            background: var(--ark-border-strong);
+            flex: none;
+        }
+        /* One mark is the whole lockup, so it gets the room two would have shared rather than
+           sitting at half size in the middle of the card. */
+        .ark-brand[data-logos="1"] .ark-lockup img { max-height: 46px; max-width: 240px; }
+        /* With no mark at all the name stops being a caption under something and becomes the
+           thing itself — otherwise the card opens on a line of small grey text hanging in space. */
+        .ark-brand[data-logos="0"] { gap: 0; margin-bottom: 22px; }
+        .ark-brand[data-logos="0"] .ark-brand-name {
+            font-size: 15px;
+            font-weight: 650;
+            letter-spacing: -.01em;
+            color: var(--ark-fg);
+        }
+        @@media (max-width: 380px) {
+            .ark-lockup { gap: 11px; }
+            .ark-lockup img { max-height: 30px; max-width: 108px; }
+        }
+
+        h1 { font-size: 21px; font-weight: 650; letter-spacing: -.015em; margin: 0 0 6px; text-align: center; }
+        .ark-sub { margin: 0 0 24px; text-align: center; color: var(--ark-fg-muted); font-size: 14px; }
+        .ark-sub strong { color: var(--ark-fg); font-weight: 600; }
+
+        /* ---------- form ---------- */
+        .ark-field { margin-bottom: 16px; }
+        .ark-field label {
+            display: block;
+            font-size: 13px;
+            font-weight: 560;
+            margin-bottom: 6px;
+            color: var(--ark-fg);
+        }
+        .ark-input {
+            width: 100%;
+            padding: 11px 13px;
+            font: inherit;
+            color: var(--ark-fg);
+            background: var(--ark-surface-2);
+            border: 1px solid var(--ark-border-strong);
+            border-radius: var(--ark-radius-sm);
+            transition: border-color .15s, box-shadow .15s, background .15s;
+        }
+        .ark-input::placeholder { color: var(--ark-fg-muted); opacity: .7; }
+        .ark-input:hover { border-color: var(--ark-accent); }
+        .ark-input:focus-visible {
+            outline: none;
+            background: var(--ark-surface);
+            border-color: var(--ark-accent);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--ark-accent) 26%, transparent);
+        }
+
+        .ark-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 11px 18px;
+            font: inherit;
+            font-weight: 600;
+            border-radius: var(--ark-radius-sm);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: background .15s, border-color .15s, transform .06s;
+        }
+        .ark-btn:active { transform: translateY(1px); }
+        .ark-btn:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--ark-accent) 40%, transparent);
+        }
+        .ark-btn-primary { background: var(--ark-accent); color: var(--ark-accent-fg); }
+        .ark-btn-primary:hover { background: var(--ark-accent-hover); }
+        .ark-btn-secondary {
+            background: var(--ark-surface-2);
+            color: var(--ark-fg);
+            border-color: var(--ark-border-strong);
+        }
+        .ark-btn-secondary:hover { border-color: var(--ark-accent); }
+
+        .ark-actions { display: flex; gap: 10px; margin-top: 22px; }
+        .ark-actions .ark-btn { flex: 1; }
+
+        /* ---------- messages ---------- */
+        .ark-alert {
+            display: flex;
+            gap: 10px;
+            padding: 11px 13px;
+            border-radius: var(--ark-radius-sm);
+            font-size: 13.5px;
+            margin-bottom: 18px;
+            border: 1px solid transparent;
+        }
+        .ark-alert-error {
+            background: var(--ark-danger-soft);
+            color: var(--ark-danger);
+            border-color: color-mix(in srgb, var(--ark-danger) 26%, transparent);
+        }
+        .ark-alert-success {
+            background: var(--ark-success-soft);
+            color: var(--ark-success);
+            border-color: color-mix(in srgb, var(--ark-success) 26%, transparent);
+        }
+        .ark-alert svg { flex: none; margin-top: 2px; }
+
+        /* ---------- scope list ---------- */
+        .ark-scopes { list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 8px; }
+        .ark-scope {
+            display: flex;
+            gap: 11px;
+            align-items: flex-start;
+            padding: 12px 13px;
+            background: var(--ark-surface-2);
+            border: 1px solid var(--ark-border);
+            border-radius: var(--ark-radius-sm);
+        }
+        .ark-scope input[type=checkbox] { margin-top: 3px; accent-color: var(--ark-accent); width: 15px; height: 15px; }
+        .ark-scope-name { font-weight: 560; font-size: 14px; display: block; }
+        .ark-scope-desc { color: var(--ark-fg-muted); font-size: 13px; }
+        .ark-scope-required { font-size: 11.5px; color: var(--ark-fg-muted); text-transform: uppercase; letter-spacing: .04em; }
+
+        /* ---------- device code ---------- */
+        .ark-code-input {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 25px;
+            letter-spacing: .18em;
+            text-align: center;
+            text-transform: uppercase;
+            padding: 14px;
+        }
+        .ark-code-display {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 21px;
+            letter-spacing: .16em;
+            text-align: center;
+            padding: 13px;
+            background: var(--ark-accent-soft);
+            border-radius: var(--ark-radius-sm);
+            margin-bottom: 20px;
+        }
+
+        /* ---------- footer ---------- */
+        .ark-foot {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 16px;
+            justify-content: center;
+            align-items: center;
+            font-size: 12.5px;
+            color: var(--ark-fg-muted);
+        }
+        .ark-foot a { color: var(--ark-fg-muted); text-decoration: none; }
+        .ark-foot a:hover { color: var(--ark-accent); text-decoration: underline; }
+
+        .ark-meta {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid var(--ark-border);
+            font-size: 12.5px;
+            color: var(--ark-fg-muted);
+            text-align: center;
+            word-break: break-word;
+        }
+        code {
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+            font-size: .92em;
+            background: var(--ark-surface-2);
+            border: 1px solid var(--ark-border);
+            border-radius: 5px;
+            padding: 1px 5px;
+        }
+
+        .ark-icon-badge {
+            width: 42px; height: 42px;
+            display: grid; place-items: center;
+            border-radius: 50%;
+            margin: 0 auto 14px;
+        }
+        .ark-icon-badge--error { background: var(--ark-danger-soft); color: var(--ark-danger); }
+        .ark-icon-badge--success { background: var(--ark-success-soft); color: var(--ark-success); }
+
+        @@media (prefers-reduced-motion: reduce) {
+            * { transition: none !important; animation: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <main class="ark-card @(ViewBag.CardClass as string)">
+        @*
+            Both marks sit in the header: the host's, because it identifies who is asking for the
+            password, and the client's, because it identifies what is being signed in to. Which
+            of the two exist is a per-client question — most clients are registered without a
+            logo — so the lockup is laid out from brand.LogoCount rather than from two
+            independent conditionals, and each of the three cases gets its own treatment instead
+            of leaving a gap or an empty band where a missing image would have been.
+        *@
+        <div class="ark-brand" data-logos="@brand.LogoCount">
+            @if (brand.LogoCount > 0)
+            {
+                <div class="ark-lockup">
+                    @if (!string.IsNullOrEmpty(brand.HostLogo))
+                    {
+                        <img src="@brand.HostLogo" alt="@brand.HostName" />
+                    }
+                    @if (brand.LogoCount == 2)
+                    {
+                        <span class="ark-lockup-sep" aria-hidden="true"></span>
+                    }
+                    @if (!string.IsNullOrEmpty(brand.ClientLogo))
+                    {
+                        <img src="@brand.ClientLogo" alt="@(brand.ClientName ?? "")" />
+                    }
+                </div>
+            }
+            <span class="ark-brand-name">@brand.HostName</span>
+        </div>
+        @RenderBody()
+    </main>
+
+    <footer class="ark-foot">
+        @if (!string.IsNullOrEmpty(brand.PrivacyUrl))
+        {
+            <a href="@brand.PrivacyUrl" rel="noopener">Privacy</a>
+        }
+        @if (!string.IsNullOrEmpty(brand.TermsUrl))
+        {
+            <a href="@brand.TermsUrl" rel="noopener">Terms</a>
+        }
+    </footer>
+</body>
+</html>

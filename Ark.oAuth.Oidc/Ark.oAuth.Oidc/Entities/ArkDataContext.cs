@@ -13,6 +13,18 @@ namespace Ark.oAuth.Oidc
         public virtual DbSet<ArkUserClientClaim> user_client_claims { get; set; }
         public virtual DbSet<ArkAudit> audit_trace { get; set; }
         public virtual DbSet<ArkAuthStatusTrace> auth_status { get; set; }
+
+        // --- standard OAuth 2.1 / OIDC protocol state ---
+        public virtual DbSet<ArkSigningKey> signing_keys { get; set; }
+        public virtual DbSet<ArkAuthCode> auth_codes { get; set; }
+        public virtual DbSet<ArkRefreshToken> refresh_tokens { get; set; }
+        public virtual DbSet<ArkDeviceCode> device_codes { get; set; }
+        public virtual DbSet<ArkParRequest> par_requests { get; set; }
+        public virtual DbSet<ArkConsent> consents { get; set; }
+        public virtual DbSet<ArkSession> sessions { get; set; }
+        public virtual DbSet<ArkSessionClient> session_clients { get; set; }
+        public virtual DbSet<ArkScope> scopes { get; set; }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<ArkClaim>()

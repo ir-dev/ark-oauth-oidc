@@ -1,56 +1,51 @@
-﻿@{
-    Layout = null;
+@*
+    Sign-in page for the deprecated /v1 authorize endpoint.
+
+    Restyled onto the shared layout so the two flows look identical during migration. New
+    integrations use /{tenant_id}/oauth2/authorize, which renders ~/Views/Oidc/Login.cshtml.
+*@
+@{
+    Layout = "~/Views/Oidc/_ArkLayout.cshtml";
+    ViewBag.Brand = new Ark.oAuth.Oidc.Endpoints.OidcBrandModel
+    {
+        HostLogo = ViewBag.host_logo as string,
+        ClientLogo = ViewBag.client_logo as string,
+        HostName = "Identity Provider"
+    };
+    ViewBag.PageTitle = "Sign in";
+    bool isError = ViewBag.IsError ?? false;
 }
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>NTT (IdP) - Login</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" />
-    <link rel="stylesheet" type="text/css" href="~/css/ark-oauth-login.css" />
-</head>
-<body>
-    <div class="container-fluid">
-        <form method="post" name="Login_Form" class="form-signin">
-            <div class="row" id="login">
-                <div class="col-xs-12 col-md-10 col-md-offset-1 col-lg-2 col-lg-offset-3 text-center" id="left">
-                    <img src="@ViewBag.client_logo" alt="client logo" style="max-height: 70px;max-width: 200px;">
-                    <h2 style="color: white;">Identity Provider</h2>
-                    <div class="auth-icon"></div>
-                    <div>
-                        <a href="@ViewBag.client_url" target="_blank">Client Config</a>
-                    </div>
-                </div>
 
-                <div class="col-xs-12 col-md-10 col-md-offset-1 col-lg-4 col-lg-offset-0" id="right">
-                    <h1 class="text-center">Log In</h1>
+<h1>Sign in</h1>
+<p class="ark-sub">to continue to your application</p>
 
-                    <hr style="border-top: 3px double #8c8b8b;" />
-                    <div id="username">
-                        <span>Username:</span>
-                        <input type="text" data-cust="username" name="Username" placeholder="username" required="" />
-                    </div>
-
-                    <div id="password">
-                        <span>Password:</span>
-                        <input type="password" data-cust="password" class="form-control" name="Password" placeholder="*********" required="" />
-                    </div>
-
-                    <button class="btn btn-lg btn-primary btn-block" data-cust="login" name="Submit" value="Login" type="Submit">Login</button>
-                    @if (ViewBag.IsError)
-                    {
-                        <div style="text-align:center;color: red; margin-top: 10px;">
-                            @ViewBag.msg
-                        </div>
-                    }
-                    <br />
-                    <div style="text-align: center;position: absolute; bottom: 10px;right: 10px;">
-                        <img src="@ViewBag.host_logo" height="50" style="" alt="host server logo">
-                    </div>
-                </div>
-            </div>
-        </form>
+@if (isError)
+{
+    <div class="ark-alert ark-alert-error" role="alert">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
+            <path d="M8 4.6v4.2M8 11.2h.01" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
+        <span>@ViewBag.msg</span>
     </div>
-</body>
-</html>
+}
+
+<form method="post" name="Login_Form" autocomplete="on">
+    <div class="ark-field">
+        <label for="ark-username">Username</label>
+        <input id="ark-username" class="ark-input" type="text" name="Username"
+               autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"
+               required autofocus placeholder="you@@example.com" />
+    </div>
+    <div class="ark-field">
+        <label for="ark-password">Password</label>
+        <input id="ark-password" class="ark-input" type="password" name="Password"
+               autocomplete="current-password" required placeholder="••••••••" />
+    </div>
+    <button class="ark-btn ark-btn-primary" type="submit" name="Submit" value="Login" style="margin-top:6px;">Sign in</button>
+</form>
+
+@if (!string.IsNullOrEmpty(ViewBag.client_url as string))
+{
+    <p class="ark-meta"><a href="@ViewBag.client_url" target="_blank" rel="noopener">Client configuration</a></p>
+}

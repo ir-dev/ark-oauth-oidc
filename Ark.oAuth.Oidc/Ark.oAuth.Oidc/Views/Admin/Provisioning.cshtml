@@ -1,0 +1,255 @@
+﻿@*
+    Provisioning and activation, on a page of their own.
+
+    These two used to be panels at the bottom of the console. They are different in kind from the
+    rest of it: everything else there edits one row of one table, while these create an
+    application, its account and the mapping between them in a single call, and revoke sessions
+    and refresh tokens that have already been handed out. They are also the two the console cannot
+    demonstrate — the point of both is that another system can call them — which is why this page
+    builds the curl for whatever is in the forms as you fill them in.
+
+    Reachable by the operator account only; see AdminController.IsOperator. Self-contained for the
+    same reason Manage.cshtml is: a view rendered out of a NuGet package cannot assume the host has
+    a layout, a _ViewStart or tag helpers.
+*@
+@{
+    Layout = null;
+    var tenant = ViewBag.Tenant as Ark.oAuth.ArkTenant;
+    var title = tenant?.display ?? tenant?.name ?? (ViewBag.TenantId as string);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin" />
+    <title>Provisioning — @title</title>
+    <link href="@ViewBag.ConsoleCss" rel="stylesheet" />
+</head>
+<body>
+@await Html.PartialAsync("_ConsoleHeader")
+
+<main class="ark-main"
+      id="ark-admin"
+      data-page="provisioning"
+      data-app-root="@ViewBag.AppRoot"
+      data-tenant-id="@ViewBag.TenantId"
+      data-user-password-mode="@ViewBag.UserPasswordMode"
+      data-machine-client="@ViewBag.MachineClientId"
+      data-machine-has-secret="@((ViewBag.MachineHasSecret == true).ToString().ToLowerInvariant())"
+      data-machine-secret-managed="@((ViewBag.MachineSecretManaged == true).ToString().ToLowerInvariant())"
+      data-token-endpoint="@ViewBag.TokenEndpoint"
+      data-api-root="@ViewBag.ApiRoot">
+
+    @*
+        Provisioning. The four steps below are the ones that have to happen in order for a new
+        application to work at all, and the fourth — the access mapping — is the one that gets
+        forgotten, because its absence shows up as "that username and password combination was
+        not recognised" on the sign-in page rather than as anything about a missing mapping.
+        This panel is the whole sequence behind one button, over the same API another system
+        would call.
+    *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Provision an application</h2>
+            <span class="ark-hint">registers the client, creates or reuses the user, and maps the two together — in one call</span>
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-provision">
+                <div class="ark-provision-form">
+                    <div class="ark-grid-2">
+                        <div class="ark-field">
+                            <label for="pv-tenant_id">Tenant</label>
+                            <select id="pv-tenant_id"></select>
+                        </div>
+                        <div class="ark-field">
+                            <label for="pv-client_name">Application name <span class="ark-req">required</span></label>
+                            <input type="text" id="pv-client_name" placeholder="Billing Portal" />
+                        </div>
+                        <div class="ark-field">
+                            <label for="pv-client_id">client_id</label>
+                            <input type="text" id="pv-client_id" placeholder="derived from the name" />
+                            <div class="ark-note">Refused if it is already taken — nothing is overwritten.</div>
+                        </div>
+                        <div class="ark-field">
+                            <label for="pv-application_type">application_type</label>
+                            <select id="pv-application_type">
+                                <option value="web">web</option>
+                                <option value="spa">spa</option>
+                                <option value="native">native</option>
+                                <option value="service">service</option>
+                            </select>
+                        </div>
+                        <div class="ark-field">
+                            <label for="pv-user_name">User name or email <span class="ark-req">required</span></label>
+                            <input type="text" id="pv-user_name" placeholder="jane@@example.com" />
+                            <div class="ark-note">An existing account is reused and mapped to the new client.</div>
+                        </div>
+                        <div class="ark-field">
+                            <label for="pv-user_display_name">User's display name</label>
+                            <input type="text" id="pv-user_display_name" placeholder="Jane Smith" />
+                        </div>
+                    </div>
+                    <div class="ark-field">
+                        <label for="pv-redirect_uris">redirect_uris</label>
+                        <textarea id="pv-redirect_uris" spellcheck="false" placeholder="https://app.example.com/signin-oidc"></textarea>
+                        <div class="ark-note">One per line. Can be added later in the client editor.</div>
+                    </div>
+                    <div class="ark-field">
+                        <label for="pv-claims">Claims for the mapping</label>
+                        <input type="text" id="pv-claims" placeholder="sub, name, email, email_verified" />
+                        <div class="ark-note">Comma separated. Left blank, the identity claims are used.</div>
+                    </div>
+                    <div class="ark-field">
+                        <label for="pv-client_logo">Application logo</label>
+                        <div class="ark-logo-edit">
+                            <span class="ark-logo-preview" id="pv-logo-preview" data-empty="true"></span>
+                            <div class="ark-logo-edit-main">
+                                <input type="text" id="pv-client_logo" placeholder="https://… or upload one" />
+                                <div class="ark-note">
+                                    <button type="button" class="ark-btn-ghost ark-btn-sm" id="pv-logo-pick">Upload image…</button>
+                                    <button type="button" class="ark-btn-ghost ark-btn-sm" id="pv-logo-clear">Remove</button>
+                                    <input type="file" id="pv-logo-file" accept="image/*" hidden />
+                                    Appears on the sign-in page for this application.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ark-check">
+                        <input type="checkbox" id="pv-send_activation_email" />
+                        <label for="pv-send_activation_email">Email an activation link instead of using the default password</label>
+                    </div>
+                    <div class="ark-provision-actions">
+                        <button type="button" id="pv-submit">Provision</button>
+                        <span class="ark-note" style="margin:0" id="pv-password-mode-note">
+                            A new account signs in with <code>ark_oauth_server:DefaultPw</code> unless the box above is ticked.
+                        </span>
+                    </div>
+                </div>
+                <aside class="ark-provision-result" id="pv-result">
+                    <h4>Result</h4>
+                    <p class="ark-empty">Nothing provisioned yet.</p>
+                </aside>
+            </div>
+        </div>
+    </section>
+
+    @*
+        Activation. Both switches in one place, because "why can this person not sign in" is one
+        question with two possible answers and chasing it across two grids is how the wrong one
+        gets flipped. The form at the top is the API request itself — pick a target and a state —
+        and the lists below it are the same operation applied to a row you can see the state of.
+    *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Activation</h2>
+            <span class="ark-hint">suspend an application or an account without deleting it — sign-ins are then refused with a message naming the level</span>
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-activation-form">
+                <div class="ark-grid-2">
+                    <div class="ark-field">
+                        <label for="av-target">Level</label>
+                        <select id="av-target">
+                            <option value="client">Application (client)</option>
+                            <option value="user">Account (user)</option>
+                        </select>
+                    </div>
+                    <div class="ark-field" id="av-tenant-field">
+                        <label for="av-tenant_id">Tenant</label>
+                        <select id="av-tenant_id"></select>
+                    </div>
+                    <div class="ark-field" id="av-client-field">
+                        <label for="av-client_id">Application</label>
+                        <select id="av-client_id"><option value="">Select an application</option></select>
+                    </div>
+                    <div class="ark-field" id="av-user-field" hidden>
+                        <label for="av-user_name">Account</label>
+                        <select id="av-user_name"><option value="">Select an account</option></select>
+                    </div>
+                    <div class="ark-field">
+                        <label for="av-is_active">State</label>
+                        <select id="av-is_active">
+                            <option value="false">Deactivate</option>
+                            <option value="true">Activate</option>
+                        </select>
+                    </div>
+                    <div class="ark-field">
+                        <label for="av-reason">Reason</label>
+                        <input type="text" id="av-reason" placeholder="recorded in the audit trail" />
+                    </div>
+                </div>
+                <div class="ark-provision-actions">
+                    <button type="button" id="av-submit">Apply</button>
+                    <span class="ark-note" style="margin:0">
+                        Deactivating revokes what has already been handed out — a client loses its refresh
+                        tokens, an account loses its sessions and refresh tokens as well.
+                    </span>
+                </div>
+            </div>
+
+            <div class="ark-activation-head">
+                <h4>Current state</h4>
+                <span class="ark-spacer"></span>
+                <input type="search" id="act-filter" placeholder="Filter…" aria-label="Filter clients and users" />
+            </div>
+            <div class="ark-activation">
+                <div class="ark-activation-col">
+                    <h4>Applications <span class="ark-hint">client level</span></h4>
+                    <div class="ark-activation-list" id="act-clients"></div>
+                </div>
+                <div class="ark-activation-col">
+                    <h4>Accounts <span class="ark-hint">user level</span></h4>
+                    <div class="ark-activation-list" id="act-users"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    @*
+        The same two requests, as curl.
+
+        It appears on its own as soon as a form has enough in it to be a valid request, and it
+        carries the values that are in the forms right now — not a template with placeholders to
+        fill in a second time. What it cannot read out of the page is the credential: the console's
+        own session is an HttpOnly cookie, deliberately unreadable from script, so the command
+        authenticates the way a script would instead — client_credentials against the machine
+        client seeded beside the console. That secret exists only as a PBKDF2 hash, so the button
+        below mints a new one and drops it straight into the command, which is the only moment
+        anything can.
+    *@
+    <section class="ark-panel" id="cu-panel" hidden>
+        <div class="ark-panel-head">
+            <h2>The same thing, as curl</h2>
+            <span class="ark-hint">built from the forms above, ready to paste into a shell or an onboarding script</span>
+            <span class="ark-spacer"></span>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="cu-copy">Copy</button>
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-grid-2">
+                <div class="ark-field">
+                    <label for="cu-client_id">Machine client</label>
+                    <input type="text" id="cu-client_id" spellcheck="false" />
+                    <div class="ark-note">A confidential client with the <code>client_credentials</code> grant.</div>
+                </div>
+                <div class="ark-field">
+                    <label for="cu-client_secret">client_secret</label>
+                    <input type="text" id="cu-client_secret" spellcheck="false" placeholder="not shown — secrets are stored hashed" />
+                    <div class="ark-note">
+                        <button type="button" class="ark-btn-ghost ark-btn-sm" id="cu-secret-reset">Generate a new secret</button>
+                        Replaces the current one immediately, and is the only time it can be read.
+                    </div>
+                </div>
+            </div>
+            <pre id="cu-out" class="ark-code"></pre>
+            <div class="ark-note" id="cu-note"></div>
+        </div>
+    </section>
+</main>
+
+<div class="ark-toasts" id="ark-toasts" aria-live="polite"></div>
+
+<script src="@ViewBag.ConsoleJs"></script>
+</body>
+</html>

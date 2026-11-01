@@ -1,0 +1,108 @@
+@model ProfileModel
+@{
+    ViewData["Title"] = "Profile";
+}
+
+<h1>Identity and tokens</h1>
+<p class="sub">
+    The claims below are on <code>HttpContext.User</code>, built by the handler from the validated
+    ID token and the UserInfo response. The tokens are in the encrypted authentication cookie.
+</p>
+
+<h2>Who is signed in</h2>
+<div class="card">
+    <div class="kv">
+        <div>sub</div><div><code>@(Model.Subject ?? "—")</code></div>
+        <div>name</div><div>@(Model.Name ?? "—")</div>
+        <div>email</div><div>@(Model.Email ?? "—")</div>
+        <div>roles (ark_claims)</div>
+        <div>
+            @if (Model.Roles.Count == 0)
+            {
+                <span style="color:var(--fg-muted)">none — add claims under Access mapping for this user and client</span>
+            }
+            else
+            {
+                foreach (var role in Model.Roles)
+                {
+                    <span class="pill">@role</span>
+                    <text> </text>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+<h2>Tokens</h2>
+<div class="card">
+    <div class="kv">
+        <div>access_token</div><div>@(Model.HasAccessToken ? "present" : "absent")</div>
+        <div>id_token</div><div>@(Model.HasIdToken ? "present" : "absent")</div>
+        <div>refresh_token</div>
+        <div>
+            @if (Model.HasRefreshToken)
+            {
+                <text>present</text>
+            }
+            else
+            {
+                <span style="color:var(--fg-muted)">absent — the <code>offline_access</code> scope is what makes the provider issue one</span>
+            }
+        </div>
+        <div>expires_at</div>
+        <div>
+            @if (Model.AccessTokenExpiresAt.HasValue)
+            {
+                var remaining = Model.AccessTokenExpiresAt.Value - DateTimeOffset.UtcNow;
+                <code>@Model.AccessTokenExpiresAt.Value.ToString("u")</code>
+                <span style="color:var(--fg-muted)">(@($"{remaining.TotalMinutes:0} min") from now)</span>
+            }
+            else
+            {
+                <text>—</text>
+            }
+        </div>
+    </div>
+    <div class="note">
+        Nothing here needs handling in application code. The cookie handler refreshes the access
+        token roughly two minutes before it expires; if the refresh token has been revoked — or
+        replayed, which revokes its whole family — the session is dropped and the user is asked to
+        sign in again.
+    </div>
+</div>
+
+@if (Model.AccessTokenPayload != null)
+{
+    <h2>Access token payload</h2>
+    <div class="card">
+        <pre>@Model.AccessTokenPayload</pre>
+        <div class="note">
+            Shown decoded, not validated — validation already happened in the handler. An
+            application should not be inspecting its own access token in normal operation; it is
+            here because seeing <code>ark_claims</code> arrive is the fastest way to confirm an
+            access mapping took effect.
+        </div>
+    </div>
+}
+
+@if (Model.IdTokenPayload != null)
+{
+    <h2>ID token payload</h2>
+    <div class="card"><pre>@Model.IdTokenPayload</pre></div>
+}
+
+<h2>All claims on the principal</h2>
+<div class="card scroll-x">
+    <table>
+        <thead><tr><th>Type</th><th>Value</th></tr></thead>
+        <tbody>
+            @foreach (var claim in Model.Claims)
+            {
+                <tr>
+                    <td class="k">@claim.Key</td>
+                    <td class="v">@claim.Value</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,77 @@
+@model Ark.oAuth.Oidc.Endpoints.DevicePageModel
+@{
+    Layout = "~/Views/Oidc/_ArkLayout.cshtml";
+    ViewBag.Brand = Model.Brand;
+    ViewBag.PageTitle = $"Connect a device · {Model.Brand.HostName}";
+    if (Model.Stage == "confirm") { ViewBag.CardClass = "ark-card--wide"; }
+}
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="ark-alert ark-alert-error" role="alert"><span>@Model.Error</span></div>
+}
+
+@if (Model.Stage == "done")
+{
+    <div class="ark-icon-badge ark-icon-badge--success" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M5 10.5l3.2 3.2L15 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+    </div>
+    <h1>Done</h1>
+    <p class="ark-sub">@Model.Message</p>
+}
+else if (Model.Stage == "confirm")
+{
+    <h1>Connect @Model.ClientDisplay</h1>
+    <p class="ark-sub">Confirm that this code matches the one shown on your device.</p>
+
+    <div class="ark-code-display">@Model.UserCode</div>
+
+    @if (Model.Scopes.Count > 0)
+    {
+        <p style="font-size:13.5px;color:var(--ark-fg-muted);margin:0 0 12px;">It will be able to:</p>
+        <ul class="ark-scopes">
+            @foreach (var scope in Model.Scopes)
+            {
+                <li class="ark-scope">
+                    <span>
+                        <span class="ark-scope-name">@scope.Display</span>
+                        @if (!string.IsNullOrEmpty(scope.Description))
+                        {
+                            <span class="ark-scope-desc">@scope.Description</span>
+                        }
+                    </span>
+                </li>
+            }
+        </ul>
+    }
+
+    <form method="post" action="@Model.ActionUrl">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="user_code" value="@Model.UserCode" />
+        <div class="ark-actions">
+            <button class="ark-btn ark-btn-secondary" type="submit" name="ark_action" value="deny">Deny</button>
+            <button class="ark-btn ark-btn-primary" type="submit" name="ark_action" value="approve">Approve</button>
+        </div>
+    </form>
+
+    <p class="ark-meta">Only approve this if you started it yourself.</p>
+}
+else
+{
+    <h1>Connect a device</h1>
+    <p class="ark-sub">Enter the code shown on your device.</p>
+
+    <form method="post" action="@Model.ActionUrl">
+        @Html.AntiForgeryToken()
+        <div class="ark-field">
+            <label for="ark-user-code">Device code</label>
+            <input id="ark-user-code" class="ark-input ark-code-input" type="text" name="user_code"
+                   value="@Model.UserCode" placeholder="XXXX-XXXX" maxlength="9"
+                   autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false"
+                   required autofocus />
+        </div>
+        <button class="ark-btn ark-btn-primary" type="submit">Continue</button>
+    </form>
+}

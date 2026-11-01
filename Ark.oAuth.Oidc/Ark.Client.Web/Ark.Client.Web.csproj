@@ -1,0 +1,40 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Ark.Client.Web</RootNamespace>
+    <!--
+      The machine client's secret belongs in user-secrets rather than in appsettings.json:
+        dotnet user-secrets set "sample:Machine:ClientSecret" "the-secret"
+    -->
+    <UserSecretsId>0bc207fd-3c2b-4811-910b-c22200d90dbb</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Keeps the whole Microsoft.IdentityModel graph on one version.
+
+      Ark.oAuth.Client pins these too, so this is belt-and-braces — but if you copy this project
+      and install Ark.oAuth.Client from NuGet at a version older than the pin, keep these lines.
+      A split graph (Protocols 7.x against Tokens 8.x) fails only at runtime, on the first
+      sign-in: "Cannot redirect to the authorization endpoint, the configuration may be missing
+      or invalid." See README.md — Troubleshooting.
+    -->
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.8.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.8.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Inside this repository the client library is referenced by project so the sample always
+      builds against the current source. In a real application, delete this and install the
+      published package instead — nothing else changes:
+
+          dotnet add package Ark.oAuth.Client
+    -->
+    <ProjectReference Include="..\Ark.oAuth.Client\Ark.oAuth.Client.csproj" />
+  </ItemGroup>
+
+</Project>

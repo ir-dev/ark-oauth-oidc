@@ -1,77 +1,393 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
+	<!--
+		Ark.oAuth.Oidc — the OAuth 2.1 / OpenID Connect provider, packaged for nuget.org.
+
+		Sdk="Microsoft.NET.Sdk.Web" with OutputType=Library is deliberate. The output is a class
+		library, but it ships MVC controllers and Razor views, so it needs the Web SDK's Razor
+		compilation and its implicit FrameworkReference to Microsoft.AspNetCore.App. The price is
+		that the Web SDK also treats appsettings/wwwroot as *application* content and would pack it
+		into every consuming project — see the "Package payload" group below, which turns that off.
+	-->
+
+	<!-- ============================== Compilation ============================== -->
 	<PropertyGroup>
 		<TargetFramework>net9.0</TargetFramework>
-		<Version>1.0.5.45</Version>
-		<Description>oAuth2 oidc IdP implementation, easy fo developer integration</Description>
+		<OutputType>Library</OutputType>
+		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<OutputType>Library</OutputType>
-		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<NeutralLanguage>en</NeutralLanguage>
+		<!--
+			Pinned rather than left to default from the file name: MigrationScript builds resource
+			names by hand ("Ark.oAuth.Oidc.Migration.{provider}.up.00001_sql.sql"), so a rename of
+			the project file would silently break every migration lookup at runtime.
+		-->
+		<RootNamespace>Ark.oAuth.Oidc</RootNamespace>
+		<AssemblyName>Ark.oAuth.Oidc</AssemblyName>
+	</PropertyGroup>
+
+	<!-- ============================== Version ============================== -->
+	<PropertyGroup>
+		<Version>2.0.14</Version>
+		<AssemblyVersion>2.0.14.0</AssemblyVersion>
+		<FileVersion>2.0.14.0</FileVersion>
+	</PropertyGroup>
+
+	<!-- ============================== Package identity ============================== -->
+	<PropertyGroup>
 		<IsPackable>true</IsPackable>
-		<PackageIcon>ark_logo.png</PackageIcon>
+		<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+		<PackageId>Ark.oAuth.Oidc</PackageId>
+		<Title>Ark Identity Server — OAuth 2.1 / OpenID Connect provider</Title>
+		<Description>A self-contained OAuth 2.1 and OpenID Connect provider for ASP.NET Core. Two lines in Program.cs give you authorization code + PKCE, refresh tokens, client credentials, the device grant, PAR, introspection, revocation, dynamic client registration, RP-initiated logout and a discovery document any standard OIDC library can configure itself from. Multi-tenant, runs on SQLite, MySQL or PostgreSQL, and ships its own sign-in, consent and admin UI. Pair it with Ark.oAuth.Client for the application side.</Description>
 		<Authors>Immanuel R</Authors>
-		<Title>Ark's IdP oAuth2 oidc basic flows</Title>
-		<PackageTags>oauth2-oidc; identity server; oauth2 client</PackageTags>
-		<PackageReleaseNotes>trying to do oauth2 a simpler for developers</PackageReleaseNotes>
+		<Company>Immanuel</Company>
+		<Product>Ark Identity Server</Product>
+		<Copyright>Copyright © 2022-2026 Immanuel</Copyright>
+		<PackageTags>oauth oauth2 oauth2.1 oidc openid openid-connect identity identity-provider idp identity-server authentication authorization jwt jwks pkce sso single-sign-on aspnetcore security</PackageTags>
+		<PackageProjectUrl>https://github.com/ir-dev/ark-oauth-oidc</PackageProjectUrl>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+		<PackageIcon>ark_logo.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<DevelopmentDependency>false</DevelopmentDependency>
+		<PackageReleaseNotes>
+Next release — the management API answers to the operator only. BREAKING: ship as 2.1.0.
+
+* **The package decides who may call /api/oauth/v1/….** It used to be a bare [Authorize] against the
+  host's default scheme: with the console cookie as the default, any account mapped to the console
+  client could create clients and reset secrets in every tenant; with a bearer scheme as the default,
+  any token this server issued could. The ArkOperator policy admits the operator's console session
+  (AdminUser:Username, or an admin claim on the console mapping) and bearer tokens issued to
+  {TenantId}_machine with client.register — validated with this server's own keys, no host wiring.
+  Everyone else gets 401/403 JSON, never a sign-in redirect. Upgrade: give other console users the
+  admin claim, and delete any bearer scheme a host added for this API.
+* **The machine client's secret from configuration.** ark_oauth_server:Management:MachineClientSecret
+  is applied on start-up and rotated by changing it, so a pipeline-built deployment can provision on
+  first boot. At least 16 characters. While set, the console refuses to regenerate that secret.
+* **client.register cannot be self-granted.** Provisioning and dynamic registration refuse it; only an
+  operator grants it in the console.
+* **/api/migration is off by default** (Management:AllowMigrationEndpoint) and answers 404 while off.
+* Optional Management:OperatorDeviceClients admits operator-approved device-code tokens, for a CLI.
+
+Also in the next release — export, import and factory reset, on an operator-only Data page.
+
+* **Export everything.** One JSON file with every mapped table and column — tenants, signing keys,
+  clients (with secret hashes), users (with password hashes), access mappings, scopes, claims,
+  sessions, refresh tokens, consents, audit trail — plus the app settings, secrets redacted unless
+  asked for. Read from the EF model, so a column a later release adds is exported without a change
+  here. Optionally encrypted with a passphrase (AES-256-GCM, PBKDF2-SHA256), always checksummed.
+* **Import that says what it will do before it does it.** Analyse works out all three modes —
+  replace, merge keeping existing records, merge taking the file's — against the database as it is,
+  row by row. Rows that cannot be loaded safely (case-only collisions, broken references, duplicate
+  names, unsafe redirect URIs, conflicting key material, expired grants…) are excluded by a named
+  rule along with everything that depends on them; the rest loads. Apply runs the chosen plan in one
+  transaction and refuses if the plan changed since it was shown.
+* **Factory reset.** Empties every table and runs the same seed a new database gets — after first
+  checking the seed can run, so a reset can never leave a server nobody can sign in to.
+* **Additive.** No schema change, no migration, no change to an existing route. Switches under
+  ark_oauth_server:Admin:DataTools (Enabled, AllowReset, AllowImport, AllowReplace,
+  MaxImportMegabytes), all on by default. Specified in API-GUIDE.md.
+
+2.0.3 — back-channel logout, sign-out that covers the whole browser, and a dependency graph that
+is only what this package uses.
+
+* **Back-Channel Logout 1.0.** A client that registers a backchannel_logout_uri is now POSTed a
+  signed logout token when a session it took part in ends — an RP-initiated logout, a revoked
+  refresh token, or an account deactivated mid-session. The token is the §2.4 artefact: typ
+  "logout+jwt", the backchannel-logout event claim, sub and sid, and deliberately no nonce, so a
+  client cannot be handed one where an ID token was expected.
+* **A client that is down cannot stop a user signing out.** The sessions are revoked at this
+  server before the first notification goes out, every delivery runs in parallel behind its own
+  timeout, and a refusal is written to the audit trail as a warning rather than raised. The worst
+  outcome of an unreachable client is an application cookie that outlives the IdP session — which
+  is exactly the state every deployment was in before this existed.
+* **Clients are notified because they took part, not because they still hold a token.** A
+  session_clients row is written the first time a session issues a client an authorization code or
+  approves its device request. Deriving that list from live refresh tokens instead would miss
+  every client that never asked for offline_access — most of them — and every client whose tokens
+  have expired while its own application cookie is still valid.
+* **Registering for it.** backchannel_logout_uri and backchannel_logout_session_required are
+  accepted through dynamic client registration (§3.1 metadata: absolute, no fragment, https unless
+  loopback), on POST /api/oauth/v1/provision/client, and in the admin console's client editor. A
+  client with no URI is simply never notified, so nothing changes for clients that do not ask.
+* **Signing out now ends every session in the browser, not just the newest.** The session cookie
+  holds one sid and each sign-in overwrites it, so on a shared machine the previous person's
+  session stayed live in the database — with its refresh tokens, and with them still signed in at
+  every application they had opened — while /oauth2/logout ended only the session the cookie
+  happened to name. A long-lived ark_idp_bid cookie now identifies the user agent, sessions record
+  which browser they were created in, and logout ends all of them. It carries no identity of its
+  own: it is a random value that means nothing without the session rows pointing at it.
+* **Discovery now tells the truth about logout.** backchannel_logout_supported and
+  backchannel_logout_session_supported are advertised. frontchannel_logout_supported and
+  frontchannel_logout_session_supported, which were advertised as true against an endpoint this
+  server has never had, are now false — a client that reads the document no longer configures a
+  logout flow that cannot work.
+* **The signed-out page says what actually happened**: how many sessions and accounts were ended
+  when it was more than one, how many applications were signed out with you, and — named rather
+  than hidden — how many could not be reached and may still be open.
+* New settings under ark_oauth_server:Oidc, all defaulted to the behaviour above:
+  EnableBackChannelLogout (true), BackChannelLogoutTimeoutSeconds (5), LogoutTokenLifetimeSeconds
+  (120), SignOutAllBrowserSessions (true) and SignOutAcrossTenants (true). The last is worth a
+  look if one browser is expected to hold sessions in several tenants at once: the browser cookie
+  is one per deployment, not one per tenant.
+* **Dependencies are now what this package actually uses.** Ark.EfCore, Azure.Identity and
+  BouncyCastle are gone. Nothing here ever used a type from Ark.EfCore — it was acting purely as a
+  carrier for the EF packages it happened to depend on, which meant the EF version was decided by
+  somebody else's release, was pinned at 8.0.x on a net9.0 target, and dragged in a SQL Server
+  provider stack (Microsoft.Data.SqlClient and its native SNI runtime) that nothing in this
+  package can select. EF Core 9.0.x and the Sqlite, MySQL and PostgreSQL providers are now named
+  directly. SQL Server is deliberately absent: Provider "sqlserver" fell through every branch of
+  OnConfiguring and left the context with no provider configured, so it has never been a working
+  option and shipping the client library implied otherwise.
+
+Migration: existing databases need 00005, which adds clients.backchannel_logout_uri and
+clients.backchannel_logout_session_required, sessions.browser_id, and the session_clients table.
+Every change is additive and defaulted — existing clients register no logout URI and are not
+notified, and sessions that predate the column have no browser to name and are treated as their
+own. On SQLite it is applied on start-up and recorded in ark_schema_history, so there is nothing
+to run by hand. Only the SQLite scripts ship in this package: on MySQL or PostgreSQL the
+equivalent ALTER TABLE and CREATE TABLE are still yours to apply, and skipping them fails the same
+way a missing 00004 did — the entities carry columns the tables do not.
+
+2.0.2 — provisioning, activation, branding, and self-applying schema updates.
+
+* **Provisioning API.** POST /api/oauth/v1/provision/client registers an application, creates or
+  reuses a user, and adds the user-client access mapping in one call. An existing client name is
+  refused with HTTP 409 and code "client_exists" and nothing is written — a live application's
+  redirect URIs are never silently rewritten. An existing user is reused and mapped, which is what
+  happens when somebody is given their second application. A user this creates signs in
+  immediately on ark_oauth_server:DefaultPw; pass send_activation_email to email a link instead.
+* **Activation, at two levels.** Applications already had is_active; accounts now have one too.
+  POST /api/oauth/v1/activation/client and /activation/user switch either off, and revoke what has
+  already been handed out — a deactivated client loses its refresh tokens, a deactivated user
+  loses their sessions and refresh tokens — so the switch takes effect now rather than whenever
+  they happened to expire. The switch is honoured through the plain client/user upsert too.
+* **Sign-in says which level is off.** A deactivated application names itself on the authorization
+  endpoint; a deactivated account gets "Your account has been deactivated…" on the sign-in page.
+  Both only after the password has been verified, so the single deliberately-vague message for
+  every credentials failure — and with it the page's resistance to account enumeration — is
+  unchanged.
+* **Pending schema scripts run on start-up.** The scripts in Migration/{provider}/up were an
+  operator's job after every upgrade, and skipping one failed quietly and specifically: without
+  00004 the entity carried users.is_active and the table did not, so /api/oauth/v1/user/list
+  answered a bare 500 and the console's Users grid came up empty with nothing saying why. The
+  bootstrap now applies what is pending and records it in ark_schema_history.
+* **Nothing is replayed.** A database that predates the history table is measured rather than
+  replayed: each script is checked against the live schema and one whose tables and columns are all
+  present is recorded as a baseline without executing. 00003 rewrites every client that holds no
+  secret — right for a 2.0.0 upgrade, wrong for anything after it — so that distinction is the
+  whole point. A database created by EnsureCreated on this version records all four and runs none.
+* **Provisioning and Activation have their own console page**, /{tenant}/admin/provisioning, linked
+  from a navigation bar in the console's top bar and restricted to the administrator account
+  (AdminUser:Username, or a principal carrying an "admin" claim). It carries the provisioning form,
+  both activation switches, and the state of every client and account at once.
+* **The page writes the curl for you.** Fill either form in and the equivalent command appears,
+  carrying the values that are in the forms — the provisioning body, the activation body, and a
+  client_credentials token step. The secret is the one thing the page cannot read back, so a button
+  mints a new one for the machine client and drops it straight into the command.
+* **Client logos.** Uploaded in the client editor or at provisioning time and inlined as a data
+  URI, so nothing has to be hosted. The sign-in page header now carries the host logo and the
+  client logo together, and lays itself out for two marks, one, or none — the previous header
+  showed only the client's, with the host's relegated to the footer. The console's top bar shows
+  the same lockup, and the client grid shows each client's mark.
+* **The client setup page can run the flow.** /{tenant}/oauth2/integrate/{client_id} gained a live
+  authorization code + PKCE section: it generates a real verifier and S256 challenge in the
+  browser, runs the request in an embedded iframe ending at the redirect_uri you pick, and shows
+  the token-exchange command for the code that comes back.
+* The interactive pages now send Content-Security-Policy: frame-ancestors 'self' — clickjacking
+  protection they did not have, and what lets the setup page frame the authorization endpoint.
+* The management API's list endpoints report a failure as { error, msg } like every other endpoint
+  instead of an empty 500, and /api/migration/v1/sql now reports whether the script it ran actually
+  worked rather than always answering "executed".
+
+Migration: existing databases need 00004, which adds users.is_active. It is one additive, defaulted
+column, so every existing account stays active. This version applies it on start-up, so there is
+nothing to run by hand, and a database created by this version already has it.
+
+2.0.1 — maintenance release.
+
+No API or protocol change over 2.0.0. Rebuilt and republished so the package on nuget.org matches
+the 2.0.0 source tree exactly, and to carry the packaging fixes below. Consumers on 2.0.0 can
+upgrade with no code change; the 2.0.0 notes apply unchanged and are kept below.
+
+Packaging: the package icon (ark_logo.png) and the readme are packed at the root of the .nupkg, so
+nuget.org and the Visual Studio package manager show both. The icon is referenced through
+PackageIcon rather than the deprecated PackageIconUrl, and is included with an empty PackagePath so
+it lands at the package root on a non-Windows build too.
+
+2.0.0 — the standards release.
+
+* Full OAuth 2.1 / OpenID Connect protocol core: discovery, JWKS with two-phase key rotation,
+  authorization code + PKCE (S256 only, required for public clients), refresh token rotation,
+  client credentials, device authorization grant (RFC 8628), pushed authorization requests
+  (RFC 9126), introspection (RFC 7662), revocation (RFC 7009), dynamic client registration
+  (RFC 7591/7592), RP-initiated logout, and issuer identification (RFC 9207).
+* Access tokens now follow RFC 9068 (typ: at+jwt, client_id, jti, scope).
+* Codes and refresh tokens are stored as SHA-256 hashes; replay of either is treated as compromise
+  and revokes the derived tokens or the whole refresh-token family.
+* Per-client setup page at /{tenant}/oauth2/integrate/{client_id}, generated from the client's own
+  registration, with copy-paste config for the Ark client, the raw ASP.NET Core handler,
+  oidc-client-ts, Authlib and go-oidc.
+* Sign-in and consent pages load no third-party resources and work under a strict CSP.
+* The admin console now ships inside this package, at /{tenant}/admin — tenants, clients, users,
+  scopes, claims and the access mapping, with no view, stylesheet or script to copy into the host.
+  Its CSS and JS are served from the assembly at /ark-admin/asset/{file}. Point
+  ark_oauth_server:Admin:SignOutUrl at your own sign-out route, since only the host can drop its
+  own authentication cookie. The v1 console at /oauth/{tenant}/v1/server/{client}/manage is still
+  served and no longer developed.
+
+Breaking / migration: the administrator account seeded into a new database now comes from
+ark_oauth_server:AdminUser (Username, Password, Name) instead of the compiled-in "admin" / "admin".
+Password is required, falls back to DefaultPw, and a value left as a &lt;&lt;placeholder&gt;&gt;
+counts as unset — seeding stops with a message naming the setting rather than creating an account
+whose credentials are published in the release notes of every deployment. Existing databases are
+untouched: the section is only read while the schema is being created.
+
+The implicit grant, the hybrid flow and the resource owner password
+credentials grant are not supported. The v1 /oauth/{tenant}/v1/... routes still work and keep their
+request and response shapes, but now delegate to the protocol core — so codes issued there are
+single-use, expire, and have their PKCE verifier checked. Existing databases must run migration
+00003 (GET /api/migration/v1/sql?action=up&amp;name=00003_sql.sql), which adds the protocol state
+tables and RFC 7591 metadata columns, seeds the scope catalogue, and adopts each tenant's existing
+RSA key as its active signing key with kid = tenant_id, so tokens already issued keep validating.
+
+Packaging: the package no longer ships application content or static web assets into consuming
+projects, and now carries a readme, an SPDX license expression and a symbol package.
+		</PackageReleaseNotes>
+	</PropertyGroup>
+
+	<!-- ============================== Repository / Source Link ============================== -->
+	<PropertyGroup>
 		<RepositoryUrl>https://github.com/ir-dev/ark-oauth-oidc</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<RepositoryBranch>main</RepositoryBranch>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<DebugType>portable</DebugType>
+		<!-- Deterministic paths only on a CI build; locally they make stack traces unreadable. -->
+		<ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true' or '$(TF_BUILD)' == 'true'">true</ContinuousIntegrationBuild>
 	</PropertyGroup>
 
+	<!-- ============================== API documentation ============================== -->
+	<PropertyGroup>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<!-- Ship IntelliSense for what is documented without demanding a doc comment on every
+		     public member before the package can build. -->
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
+	</PropertyGroup>
+
+	<!-- ============================== Package payload ============================== -->
+	<PropertyGroup>
+		<!--
+			Without this the Web SDK emits a staticwebassets/ folder plus two build/*.props files
+			that wire wwwroot up to be served from _content/Ark.oAuth.Oidc/. Nothing here is served
+			that way — see the wwwroot group below — so it was dead weight in the package.
+
+			Note this does NOT stop wwwroot being packed: with static web asset processing off, any
+			surviving Content item would be packed as plain content/ instead. The Content Remove
+			below is what actually keeps it out.
+		-->
+		<StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
+		<!--
+			IncludeContentInPack is deliberately NOT set to false here. It reads like the switch for
+			"do not ship application content", but in NuGet.Build.Tasks.Pack.targets it gates the
+			whole _GetPackageFiles target — which is also what collects None items marked
+			Pack="true". Setting it false silently drops the icon and the readme and the build fails
+			with NU5046. Unwanted content is excluded item by item instead.
+		-->
+	</PropertyGroup>
+
+	<!-- ==============================================================================
+		Package root files. PackagePath is empty, not "\" — on a non-Windows build MSBuild takes
+		the backslash literally and the icon lands in a directory called "\", which pack then
+		reports as NU5046 "the icon file does not exist in the package".
+	     ============================================================================== -->
 	<ItemGroup>
-		<Content Remove="wwwroot/css/ark-oauth-login.css" />
-		<Content Remove="wwwroot\email\user_activation_.html" />
-		<Content Remove="wwwroot\img\ark-auth.gif" />
-		<Content Remove="wwwroot\img\ark_idp.png" />
-		<Content Remove="wwwroot\img\ark_logo_1.png" />
-		<Content Remove="wwwroot\img\ark_oauth_logo.png" />
-		<Content Remove="wwwroot\img\imm_c_dev_1.png" />
-		<Content Remove="wwwroot\img\oauth-bg.jpg" />
-		<Content Remove="wwwroot\img\profile.png" />
-		<Content Remove="wwwroot\img\security_1.jpg" />
+		<None Include="Icon\ark_logo.png" Pack="true" PackagePath="" Visible="false" />
+		<None Include="README.md" Pack="true" PackagePath="" />
 	</ItemGroup>
 
+	<!-- ==============================================================================
+		AI-prompt-first developer documentation, packed at the .nupkg root beside the
+		README so it travels with the package. nuget.org renders only PackageReadmeFile
+		(README.md), so README links to these; they are here for a developer or an AI
+		coding agent that has the package in hand (unpack, or browse the repo).
+
+		Same Pack="true" PackagePath="" pattern as README: it lands in the package but is
+		NOT contentFiles, so it is never copied into a consuming project's tree. PackagePath
+		is empty, not "\", for the non-Windows build reason documented above.
+	     ============================================================================== -->
 	<ItemGroup>
-	  <None Remove="Migration\Sqlite\down\00001_sql.sql" />
-	  <None Remove="Migration\Sqlite\down\00002_sql.sql" />
-	  <None Remove="Migration\Sqlite\up\00001_sql.sql" />
-	  <None Remove="Migration\Sqlite\up\00002_sql.sql" />
+		<None Include="AI-PROMPT.md" Pack="true" PackagePath="" />
+		<None Include="AI-RECIPES.md" Pack="true" PackagePath="" />
+		<None Include="API-GUIDE.md" Pack="true" PackagePath="" />
+		<None Include="TROUBLESHOOTING.md" Pack="true" PackagePath="" />
+		<None Include="MIGRATION.md" Pack="true" PackagePath="" />
 	</ItemGroup>
 
+	<!-- ==============================================================================
+		wwwroot: embedded, never served.
+
+		AddArkOidcServer runs EmbeddedResourceUnpacker in Development, which writes every embedded
+		resource out to the host's content root. That is how a host which only references this
+		package ends up with the sign-in CSS, the activation email template and the images on disk.
+		Removing the same files from Content stops the Web SDK claiming them as application content.
+	     ============================================================================== -->
 	<ItemGroup>
-		<EmbeddedResource Include="Migration/Sqlite/down/00001_sql.sql" />
-		<EmbeddedResource Include="Migration\Sqlite\down\00002_sql.sql" />
-		<EmbeddedResource Include="Migration\Sqlite\up\00001_sql.sql" />
-		<EmbeddedResource Include="Migration\Sqlite\up\00002_sql.sql" />
-		<EmbeddedResource Include="wwwroot\email\user_activation_.html" />
-		<EmbeddedResource Include="wwwroot\img\profile.png" />
+		<Content Remove="wwwroot\**" />
+		<EmbeddedResource Include="wwwroot\**" />
 	</ItemGroup>
 
+	<!-- ==============================================================================
+		Migration scripts, looked up by name at runtime as
+		"Ark.oAuth.Oidc.Migration.{Sqlite|Mysql|Postgres|Sqlserver}.{up|down}.{file}.sql".
+		Wildcarded so a new script is picked up by adding the file and nothing else.
+	     ============================================================================== -->
 	<ItemGroup>
-		<Page Include="wwwroot\img\ark_logo_1.png" />
-	</ItemGroup>
-	
-	<ItemGroup>
-		<None Include="Icon\ark_logo.png" Pack="true" PackagePath="" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<EmbeddedResource Include="wwwroot/css/ark-oauth-login.css" />
-		<EmbeddedResource Include="wwwroot\img\ark-auth.gif" />
-		<EmbeddedResource Include="wwwroot\img\ark_idp.png" />
-		<EmbeddedResource Include="wwwroot\img\ark_logo_1.png" />
-		<EmbeddedResource Include="wwwroot\img\ark_oauth_logo.png" />
-		<EmbeddedResource Include="wwwroot\img\imm_c_dev_1.png" />
-		<EmbeddedResource Include="wwwroot\img\oauth-bg.jpg" />
-		<EmbeddedResource Include="wwwroot\img\security_1.jpg" />
+		<None Remove="Migration\**\*.sql" />
+		<EmbeddedResource Include="Migration\**\*.sql" />
 	</ItemGroup>
 
+	<!-- ==============================================================================
+		Dependencies.
+
+		Every EF Core package below used to arrive transitively, through a reference to
+		Ark.EfCore 0.0.1.3. Nothing in this project ever used a type from that package — its
+		public surface is one DbContext subclass, one settings POCO and one AddArkContext<T>()
+		extension, and this project has its own ArkDataContext and its own registration — so it
+		was acting purely as a carrier for the four EF provider packages it happened to depend on.
+		That is worth avoiding: the EF version this package built against was decided by somebody
+		else's release, it pinned EF at 8.0.x on a net9.0 target, and it dragged in a SQL Server
+		provider stack (Microsoft.Data.SqlClient plus its native SNI runtime) that
+		ArkDataContext.OnConfiguring has no branch to select. The providers are now named here.
+
+		Sqlite / MySQL / Postgres are the three OnConfiguring can actually switch on, so they are
+		the three that are referenced. SQL Server is deliberately absent: setting Provider to
+		"sqlserver" fell through every branch and left the context with no provider configured, so
+		it has never been a working option and shipping the client library implied otherwise.
+	     ============================================================================== -->
 	<ItemGroup>
-		<PackageReference Include="Ark.EfCore" Version="0.0.1.3" />
-		<PackageReference Include="ark.net.util" Version="1.0.4.14" />
-		<PackageReference Include="Azure.Identity" Version="1.13.2" />
-		<PackageReference Include="BouncyCastle.Cryptography" Version="2.5.1" />
+		<PackageReference Include="ark.net.util" Version="1.0.4.15" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.19" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.19" />
+		<PackageReference Include="MySql.EntityFrameworkCore" Version="9.0.17" />
+		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.8.0" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.8.0" />
+		<!--
+			Not used by this assembly — pinned to keep the graph on one Microsoft.IdentityModel
+			version. MySql.Data (under MySql.EntityFrameworkCore) asks for
+			Microsoft.IdentityModel.Protocols.OpenIdConnect 7.5.0 while everything else here is on
+			8.8.0, and that split does not fail at restore or at build: it fails at the first OIDC
+			challenge, with a MethodAccessException or a missing-method error that names neither
+			package. Raising the floor to 8.8.0 keeps Protocols and Tokens on the same major.
+		-->
+		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.8.0" />
 	</ItemGroup>
+
 </Project>

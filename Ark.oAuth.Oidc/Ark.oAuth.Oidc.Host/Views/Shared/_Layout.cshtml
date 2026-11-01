@@ -1,0 +1,22 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin" />
+    <title>@ViewData["Title"] — Ark IdP</title>
+    @*
+        The shell styling — top bar, panels, buttons, the landing layout — now ships inside the
+        server package with the admin console it is shared with, and is served from the assembly
+        rather than from this app's wwwroot. Keeping a copy here is what let the host and the
+        console drift apart in the first place.
+    *@
+    <link rel="stylesheet" href="@AdminController.AssetUrl(Context.Request.PathBase, AdminController.CssAsset)" />
+    @await RenderSectionAsync("Styles", required: false)
+</head>
+<body>
+    @RenderBody()
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

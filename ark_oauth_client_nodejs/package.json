@@ -1,0 +1,61 @@
+{
+  "name": "ark-oauth-client",
+  "version": "2.0.1",
+  "description": "The OAuth 2.1 / OpenID Connect client for Node.js applications, built for Ark.oAuth.Oidc. Authorization code + PKCE with state, nonce, iss and at_hash checks, JWKS rotation, silent refresh, client credentials, the device grant, PAR, introspection, revocation, dynamic client registration and RP-initiated logout \u2014 plus Express/Connect middleware for interactive sign-in and for protecting an API. No runtime dependencies.",
+  "keywords": [
+    "oauth",
+    "oauth2",
+    "oidc",
+    "openid-connect",
+    "pkce",
+    "jwt",
+    "jwks",
+    "authentication",
+    "express",
+    "ark"
+  ],
+  "license": "MIT",
+  "author": "Immanuel R",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ir-dev/ark-oauth-oidc.git",
+    "directory": "ark_oauth_client_nodejs"
+  },
+  "homepage": "https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_nodejs#readme",
+  "bugs": "https://github.com/ir-dev/ark-oauth-oidc/issues",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./express": {
+      "types": "./types/index.d.ts",
+      "default": "./src/express.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "types",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "test:watch": "node --test --watch \"test/*.test.js\"",
+    "example:web": "node examples/web-app.js",
+    "example:api": "node examples/api-server.js",
+    "example:device": "node examples/device-flow.js",
+    "example:setup": "node examples/setup-check.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": ">=20"
+  }
+}

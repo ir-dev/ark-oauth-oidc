@@ -1,3 +1,23 @@
+
+-------
+
+---------
+
+Getting strted:
+
+Step 1: Base Libraries 
+	- base library: 	"Ark.oAuth.Oidc" - Server Library
+	- client library:	"Ark.oAuth.client" - Client Library
+Step 2: Host Project - that hosts the IdP server using Base Librarires
+	- Ark.oAuth.Oidc.Host - host project that is the IDP server using base library
+						  - also the admin console that acts as a admin console (as client app using client library)
+						  - https://localhost:7233/ark_idp/admin
+
+Step 3: Sample client - "Ark.Client.Web" - Sample client project
+		- https://localhost:7255/
+
+
+
 Step by Step guide for setting "Auth Server"
 
 	1. Create a Asp.net cortroller project & add nuget referece to both Ark.oAuth.Oidc & Ark.oAuth.client nuget packages
