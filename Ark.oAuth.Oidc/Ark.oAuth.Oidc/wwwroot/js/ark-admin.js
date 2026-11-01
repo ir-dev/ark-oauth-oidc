@@ -1366,7 +1366,14 @@
     var TOKEN_ENDPOINT = root.dataset.tokenEndpoint || "";
     var API_ROOT = root.dataset.apiRoot || "";
     var MACHINE_HAS_SECRET = root.dataset.machineHasSecret === "true";
+    // The machine client's secret comes from ark_oauth_server:Management:MachineClientSecret;
+    // the server refuses to regenerate it, since the next restart would put the configured one back.
+    var MACHINE_SECRET_MANAGED = root.dataset.machineSecretManaged === "true";
     var SECRET_PLACEHOLDER = "<client secret>";
+
+    function isManagedMachineClient(clientId) {
+        return MACHINE_SECRET_MANAGED && clientId === (root.dataset.machineClient || "");
+    }
 
     /** Single-quotes a value for a POSIX shell, including values that contain a quote. */
     function shellQuote(value) {
@@ -1424,6 +1431,8 @@
         byId("cu-out").textContent = blocks.join("\n\n");
         byId("cu-note").textContent = (byId("cu-client_secret").value || "").trim()
             ? "The secret above is in the command. It is not stored anywhere readable, so this page is the only place it exists — copy the command before leaving."
+            : isManagedMachineClient((byId("cu-client_id").value || "").trim())
+                ? "This client's secret is set by ark_oauth_server:Management:MachineClientSecret in the server's configuration. Paste it in, or have the pipeline read it from wherever that setting is kept."
             : MACHINE_HAS_SECRET
                 ? "The command carries a placeholder for the secret. Generate one above to have it filled in, or paste the value you kept."
                 : "This client has no secret yet, so the token request will be refused until one is generated above.";
@@ -1433,6 +1442,10 @@
     on("cu-secret-reset", "click", function () {
         var clientId = (byId("cu-client_id").value || "").trim();
         if (!clientId) { toast("w", "name the client the script should authenticate as", 4000); return; }
+        if (isManagedMachineClient(clientId)) {
+            toast("w", "this secret is set by ark_oauth_server:Management:MachineClientSecret - rotate it by changing that setting", 6000);
+            return;
+        }
         var known = state.clients.filter(function (c) { return c.client_id === clientId; })[0];
         if (!confirm("Generate a new secret for '" + clientId + "'?\n\nThe current one stops working immediately.")) return;
 

@@ -78,8 +78,9 @@ scripts and runs none.
 table did not, so `/api/oauth/v1/user/list` answered a bare 500 and the console's Users grid came up
 empty with nothing saying why.
 
-Run/rollback one by hand: `GET /api/migration/v1/sql?action=up|down&name=00005_sql.sql` (now reports
-whether the script actually worked instead of always saying "executed").
+Run/rollback one by hand: `POST /api/migration/v1/sql?action=up|down&name=00005_sql.sql` (reports
+whether the script actually worked instead of always saying "executed"). Since the next release the
+endpoint is off unless `ark_oauth_server:Management:AllowMigrationEndpoint` is `true`.
 
 ## Upgrade playbook
 
@@ -115,6 +116,25 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
 ```
 
 ## Behavioural changes by version (from the .csproj notes)
+
+- **Next release — management API authorization (breaking; ship as 2.1.0).**
+  - `ManageController` and `ProvisionController` take the `ArkOperator` policy instead of a bare
+    `[Authorize]`. Admitted: the operator's console session (`AdminUser:Username`, or an `admin` /
+    `ark_admin` claim on the console mapping), or a bearer token issued to `{TenantId}_machine` with
+    `client.register` (or an operator-approved token from a `Management:OperatorDeviceClients` client).
+    Everyone else gets 401/403 JSON instead of a sign-in redirect.
+  - **Upgrade action:** a console user who is not `AdminUser` and used the console's grids needs the
+    `admin` claim on their mapping to `{TenantId}_client`, or every API call answers 403.
+  - **Upgrade action for hosts that added their own bearer scheme** for the API (e.g. a policy scheme
+    made the default, or JWT bearer with a client_id check): remove it. The package's schemes are
+    `ArkManagement` and `ArkManagementBearer`; a host scheme of either name is a duplicate-scheme error on the first request.
+  - New, optional `ark_oauth_server:Management`: `MachineClientSecret` (applied to the machine client
+    on start-up; ≥ 16 characters or the bootstrap stops; while set the console refuses to regenerate
+    that secret), `OperatorDeviceClients` (default empty), `AllowMigrationEndpoint` (default `false`).
+  - `/api/migration` answers 404 unless `AllowMigrationEndpoint` is true.
+  - `client.register` is refused when requested through `/provision/client` (`invalid_scope`) or
+    `/oauth2/register` (`invalid_client_metadata`); an operator still grants it in the console.
+  - No schema change.
 
 - **Next release** (after 2.0.13): the operator's **Data** page (`/{tenant}/admin/data`) and API —
   full export (every table and column, optionally AES-256-GCM encrypted), analysed import with three

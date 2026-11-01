@@ -54,7 +54,25 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
-Next release — export, import and factory reset, on an operator-only Data page.
+Next release — the management API answers to the operator only. BREAKING: ship as 2.1.0.
+
+* **The package decides who may call /api/oauth/v1/….** It used to be a bare [Authorize] against the
+  host's default scheme: with the console cookie as the default, any account mapped to the console
+  client could create clients and reset secrets in every tenant; with a bearer scheme as the default,
+  any token this server issued could. The ArkOperator policy admits the operator's console session
+  (AdminUser:Username, or an admin claim on the console mapping) and bearer tokens issued to
+  {TenantId}_machine with client.register — validated with this server's own keys, no host wiring.
+  Everyone else gets 401/403 JSON, never a sign-in redirect. Upgrade: give other console users the
+  admin claim, and delete any bearer scheme a host added for this API.
+* **The machine client's secret from configuration.** ark_oauth_server:Management:MachineClientSecret
+  is applied on start-up and rotated by changing it, so a pipeline-built deployment can provision on
+  first boot. At least 16 characters. While set, the console refuses to regenerate that secret.
+* **client.register cannot be self-granted.** Provisioning and dynamic registration refuse it; only an
+  operator grants it in the console.
+* **/api/migration is off by default** (Management:AllowMigrationEndpoint) and answers 404 while off.
+* Optional Management:OperatorDeviceClients admits operator-approved device-code tokens, for a CLI.
+
+Also in the next release — export, import and factory reset, on an operator-only Data page.
 
 * **Export everything.** One JSON file with every mapped table and column — tenants, signing keys,
   clients (with secret hashes), users (with password hashes), access mappings, scopes, claims,

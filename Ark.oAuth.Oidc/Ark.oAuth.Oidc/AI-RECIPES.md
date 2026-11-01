@@ -188,7 +188,9 @@ and ensure `app.UseArkOidcCors();` sits **after** `UseRouting()` and **before** 
 > it a secret."
 
 1. In the console's client editor for `{tenant}_machine`, press **Regenerate secret** (it ships
-   secret-less on purpose and cannot mint tokens until it has one).
+   secret-less on purpose and cannot mint tokens until it has one) — or, for a pipeline-provisioned
+   deployment, set `ark_oauth_server:Management:MachineClientSecret` from a key vault or environment
+   variable; it is applied on start-up.
 2. Exchange:
 ```http
 POST /my_idp/oauth2/token
@@ -198,6 +200,8 @@ grant_type=client_credentials&client_id=my_idp_machine&client_secret=<secret>&sc
 ```
 - **`client.register`** is the scope an initial access token needs to create clients via `/oauth2/register`.
 - On the client side use `ArkClientCredentials.GetTokenAsync(...)` from `Ark.oAuth.Client`.
+- The same token drives the management API (`/api/oauth/v1/...`): send it as `Authorization: Bearer`.
+  Only `{tenant}_machine` tokens are admitted — giving `client.register` to another client does not.
 - **Mistake:** expecting `{tenant}_machine` to work immediately — regenerate its secret first.
 
 ---
@@ -302,7 +306,8 @@ public async Task SignOutAll()
 - Then, on every provider, any table/column still missing from the entity model is added (audited as
   `schema_sync`). A new entity property therefore needs no script on any provider; write one only for
   a *data* change, and make it safe to run twice.
-- To run/rollback one by hand: `GET /api/migration/v1/sql?action=up|down&name=00005_sql.sql`.
+- To run/rollback one by hand: `POST /api/migration/v1/sql?action=up|down&name=00005_sql.sql`, after setting
+  `ark_oauth_server:Management:AllowMigrationEndpoint=true` (it answers 404 otherwise); operator session only.
 
 ---
 
@@ -315,5 +320,6 @@ public async Task SignOutAll()
 3. Keep `RequireHttpsMetadata=true` on clients; use an https `BaseUrl`.
 4. Leave `Oidc:EnableDynamicRegistration` off unless needed; keep `RequireRegistrationAccessToken` on.
 5. Give confidential clients real secrets and set `token_endpoint_auth_method` accordingly.
-6. Regenerate the `{tenant}_machine` client secret (it ships without one).
+6. Regenerate the `{tenant}_machine` client secret (it ships without one), or set
+   `Management:MachineClientSecret` from a key vault — never from a tracked settings file.
 7. List exact SPA origins in `Oidc:CorsOrigins`; leave it empty if there are none.

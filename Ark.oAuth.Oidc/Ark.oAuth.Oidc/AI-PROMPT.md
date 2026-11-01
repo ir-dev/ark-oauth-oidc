@@ -91,7 +91,7 @@ Provisioning & activation API   (/api/oauth/v1/... , [Authorize] — needs a val
  ├── Collision      client name taken => 409 client_exists, nothing written; existing user => reused+mapped
  └── Anti-patterns  four manual steps; forgetting the access mapping (looks like a wrong password)
 
-Management API   (/api/oauth/v1/... , [Authorize])
+Management API   (/api/oauth/v1/... , operator only: operator console session, or {tenant}_machine bearer with client.register)
  ├── Tenants        v1/tenant/list, v1/tenant/upsert
  ├── Clients        v1/client/list|upsert|delete, v1/client/secret/reset
  ├── Users          v1/user/list|upsert, v1/user/pw/reset/init, v1/user/pw/set
@@ -117,7 +117,8 @@ Admin console (UI)
  └── Anti-patterns  copying views into the host; expecting the console to end the host session itself
 
 Migration API
- ├── Run/rollback   GET /api/migration/v1/sql?action=up|down&name=00005_sql.sql
+ ├── Switch         off (404) unless ark_oauth_server:Management:AllowMigrationEndpoint=true; operator session only
+ ├── Run/rollback   POST /api/migration/v1/sql?action=up|down&name=00005_sql.sql
  ├── List embeds    GET /api/migration/v1/embeded/list
  └── Note           SQLite scripts self-apply on start-up; MySQL/PostgreSQL ALTERs are manual
 ```
@@ -129,7 +130,7 @@ Standing up a new IdP?                     -> AddArkOidcServer(env) + AddArkOidc
 Onboarding a new application?              -> POST /api/oauth/v1/provision/client (one call, includes the access mapping)
 Turning an app or account off temporarily? -> POST /api/oauth/v1/activation/client | /activation/user (is_active=false; revokes tokens)
 SPA client can't reach /token from browser?-> add its exact origin to Oidc:CorsOrigins, then UseArkOidcCors()
-Need machine-to-machine tokens?            -> use the seeded {tenant}_machine client; regenerate its secret in the console first
+Need machine-to-machine tokens?            -> use the seeded {tenant}_machine client; regenerate its secret in the console, or set Management:MachineClientSecret (key vault/env)
 Need dynamic client registration?          -> Oidc:EnableDynamicRegistration=true (keep RequireRegistrationAccessToken on)
 Want mandatory PAR?                         -> Oidc:RequirePushedAuthorizationRequests=true
 Onboarding passwords via email links?       -> UserPasswordMode="email_based" (email accounts parked in reset mode)
@@ -201,7 +202,7 @@ PRIMARY APIS:
 - pipeline: UseRouting(); UseArkOidcCors(); UseArkAuthData(); UseArkOidcClient(); UseAuthentication(); UseAuthorization();
 - POST /api/oauth/v1/provision/client        (client + user + redirects + access mapping)
 - POST /api/oauth/v1/activation/client|user  (is_active on/off; revokes tokens)
-- Management API under /api/oauth/v1/... ([Authorize])
+- Management API under /api/oauth/v1/... (operator only — ArkManagementAuth; the host registers nothing for it)
 - Protocol endpoints under {BaseUrl}/{TenantId}/oauth2/... and /.well-known/...
 
 CONFIGURATION ("ark_oauth_server"):

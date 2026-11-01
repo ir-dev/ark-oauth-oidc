@@ -305,6 +305,11 @@ namespace Ark.oAuth.Oidc.Endpoints
             if (unknown.Count > 0)
                 throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
                     $"unknown scope(s): {string.Join(", ", unknown)}. Register only scopes this server defines.");
+
+            var privileged = ArkClaimsService.Privileged(client.scopes);
+            if (privileged.Count > 0)
+                throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                    $"scope(s) {string.Join(", ", privileged)} cannot be registered dynamically; an operator grants them in the console.");
         }
 
         private async Task EnforceUniqueClientNameAsync(ArkClient client)

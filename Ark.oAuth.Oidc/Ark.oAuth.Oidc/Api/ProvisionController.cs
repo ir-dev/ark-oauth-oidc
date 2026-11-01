@@ -13,11 +13,10 @@ namespace Ark.oAuth.Oidc
     ///   * <c>POST v1/provision/client</c>   — register an application and give a user access to it.
     ///   * <c>POST v1/activation/{client|user}</c> — switch either of them off, and back on.
     ///
-    /// Authorization is the same as the rest of the management API: a bare <c>[Authorize]</c>
-    /// against the host's default scheme, which makes the caller a global operator over every
-    /// tenant. See the operator-vs-tenant note on <see cref="ManageController"/>. A host that
-    /// wants machine callers rather than a browser session registers a bearer scheme as its
-    /// default (or an additional one) — nothing here assumes a cookie.
+    /// Authorization is the same as the rest of the management API: operator only, through
+    /// <see cref="ArkManagementAuth"/> — the operator's console session, or a bearer token
+    /// issued to the machine client with <c>client.register</c>. A pipeline uses the second; the
+    /// host registers nothing for it.
     ///
     /// Responses keep the <c>{ error, msg, data }</c> shape the rest of the management API uses,
     /// and add a stable <c>code</c> so a caller can branch without matching on prose. Unlike the
@@ -25,7 +24,7 @@ namespace Ark.oAuth.Oidc
     /// person reading a toast, and "already exists" has to be distinguishable from "worked"
     /// without parsing the body.
     /// </summary>
-    [Authorize]
+    [Authorize(Policy = ArkManagementAuth.PolicyName)]
     [Route("api/oauth")]
     [ApiController]
     public class ProvisionController : ControllerBase

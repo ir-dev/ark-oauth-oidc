@@ -358,6 +358,45 @@ namespace Ark.oAuth.Oidc
             ReconcileAdminConsoleClient(services);
             ReconcileScopeCatalogue(services);
             ReconcileMachineClient(services);
+            ReconcileMachineSecret(services);
+        }
+
+        /// <summary>
+        /// Gives the machine client the secret named by
+        /// <c>ark_oauth_server:Management:MachineClientSecret</c>, when one is configured.
+        ///
+        /// Runs here, inside the bootstrap, because this is the first point at which both the
+        /// schema and the machine client are guaranteed to exist — a host applying it from its
+        /// own start-up code reads a database the bootstrap has not created yet. Skipped when the
+        /// stored hash already matches, so an unchanged setting writes nothing; a changed one
+        /// rotates the credential on the next start. Unset, an existing secret is left alone.
+        /// </summary>
+        private static void ReconcileMachineSecret(IServiceProvider services)
+        {
+            var conf = services.GetRequiredService<IConfiguration>();
+            var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
+            var secret = ser?.Management?.ConfiguredMachineClientSecret;
+            if (ser == null || secret == null || string.IsNullOrWhiteSpace(ser.TenantId)) return;
+
+            // This value is the operator's authority in a string. A short one is refused loudly
+            // rather than applied, for the same reason an unset admin password stops the seed.
+            if (secret.Length < ArkManagementConfig.MinMachineClientSecretLength)
+                throw new ApplicationException(
+                    $"ark_oauth_server:Management:MachineClientSecret is shorter than " +
+                    $"{ArkManagementConfig.MinMachineClientSecretLength} characters. It authenticates as the " +
+                    "operator, so use a long random value (openssl rand -base64 32), or unset it.");
+
+            var dbContext = services.GetRequiredService<ArkDataContext>();
+            var clientId = ArkManagementAuth.MachineClientId(ser.TenantId);
+            var client = dbContext.clients.FirstOrDefault(c => c.tenant_id == ser.TenantId && c.client_id == clientId);
+            if (client == null || Protocol.ArkCrypto.VerifySecret(secret, client.client_secret_hash)) return;
+
+            client.client_secret_hash = Protocol.ArkCrypto.HashSecret(secret);
+            client.client_secret_expires_at = null;
+            dbContext.SaveChanges();
+
+            services.GetRequiredService<DataAccess>().Log("client_secret_reset", clientId,
+                "machine client secret set from configuration", "source: ark_oauth_server:Management:MachineClientSecret");
         }
 
         /// <summary>
@@ -658,6 +697,9 @@ namespace Ark.oAuth.Oidc
             services.AddCors();
             services.AddSingleton<Microsoft.Extensions.Options.IConfigureOptions<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>,
                 ArkCorsConfigurator>();
+
+            // the management API answers only to the operator — see ArkManagementAuth
+            services.AddArkManagementAuth();
 
             // the interactive endpoints render Razor views shipped inside this package
             services.AddControllersWithViews();

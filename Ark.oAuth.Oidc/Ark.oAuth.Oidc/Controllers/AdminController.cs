@@ -85,6 +85,9 @@ namespace Ark.oAuth.Oidc.Controllers
             var machine = await _da.GetClient(tenant.tenant_id, $"{ServerConfig.TenantId}_machine");
             ViewBag.MachineClientId = machine?.client_id ?? "";
             ViewBag.MachineHasSecret = !string.IsNullOrEmpty(machine?.client_secret_hash);
+            // Set from Management:MachineClientSecret: the API refuses to regenerate it, so the
+            // page says so rather than offering a button that fails.
+            ViewBag.MachineSecretManaged = ServerConfig.Management?.ConfiguredMachineClientSecret != null;
 
             // Absolute, and taken from the same builder the discovery document uses — a command
             // meant to be pasted into somebody else's shell cannot be built from
