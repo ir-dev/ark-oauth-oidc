@@ -3,16 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32014.148
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Test.Csle", "Test.Csle\Test.Csle.csproj", "{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ark.oAuth.Oidc", "Ark.oAuth.Oidc\Ark.oAuth.Oidc.csproj", "{DB98E623-29C4-4B25-AA4D-BECA8C1D0477}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ark.oAuth.Oidc.Web", "Ark.oAuth.Oidc.Web\Ark.oAuth.Oidc.Web.csproj", "{83729189-BD73-4603-8DFD-93EDF3656D03}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{7CC1C75B-B414-4E68-B2D9-C3ED5A1A6B06}"
 	ProjectSection(SolutionItems) = preProject
 		..\.gitignore = ..\.gitignore
-		Ark.oAuth.Oidc\Ark.oAuth.Oidc.nuspec = Ark.oAuth.Oidc\Ark.oAuth.Oidc.nuspec
 		..\custom-pkce-flow.md = ..\custom-pkce-flow.md
 		key_points.txt = key_points.txt
 		nuget.config = nuget.config
@@ -20,8 +15,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.oAuth.Client", "Ark.oAuth.Client\Ark.oAuth.Client.csproj", "{5CB2A48F-101D-4C21-A206-A2E122BC4574}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.Auth.Client.Web", "Ark.Auth.Client.Web\Ark.Auth.Client.Web.csproj", "{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.oAuth.Oidc.Host", "Ark.oAuth.Oidc.Host\Ark.oAuth.Oidc.Host.csproj", "{15A2E75B-31A0-484E-BAB6-CA89481261B5}"
 EndProject
@@ -37,18 +30,6 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Debug|x64.Build.0 = Debug|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Debug|x86.Build.0 = Debug|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Release|Any CPU.Build.0 = Release|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Release|x64.ActiveCfg = Release|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Release|x64.Build.0 = Release|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Release|x86.ActiveCfg = Release|Any CPU
-		{785BA7FF-6D66-46CC-AFF5-1C50F3C4FD9A}.Release|x86.Build.0 = Release|Any CPU
 		{DB98E623-29C4-4B25-AA4D-BECA8C1D0477}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{DB98E623-29C4-4B25-AA4D-BECA8C1D0477}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DB98E623-29C4-4B25-AA4D-BECA8C1D0477}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -61,18 +42,6 @@ Global
 		{DB98E623-29C4-4B25-AA4D-BECA8C1D0477}.Release|x64.Build.0 = Release|Any CPU
 		{DB98E623-29C4-4B25-AA4D-BECA8C1D0477}.Release|x86.ActiveCfg = Release|Any CPU
 		{DB98E623-29C4-4B25-AA4D-BECA8C1D0477}.Release|x86.Build.0 = Release|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Debug|x64.Build.0 = Debug|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Debug|x86.Build.0 = Debug|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Release|Any CPU.Build.0 = Release|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Release|x64.ActiveCfg = Release|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Release|x64.Build.0 = Release|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Release|x86.ActiveCfg = Release|Any CPU
-		{83729189-BD73-4603-8DFD-93EDF3656D03}.Release|x86.Build.0 = Release|Any CPU
 		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -85,18 +54,6 @@ Global
 		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Release|x64.Build.0 = Release|Any CPU
 		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Release|x86.ActiveCfg = Release|Any CPU
 		{5CB2A48F-101D-4C21-A206-A2E122BC4574}.Release|x86.Build.0 = Release|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Debug|x64.Build.0 = Debug|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Debug|x86.Build.0 = Debug|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Release|Any CPU.Build.0 = Release|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Release|x64.ActiveCfg = Release|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Release|x64.Build.0 = Release|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Release|x86.ActiveCfg = Release|Any CPU
-		{BC5FD457-AB51-4DCB-9F77-04A3FC6C4F0A}.Release|x86.Build.0 = Release|Any CPU
 		{15A2E75B-31A0-484E-BAB6-CA89481261B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{15A2E75B-31A0-484E-BAB6-CA89481261B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{15A2E75B-31A0-484E-BAB6-CA89481261B5}.Debug|x64.ActiveCfg = Debug|Any CPU

@@ -80,14 +80,12 @@ PATHS
   IdP    $REPO/Ark.oAuth.Oidc/Ark.oAuth.Oidc/Ark.oAuth.Oidc.csproj
   Client $REPO/Ark.oAuth.Oidc/Ark.oAuth.Client/Ark.oAuth.Client.csproj
 
-  Only those two projects are meant to be packed. Ark.oAuth.Oidc.Host,
-  Ark.oAuth.Oidc.Web, Ark.Client.Web and Ark.Auth.Client.Web all use
-  Microsoft.NET.Sdk.Web, where IsPackable defaults to false, so they are never
-  packed. Test.Csle is the exception worth knowing about: it uses the plain
-  Microsoft.NET.Sdk, where IsPackable defaults to TRUE, so `dotnet pack` on the
-  .sln would emit a junk Test.Csle.1.0.0.nupkg alongside the real ones. That is
-  the reason every pack command below names its project file explicitly instead
-  of packing the solution.
+  Only those two projects are meant to be packed. Ark.oAuth.Oidc.Host and
+  Ark.Client.Web use Microsoft.NET.Sdk.Web, where IsPackable defaults to false,
+  so they are never packed. Every pack command below still names its project
+  file explicitly instead of packing the solution: any project added later on
+  the plain Microsoft.NET.Sdk defaults IsPackable to TRUE and would otherwise
+  emit a junk .nupkg alongside the real ones.
 
   The two packages do NOT depend on each other, so push order does not matter.
 
