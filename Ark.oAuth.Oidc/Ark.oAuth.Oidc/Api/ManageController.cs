@@ -10,7 +10,12 @@ namespace Ark.oAuth.Oidc
         public string? password { get; set; }
     }
 
-    [Authorize]
+    /// <summary>
+    /// The management API behind the admin console. Operator only — see
+    /// <see cref="ArkManagementAuth"/> for who that admits and why it is not the host's default
+    /// scheme.
+    /// </summary>
+    [Authorize(Policy = ArkManagementAuth.PolicyName)]
     [Route("api/oauth")]
     [ApiController]
     public class ManageController : ControllerBase
@@ -198,7 +203,7 @@ namespace Ark.oAuth.Oidc
         /// </summary>
         [HttpPost]
         [Route("v1/client/secret/reset")]
-        public async Task<dynamic> ClientSecretReset([FromServices] DataAccess da, [FromBody] ArkClient client)
+        public async Task<dynamic> ClientSecretReset([FromServices] DataAccess da, [FromServices] ArkUtil util, [FromBody] ArkClient client)
         {
             try
             {
@@ -206,6 +211,17 @@ namespace Ark.oAuth.Oidc
                     ?? throw new ApplicationException("unknown client.");
                 if (string.Equals(stored.token_endpoint_auth_method, "none", StringComparison.OrdinalIgnoreCase))
                     throw new ApplicationException("this is a public client (token_endpoint_auth_method 'none'); it does not use a secret.");
+
+                // A secret minted here would work until the next restart and then be replaced by
+                // the configured one without a word — the console would have handed out a
+                // credential with a hidden expiry. Configuration owns this client's secret.
+                var ser = util.ServerConfig;
+                if (ser.Management?.ConfiguredMachineClientSecret != null
+                    && string.Equals(stored.tenant_id, ser.TenantId, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(stored.client_id, ArkManagementAuth.MachineClientId(ser.TenantId), StringComparison.Ordinal))
+                    throw new ApplicationException(
+                        "this client's secret is set by ark_oauth_server:Management:MachineClientSecret, and the next restart " +
+                        "would replace a secret generated here. Rotate it by changing that setting.");
 
                 var secret = Protocol.ArkCrypto.RandomToken(32);
                 stored.client_secret_hash = Protocol.ArkCrypto.HashSecret(secret);

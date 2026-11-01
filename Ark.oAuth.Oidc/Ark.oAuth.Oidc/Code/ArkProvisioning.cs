@@ -209,6 +209,11 @@ namespace Ark.oAuth.Oidc
             var logouts = Clean(req.post_logout_redirect_uris);
             var scopes = Clean(req.scopes);
             if (scopes.Count == 0) scopes = new List<string> { "openid", "profile", "email", "offline_access" };
+            var privileged = Protocol.ArkClaimsService.Privileged(scopes);
+            if (privileged.Count > 0)
+                throw new ArkProvisionException("invalid_scope",
+                    $"'{string.Join("', '", privileged)}' cannot be provisioned - it is authority over this server, " +
+                    "not over a user's data. An operator grants it by editing the client in the console.");
 
             var authMethod = string.IsNullOrWhiteSpace(req.token_endpoint_auth_method)
                 ? "none" : req.token_endpoint_auth_method!.Trim();

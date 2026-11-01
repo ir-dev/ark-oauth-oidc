@@ -16,13 +16,18 @@
  * could reach the server could wipe it with one link — and as a GET, a signed-in operator could
  * be made to do it by any page that navigated them there. It now needs the operator account
  * (ArkOperator) and a POST.
+ *
+ * Since 2.1.0 it is also off unless ark_oauth_server:Management:AllowMigrationEndpoint is true,
+ * and answers 404 while off, so a probe cannot confirm it exists. Switch it on for the repair,
+ * then off again.
  *********************/
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ark.oAuth.Oidc
 {
-    [Authorize]
+    // No [Authorize] on purpose: it would answer an anonymous probe with a redirect to the
+    // sign-in page, confirming the route exists while the switch is off. Each action tests the
+    // switch first and then ArkOperator.IsOperator, which also requires a signed-in user.
     [Route("api/migration")]
     [ApiController]
     public class MigrationController : ControllerBase
@@ -32,7 +37,9 @@ namespace Ark.oAuth.Oidc
         public async Task<dynamic> ExexuteMigration([FromServices] DataAccess da, [FromServices] IConfiguration config,
             [FromQuery] string action, [FromQuery] string name)
         {
-            if (!ArkOperator.IsOperator(User, config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>()))
+            var ser = config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
+            if (ser?.Management?.AllowMigrationEndpoint != true) return NotFound();
+            if (!ArkOperator.IsOperator(User, ser))
                 return StatusCode(403, new { error = true, msg = "migrations are restricted to the administrator account." });
 
             //name: "00001_sql.sql"; //file name inside Migration/{provider}/{up|down}
@@ -71,7 +78,9 @@ namespace Ark.oAuth.Oidc
         [HttpGet]
         public async Task<dynamic> GetEmbeds([FromServices] IConfiguration config)
         {
-            if (!ArkOperator.IsOperator(User, config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>()))
+            var ser = config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
+            if (ser?.Management?.AllowMigrationEndpoint != true) return NotFound();
+            if (!ArkOperator.IsOperator(User, ser))
                 return StatusCode(403, new { error = true, msg = "restricted to the administrator account." });
 
             return new

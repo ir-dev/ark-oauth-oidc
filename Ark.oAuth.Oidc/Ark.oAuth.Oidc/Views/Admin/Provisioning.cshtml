@@ -38,6 +38,7 @@
       data-user-password-mode="@ViewBag.UserPasswordMode"
       data-machine-client="@ViewBag.MachineClientId"
       data-machine-has-secret="@((ViewBag.MachineHasSecret == true).ToString().ToLowerInvariant())"
+      data-machine-secret-managed="@((ViewBag.MachineSecretManaged == true).ToString().ToLowerInvariant())"
       data-token-endpoint="@ViewBag.TokenEndpoint"
       data-api-root="@ViewBag.ApiRoot">
 

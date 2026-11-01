@@ -292,8 +292,36 @@ self-contained and remain valid until they expire, which is the usual bound on r
 
 The console's **Activation** panel — on the same *Provisioning* page — states the request as a
 form and lists every client and account with its current state below it. Both endpoints need the
-same authorization as the rest of the management API; the page itself is restricted to the
+same authorization as the rest of the management API, below; the page itself is restricted to the
 administrator account (`AdminUser:Username`, or a principal carrying an `admin` claim).
+
+### Who may call the management API
+
+Everything under `/api/oauth/v1/…` answers to the operator only, and the package decides that itself
+— the host registers nothing and keeps its own default scheme. A caller is admitted if it is either
+
+* the console session of the operator: the `AdminUser:Username` account, or an account carrying an
+  `admin` claim on its mapping to the console client; or
+* a bearer token this server issued to the machine client `{TenantId}_machine` with the
+  `client.register` scope — which is how a pipeline provisions.
+
+Anyone else gets `401` or `403` with a JSON body, never the sign-in page. A token with
+`client.register` issued to any other client is refused: holding the scope does not make a client
+the operator. `client.register` cannot be requested through provisioning or dynamic registration;
+only an operator grants it, in the console.
+
+The machine client ships without a secret. Give it one in the console (**Regenerate secret**), or
+from configuration, so a fresh deployment can be provisioned without anyone signing in:
+
+```bash
+ark_oauth_server__Management__MachineClientSecret="$(openssl rand -base64 32)"   # env / key vault
+```
+
+It is applied on start-up and rotated by changing it. While it is set, the console will not
+regenerate that client's secret, because the next restart would put the configured one back.
+Whoever can read this setting is the operator, so keep it out of `appsettings.json`.
+`Management:OperatorDeviceClients` admits device-code tokens approved by the operator, for a CLI;
+it is empty by default and best left so.
 
 ## Admin console
 
@@ -397,8 +425,9 @@ with DDL from the provider's own EF migrations generator, and with each entity's
 (`is_active = true`, `access_token_lifetime_seconds = 3600`) as the value existing rows receive. It
 is additive only. On MySQL and PostgreSQL this is what replaces hand-written `ALTER TABLE`s; before
 it, a missed one surfaced as `42703: column c.backchannel_logout_session_required does not exist` on
-the first request. `GET /api/migration/v1/sql?action=up|down&name=00005_sql.sql` is still there to
-run or roll back one SQLite script by hand, and reports whether it actually worked.
+the first request. `POST /api/migration/v1/sql?action=up|down&name=00005_sql.sql` is still there to
+run or roll back one SQLite script by hand, and reports whether it actually worked. It is off — 404 —
+unless `ark_oauth_server:Management:AllowMigrationEndpoint` is `true`, and operator-only when on.
 
 ## Before production
 
@@ -408,6 +437,9 @@ run or roll back one SQLite script by hand, and reports whether it actually work
 4. Leave `EnableDynamicRegistration` off unless you need it, and keep
    `RequireRegistrationAccessToken` on if you do.
 5. Give confidential clients real secrets and set `token_endpoint_auth_method` accordingly.
+6. If anything provisions through the API, set `Management:MachineClientSecret` from a key vault
+   or environment variable — never a settings file under source control — and leave
+   `Management:AllowMigrationEndpoint` off.
 
 ## Documentation
 

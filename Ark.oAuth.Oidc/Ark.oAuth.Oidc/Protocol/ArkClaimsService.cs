@@ -149,6 +149,19 @@ namespace Ark.oAuth.Oidc.Protocol
             return claims.ToList();
         }
 
+        /// <summary>
+        /// Scopes that carry authority over the server rather than over a user's data. Only an
+        /// operator grants them, by editing a client in the console: provisioning and dynamic
+        /// registration refuse to register a client for one. Dynamic registration accepts any
+        /// token holding <c>client.register</c> as an initial access token, so a client that
+        /// could register itself for it could mint every client after it.
+        /// </summary>
+        public static readonly IReadOnlyList<string> PrivilegedScopes = new[] { "client.register" };
+
+        /// <summary>The privileged scopes among <paramref name="scopes"/>.</summary>
+        public static List<string> Privileged(IEnumerable<string> scopes) =>
+            scopes.Where(s => PrivilegedScopes.Contains(s, StringComparer.OrdinalIgnoreCase)).ToList();
+
         /// <summary>The scope catalogue seeded into a new database.</summary>
         public static List<ArkScope> DefaultScopes() => new()
         {

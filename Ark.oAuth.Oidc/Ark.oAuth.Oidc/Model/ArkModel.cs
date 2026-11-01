@@ -71,6 +71,8 @@
         public ArkAdminUserConfig AdminUser { get; set; } = new ArkAdminUserConfig();
         /// <summary>The bundled v2 admin console. Optional — every value has a working default.</summary>
         public ArkAdminConsoleConfig Admin { get; set; } = new ArkAdminConsoleConfig();
+        /// <summary>Who may drive the management API, and how. See <see cref="ArkManagementConfig"/>.</summary>
+        public ArkManagementConfig Management { get; set; } = new ArkManagementConfig();
 
         /// <summary>The parsed onboarding mode, defaulting to the legacy auto behaviour.</summary>
         public ArkUserPasswordMode EffectiveUserPasswordMode =>
@@ -175,6 +177,69 @@
         public bool AllowReplace { get; set; } = true;
         /// <summary>Largest import body accepted, in megabytes.</summary>
         public int MaxImportMegabytes { get; set; } = 100;
+    }
+
+    /// <summary>
+    /// The management API (<c>ark_oauth_server:Management</c>): who may call it besides the
+    /// operator's console session, and the switches around it.
+    ///
+    /// The API itself answers only to the operator — see <see cref="ArkManagementAuth"/>. Nothing
+    /// here widens that; these settings decide how a pipeline proves it is acting for the
+    /// operator, and nothing in this section is needed by a deployment administered from the
+    /// console alone.
+    /// </summary>
+    public class ArkManagementConfig
+    {
+        /// <summary>The shortest <see cref="MachineClientSecret"/> accepted.</summary>
+        public const int MinMachineClientSecretLength = 16;
+
+        /// <summary>
+        /// The secret of the machine client (<c>{TenantId}_machine</c>), applied on start-up.
+        ///
+        /// The machine client is seeded without a secret, so on a new deployment nothing can
+        /// obtain a management token until somebody presses <b>Regenerate secret</b> in the
+        /// console — which a deployment provisioned from a pipeline cannot do. Set this and the
+        /// client gets it on first boot; change it and the next start rotates it. While it is
+        /// set, the console refuses to regenerate this client's secret, because the next restart
+        /// would silently put this one back.
+        ///
+        /// Whoever can read this value is the operator. Keep it in a key vault reference or an
+        /// environment variable, never in a settings file under source control. A
+        /// <c>&lt;&lt;placeholder&gt;&gt;</c> counts as unset.
+        /// </summary>
+        public string? MachineClientSecret { get; set; }
+
+        /// <summary>
+        /// Clients whose device-code tokens (RFC 8628) may drive the management API, for a person
+        /// at a terminal rather than a pipeline. Empty by default.
+        ///
+        /// A token from one of these is admitted only when it carries <c>client.register</c>, the
+        /// person who approved the code is the operator, and the client is registered as public,
+        /// for the device-code grant and no redirect URIs — so its tokens can come from nowhere
+        /// but a code approved on this server. Device-code phishing (someone starts a flow and
+        /// sends the operator the user code) is the risk this accepts; leave it empty unless a
+        /// CLI needs it.
+        /// </summary>
+        public List<string> OperatorDeviceClients { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Whether <c>/api/migration</c> answers at all. Off by default: the schema updates itself
+        /// on start-up, and running or rolling back a script by hand is a repair, not routine.
+        /// When off the path answers 404, so a probe cannot confirm it exists; when on it is
+        /// still operator-only.
+        /// </summary>
+        public bool AllowMigrationEndpoint { get; set; }
+
+        /// <summary><see cref="MachineClientSecret"/>, or null when it is empty or a placeholder.</summary>
+        public string? ConfiguredMachineClientSecret
+        {
+            get
+            {
+                var trimmed = (MachineClientSecret ?? "").Trim();
+                if (trimmed.Length == 0 || (trimmed.StartsWith("<<") && trimmed.EndsWith(">>"))) return null;
+                return trimmed;
+            }
+        }
     }
     public class ArkEmailConfig
     {

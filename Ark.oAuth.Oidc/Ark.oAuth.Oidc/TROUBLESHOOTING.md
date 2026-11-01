@@ -64,7 +64,13 @@ Diagnose against the provider's actual behaviour. Verify .NET changes against a 
 
 | Symptom | Likely cause | Diagnosis | Correct solution | Avoid |
 |---|---|---|---|---|
-| `{tenant}_machine` can't get a token | It ships without a secret | Client record has no secret | Regenerate its secret in the console | Expecting it to work unconfigured |
+| `{tenant}_machine` can't get a token | It ships without a secret | Client record has no secret | Regenerate its secret in the console, or set `Management:MachineClientSecret` | Expecting it to work unconfigured |
+| `/api/oauth/...` answers 401 `unauthorized` with a valid-looking token | Token not from the machine client, or lacks `client.register` | Server log: `management API token rejected: <reason>` | Use a `client_credentials` token from `{tenant}_machine` with `scope=client.register` | Giving another client `client.register` — the scope alone is refused |
+| Console grids empty; API answers 403 `forbidden` | Signed in as someone other than the operator | The account is not `AdminUser:Username` and has no `admin` claim | Add the `admin` claim to that user's mapping to the console client, then sign in again | Expecting every console user to be an operator |
+| Every request 500s after setting `MachineClientSecret` | Value shorter than 16 characters | Log: `MachineClientSecret is shorter than 16 characters` | Use `openssl rand -base64 32`, or unset it | Lowering the bar |
+| "Regenerate secret" on the machine client refuses | `Management:MachineClientSecret` owns it | Setting is present | Rotate by changing the setting and restarting | Expecting a console secret to survive a restart |
+| `/api/migration/...` answers 404 | `Management:AllowMigrationEndpoint` is off (default) | — | Switch it on for the repair, sign in as the operator, switch it off | Leaving it on |
+| `invalid_scope` / `invalid_client_metadata` naming `client.register` | Privileged scope requested through provisioning or dynamic registration | — | Grant it to the client in the console, if it really needs it | Requesting it from a pipeline |
 | `/oauth2/register` 404 / not advertised | Dynamic registration off | Discovery has no `registration_endpoint` | Set `Oidc:EnableDynamicRegistration=true` | Guessing the URL |
 | Registration works but no one can sign in to the new client | Registration ≠ access mapping | — | Map a user to the client | Assuming registration grants access |
 

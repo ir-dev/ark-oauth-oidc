@@ -141,10 +141,39 @@ offline_access), `application_type` (web|spa|native|service, default web), `toke
 
 **`ArkActivationRequest`**: `tenant_id`, `client_id`, `user_name`, `is_active`, `reason`.
 
-## Management API (`ManageController`, `[Authorize]`, base `/api/oauth`)
+## Management API (`ManageController`, operator policy, base `/api/oauth`)
 
 All `v1/...`; list endpoints are GET, mutations are POST with the entity in the body. On failure they
 return `{ error, msg }`.
+
+**Who may call it** (`ManageController` and `ProvisionController`, policy `ArkManagementAuth.PolicyName`).
+The package registers this itself in `AddArkOidcServer`; the host adds nothing and keeps its own default
+scheme. Two callers are admitted:
+
+| Caller | Admitted when |
+|---|---|
+| Console session (the host's default scheme, normally the `ArkCookie` from `AddArkOidcClient`) | the account is the operator: `AdminUser:Username`, or an `admin` / `ark_admin` claim on its mapping to the console client |
+| `Authorization: Bearer <token>` | the token was issued by this server's operator tenant, carries `client.register`, and was issued to `{TenantId}_machine` — or to a client in `Management:OperatorDeviceClients` that is public, device-code-only, has no redirect URIs, and whose code the operator approved |
+
+Not admitted answers `401` (no or refused credential, with `WWW-Authenticate: Bearer`) or `403`
+(signed in, not the operator), each with `{ error: true, code, msg }` — never a redirect to the sign-in
+page. The reason a token was refused is logged by the server, not returned.
+
+```http
+POST /{TenantId}/oauth2/token
+grant_type=client_credentials&client_id={TenantId}_machine&client_secret=<secret>&scope=client.register
+
+GET /api/oauth/v1/client/list
+Authorization: Bearer <access_token>
+```
+
+Configuration, all optional (`ark_oauth_server:Management`):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `MachineClientSecret` | unset | Applied to `{TenantId}_machine` on start-up; changing it rotates the secret on the next start. At least 16 characters, or the bootstrap stops with a message. While set, `v1/client/secret/reset` refuses that client. Keep it in a key vault or environment variable. |
+| `OperatorDeviceClients` | `[]` | Device-code clients whose operator-approved tokens may drive the API. |
+| `AllowMigrationEndpoint` | `false` | `/api/migration` answers 404 while off. |
 
 | Area | Routes |
 |---|---|
@@ -404,11 +433,12 @@ operator's browser cookie stays valid until it expires, but should sign out and 
 
 | Method + route | Purpose |
 |---|---|
-| `GET /v1/sql?action=up\|down&name=00005_sql.sql` | Run or roll back one script by hand (reports whether it worked). |
+| `POST /v1/sql?action=up\|down&name=00005_sql.sql` | Run or roll back one script by hand (reports whether it worked). |
 | `GET /v1/embeded/list` | List embedded migration resources. |
 
-> Note: `MigrationController` has no class-level `[Authorize]`; protect `/api/migration` at the
-> network/gateway layer, or do not expose it publicly.
+> Off unless `ark_oauth_server:Management:AllowMigrationEndpoint` is `true` — both routes answer 404
+> while off, to anyone. When on, they need the operator's console session (not a machine token). The
+> schema updates itself on start-up, so switch this on only for a repair, then off again.
 
 ## Admin console (UI)
 
@@ -429,7 +459,9 @@ claim). Override a page by placing your own `Views/Admin/Manage.cshtml` in the h
 - Admin console client `{TenantId}_client` (public, PKCE, `authorization_code`+`refresh_token`,
   redirect URIs include `/signin-oidc` and the v1 callback).
 - Machine client `{TenantId}_machine` (`client_credentials`, `client_secret_post`, scope
-  `client.register`) — **without a secret**; regenerate one before use.
+  `client.register`) — **without a secret**; regenerate one in the console, or set
+  `Management:MachineClientSecret`, before use. It is the only client whose tokens drive the
+  management API.
 - The default scope catalogue, identity claims, the admin user, and a default service account.
 
 ## Public types (for reference)
