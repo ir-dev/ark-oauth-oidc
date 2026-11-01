@@ -625,58 +625,39 @@ PATHS
 ================================================================================
 
   GitHub Actions authenticates to PyPI with a short-lived OIDC identity. There
-  is no token to store, leak, rotate or commit, and PyPI attaches signed PEP
-  740 attestations proving which workflow built the artifact. Given this repo
-  is public and has already had one credential incident, this is the option to
-  move to.
+  is no token to store, leak, rotate or commit. Given this repo is public and
+  has already had one credential incident, this is the way to publish.
 
-  1. On PyPI: Your projects -> ark-oauth-client -> Publishing -> Add a new
-     pending/trusted publisher.
+  IT IS BUILT: .github/workflows/release.yml. It releases all four packages
+  (NuGet x2, PyPI, npm) at one version, so there is no separate Python
+  workflow and no py-v* tag any more -- one tag, vX.Y.Z, for the lot. Its
+  header comment has the one-time setup for every registry; for PyPI it is:
+
+  1. https://pypi.org/manage/project/ark-oauth-client/settings/publishing/
+     -> Add a new publisher -> GitHub:
         Owner:              ir-dev
         Repository:         ark-oauth-oidc
-        Workflow filename:  publish-python.yml
-        Environment:        pypi
-     (Before the first release the project does not exist yet -- use "pending
-     publisher" under https://pypi.org/manage/account/publishing/ instead.)
+        Workflow filename:  release.yml
+        Environment:        release
 
-  2. Commit .github/workflows/publish-python.yml:
+  2. GitHub: Settings -> Environments -> New environment "release" (add a
+     required reviewer to get a click before anything is published).
 
-        name: Publish ark-oauth-client to PyPI
-        on:
-          push:
-            tags: ["py-v*"]
-          workflow_dispatch:
+  3. Release:
+        scripts/version.sh set 2.0.15          # every manifest, incl. __version__
+        # write the CHANGELOG.md entry, commit, push
+        # Actions -> Release -> Run workflow (tick "dry run" to rehearse)
 
-        jobs:
-          release:
-            runs-on: ubuntu-latest
-            environment: pypi
-            permissions:
-              id-token: write          # REQUIRED: mints the OIDC token
-            steps:
-              - uses: actions/checkout@v4
-              - uses: astral-sh/setup-uv@v5
-              - name: Test
-                working-directory: ark_oauth_client_py
-                run: uv run --extra dev pytest -q
-              - name: Build
-                working-directory: ark_oauth_client_py
-                run: uv build
-              - name: Check README renders
-                working-directory: ark_oauth_client_py
-                run: uvx twine check dist/*
-              - name: Publish
-                working-directory: ark_oauth_client_py
-                run: uv publish dist/*      # no token: OIDC does it
+  What the workflow does for this package: pytest, uv build, twine check, the
+  STEP 5e test against the INSTALLED wheel, a check that the wheel's
+  __version__ equals the release (2.0.14 shipped saying 2.0.11), then
+  `uv publish --trusted-publishing always`. A version already on PyPI is
+  skipped, not failed. The vX.Y.Z tag and GitHub release come last, after
+  every registry accepted, with the artifacts attached.
 
-  3. Release by tagging, which is STEP 9 doing double duty:
-
-        git tag -a py-v2.0.5 -m "ark-oauth-client 2.0.5" && git push origin py-v2.0.5
-
-  `permissions: id-token: write` is the line everyone forgets; without it the
-  workflow cannot mint the OIDC token and uv falls back to looking for a
-  password it does not have. The `environment:` also lets you require a manual
-  approval on the GitHub side before anything is published.
-
-  The equivalent with twine is `pypa/gh-action-pypi-publish@release/v1`, which
-  works the same way and needs the same `id-token: write`.
+  PROVENANCE: `uv publish` uploads PEP 740 attestations but does not create
+  them. The workflow attaches GitHub build-provenance attestations to the
+  release assets instead (`gh attestation verify <file> -R ir-dev/ark-oauth-oidc`).
+  For PEP 740 on PyPI itself, swap the publish step for
+  `pypa/gh-action-pypi-publish@release/v1`, which generates them and needs the
+  same `id-token: write`.
