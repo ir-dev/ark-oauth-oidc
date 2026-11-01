@@ -6,13 +6,17 @@
 #   npm    ark-oauth-client                    ark_oauth_client_nodejs
 #
 # HOW TO RELEASE
-#   1. scripts/version.sh set X.Y.Z, write the notes (CHANGELOG.md, <PackageReleaseNotes>),
-#      commit and push. The commit is what Source Link stamps into the .nupkg, so bump first.
-#   2. Actions -> Release -> Run workflow, on that branch. Tick "dry run" to build and test
-#      without publishing.
+#   1. Write the notes (CHANGELOG.md, <PackageReleaseNotes>), commit and push.
+#   2. Actions -> Release -> Run workflow, on that branch, typing the version to release.
+#      Tick "dry run" to build and test without publishing.
 #
-# The version comes from the manifests, never from the run: `scripts/version.sh check` fails the
-# run unless every csproj, pyproject.toml, __init__.py and package.json agree. A registry that
+# The version is either typed into the run or, left blank, read from the manifests:
+#   typed  `scripts/version.sh set X.Y.Z` stamps it into every csproj, pyproject.toml,
+#          __init__.py and package.json on each runner before building. Nothing is committed,
+#          so the manifests in git may lag the release; the tag and the GitHub release record it.
+#   blank  `scripts/version.sh check` fails the run unless every manifest already agrees.
+# Either way a version is consumed only by a registry accepting it, so a failed run, a dry run
+# or a re-run burns nothing. A registry that
 # already has the version is skipped, not failed, so a half-finished release can be finished by
 # re-running ("Re-run failed jobs" reuses the artifacts already built and published). The tag
 # vX.Y.Z is created by the GitHub release, LAST, so a tag never names something unpublished.
@@ -36,7 +40,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Expected version (optional). The run fails unless the manifests already say it."
+        description: "Version to release, X.Y.Z (optional). Stamped into every package for this run; blank = what the manifests say."
         required: false
         default: ""
       dry_run:
@@ -62,14 +66,29 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Every manifest carries the same version
+      - name: The version to release
         id: version
         env:
-          EXPECTED: ${{ inputs.version }}
-        # Assign first: inside `echo "...$(cmd)"` a failing check is swallowed by echo's exit 0,
-        # and every later job then runs with an empty VERSION.
+          REQUESTED: ${{ inputs.version }}
+        # A typed version is stamped here too, so a bad one (not X.Y.Z, or a manifest the stamp
+        # cannot find) fails before anything builds; the build jobs repeat the stamp on their own
+        # checkout. Assign rather than `echo "...$(cmd)"`, which swallows a failing check's exit
+        # code and hands every later job an empty VERSION. The script's own reason is raised as
+        # an annotation, since stderr alone shows only "exit code N" on the run summary.
         run: |
-          version=$(scripts/version.sh check "$EXPECTED")
+          fail() {
+            cat "$RUNNER_TEMP/version.err" >&2
+            reason=$(grep '^error:\|^no match' "$RUNNER_TEMP/version.err" | head -1 | sed 's/^error: //')
+            echo "::error::${reason:-$1} (input was '$REQUESTED')"
+            exit 1
+          }
+          requested=$(printf '%s' "$REQUESTED" | tr -d '[:space:]')
+          requested=${requested#v}
+          if [ -n "$requested" ]; then
+            scripts/version.sh set "$requested" 2>"$RUNNER_TEMP/version.err" || fail "scripts/version.sh set failed"
+          fi
+          version=$(scripts/version.sh check "$requested" 2>"$RUNNER_TEMP/version.err") || fail "scripts/version.sh check failed"
+          cat "$RUNNER_TEMP/version.err" >&2
           [ -n "$version" ] || { echo "::error::scripts/version.sh check printed no version"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -142,6 +161,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The version decided by prepare, into every manifest on this runner. A no-op when the
+      # manifests already say it.
+      - name: Stamp the version
+        run: scripts/version.sh set "$VERSION"
+
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 9.0.x
@@ -190,6 +214,11 @@ jobs:
         working-directory: ark_oauth_client_py
     steps:
       - uses: actions/checkout@v7
+
+      # As in build-dotnet. Before setup-uv, so `set` skips refreshing the gitignored uv.lock.
+      - name: Stamp the version
+        working-directory: .
+        run: scripts/version.sh set "$VERSION"
 
       # uv.lock is gitignored, so the cache keys on pyproject.toml.
       - uses: astral-sh/setup-uv@v7
@@ -241,6 +270,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+
+      # As in build-dotnet.
+      - name: Stamp the version
+        working-directory: .
+        run: scripts/version.sh set "$VERSION"
 
       # No runtime dependencies, so nothing to install before testing.
       - name: Test

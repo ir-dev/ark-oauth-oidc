@@ -90,9 +90,11 @@ These apply in every language and are the source of most "it just says the passw
   machine: `nuget_deploy.txt` and `ark_oauth_client_py/pip_deploy.txt`. Read the runbook before
   publishing; versions are immutable on all three registries once pushed.
 * **Releases go through `.github/workflows/release.yml`** (manual dispatch): all four packages at
-  one version, Trusted Publishing on every registry, then a `vX.Y.Z` GitHub release. Bump with
-  `scripts/version.sh set X.Y.Z`, never by hand. The run fails unless every manifest agrees,
-  including the Python `__version__`, which has drifted from `pyproject.toml` more than once.
+  one version, Trusted Publishing on every registry, then a `vX.Y.Z` GitHub release. Type the
+  version into the run and it is stamped into every manifest on the runner (nothing committed);
+  leave it blank and the run fails unless every committed manifest agrees, including the Python
+  `__version__`, which has drifted from `pyproject.toml` more than once. Bump locally with
+  `scripts/version.sh set X.Y.Z`, never by hand. Plain `X.Y.Z` only: npm rejects a fourth number.
 * **Tests:** `pytest` in `ark_oauth_client_py` (129 tests) and `npm test` in
   `ark_oauth_client_nodejs`. Both run against a stub IdP (`tests/stub_idp.py`, `test/stub-idp.js`)
   that mirrors the real server's wire behaviour — prefer it to a live server when changing a client.
