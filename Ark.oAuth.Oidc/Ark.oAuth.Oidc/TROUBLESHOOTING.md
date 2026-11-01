@@ -68,6 +68,25 @@ Diagnose against the provider's actual behaviour. Verify .NET changes against a 
 | `/oauth2/register` 404 / not advertised | Dynamic registration off | Discovery has no `registration_endpoint` | Set `Oidc:EnableDynamicRegistration=true` | Guessing the URL |
 | Registration works but no one can sign in to the new client | Registration ≠ access mapping | — | Map a user to the client | Assuming registration grants access |
 
+## Export / import / reset
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| No **Data** link; `/{tenant}/admin/data` and `/api/oauth/v1/data/*` answer 404 | `ark_oauth_server:Admin:DataTools:Enabled` is `false` | Set it `true` (the default) |
+| 403 `operator_only` | Signed in, but not as `AdminUser:Username` and without an `admin` role | Sign in as the administrator |
+| Analysis: `checksum_mismatch` | The file was edited (or damaged) after export | Re-export, or tick *edited on purpose* (`allow_modified: true`) |
+| Analysis: `passphrase_invalid` | Wrong passphrase, or a truncated file | The passphrase is not stored anywhere; without it the file cannot be read |
+| `replace` not possible: `operator_lockout` | The file lacks this server's `TenantId` tenant (exact case), `{TenantId}_client`, the `AdminUser:Username` account or its mapping to that client | Use a merge mode, or export from a server with the same `TenantId` and administrator |
+| Every merge excludes `signing_keys` `{TenantId}` with `key_material_conflict` | Each server seeds its first key with `kid = TenantId`; two servers sharing a TenantId always collide | Expected — this server keeps its own key. Other keys from the file are added |
+| Imported key arrives as `rollover`, not `active` | Merge never switches a tenant's signer; it already had an active key here | Tokens the key signed still verify (JWKS). Rotate in the console if it should sign |
+| Apply: 409 `plan_changed` | The database (or the file / categories) changed after the analysis | Analyse again and review the new plan |
+| Rows `excluded` with `case_conflict` | A tenant / client / user matches one here only by letter case | Fix the case in the source and re-import with `merge_skip` |
+| Reset: 409 `seed_unavailable`; nothing deleted | No administrator password configured (`AdminUser:Password` / `DefaultPw`, or still a `<<placeholder>>`) | Configure one, restart, reset again |
+| After reset/replace the console still shows the old name / keeps working | The host's auth cookie outlives the data | Sign out and back in; after reset use the **configured** admin password |
+| After a **replace**, sign-in fails with `IDX10511: Signature validation failed` | The file's key reuses a kid the client already cached (`signing_key_kid_reused`), so it never refetches the JWKS | Wait ~5 minutes, or restart the host / client so it refetches |
+| After a **reset**, the first sign-in fails with `IDX10503` (kid not found); the next one works | The reset key has a new kid; the cached JWKS lacks it and the client refetches on that failure | Sign in again |
+| 413 `file_too_large` | Larger than `DataTools:MaxImportMegabytes` (default 100) | Raise it (the hard ceiling is 1 GB); the audit trail is usually what makes a file large |
+
 ## Runtime / dependency
 
 | Symptom | Likely cause | Diagnosis | Correct solution | Avoid |

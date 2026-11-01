@@ -116,6 +116,11 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
 
 ## Behavioural changes by version (from the .csproj notes)
 
+- **Next release** (after 2.0.13): the operator's **Data** page (`/{tenant}/admin/data`) and API —
+  full export (every table and column, optionally AES-256-GCM encrypted), analysed import with three
+  modes (`replace`, `merge_skip`, `merge_overwrite`) and rule-based per-record exclusion, and factory
+  reset to the first-run seed. **No schema change and no migration**; existing routes are unchanged.
+  New optional settings under `ark_oauth_server:Admin:DataTools` (all default on). See API-GUIDE.md.
 - **2.0.3** (present in 2.0.11): Back-Channel Logout 1.0 (signed `logout_token`, `typ: logout+jwt`,
   `sid`, no `nonce`); a down client cannot block sign-out (parallel, per-client timeout, logged not
   raised); clients notified because they *took part* (recorded via `session_clients`, not derived from

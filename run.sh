@@ -146,10 +146,26 @@ port_busy() {
 # ark_oauth_server:AdminUser. The password is required and has no default: with none configured
 # the first request fails and no database is left behind. It is only read while the database is
 # being created, so an existing data/ file means the account already exists and this is moot.
+#
+# Settings are looked up the way ASP.NET Core layers them, first match wins: the environment
+# variable, then appsettings.Development.json (local, gitignored), then appsettings.json.
+SETTINGS_FILES=("$HOST_PROJ/appsettings.Development.json" "$HOST_PROJ/appsettings.json")
+
+# host_setting <section> <key> — the first configured value of "<key>" in the "<section>" object
+# (the whole file when <section> is empty). A <<placeholder>> counts as unset, as in the server.
+host_setting() {
+    local section="$1" key="$2" f v
+    for f in "${SETTINGS_FILES[@]}"; do
+        [ -f "$f" ] || continue
+        v=$(if [ -n "$section" ]; then grep -A4 "\"$section\"" "$f"; else cat "$f"; fi 2>/dev/null \
+            | grep -o "\"$key\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+        case "$v" in ""|"<<"*) ;; *) printf '%s' "$v"; return 0 ;; esac
+    done
+}
+
 admin_username() {
     local u
-    u=$(grep -A2 '"AdminUser"' "$HOST_PROJ/appsettings.json" 2>/dev/null \
-        | grep -o '"Username"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
+    u=$(host_setting AdminUser Username)
     printf '%s' "${u:-admin}"
 }
 
@@ -164,12 +180,11 @@ admin_password() {
         return 0
     fi
 
-    local configured
-    configured=$(grep -A3 '"AdminUser"' "$HOST_PROJ/appsettings.json" | grep -o '"Password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
-    case "$configured" in
-        ""|"<<"*) ;;                              # unset, or left as a <<placeholder>>
-        *) ok "admin password configured in appsettings.json"; return 0 ;;
-    esac
+    # The server falls back to DefaultPw when AdminUser:Password is unset, so either will do.
+    if [ -n "$(host_setting AdminUser Password)" ] || [ -n "$(host_setting "" DefaultPw)" ]; then
+        ok "admin password configured in appsettings"
+        return 0
+    fi
 
     printf '\n  %sThis is the first run: the database does not exist yet.%s\n' "$B" "$N"
     printf '  The administrator account is created now, once, and its password has no default.\n\n'
@@ -189,6 +204,11 @@ admin_password() {
 
     export ark_oauth_server__AdminUser__Password='a-real-password'
     ./run.sh
+
+  or in the local, gitignored settings file:
+
+    cp $HOST_PROJ/appsettings.Development.sample.json $HOST_PROJ/appsettings.Development.json
+    # then set ark_oauth_server:AdminUser:Password in it
 
   or put it in user-secrets:
 

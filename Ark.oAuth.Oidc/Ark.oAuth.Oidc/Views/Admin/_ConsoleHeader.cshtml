@@ -1,4 +1,4 @@
-@*
+﻿@*
     The console's top bar, shared by the console and the provisioning page.
 
     A partial rather than a layout: these views set Layout = null on purpose — a view rendering
@@ -46,8 +46,8 @@
     </div>
 
     @*
-        Navigation. Provisioning is drawn only for the operator account, because the route itself
-        refuses everybody else — a link that answers 403 teaches nothing except that the page
+        Navigation. Provisioning and Data are drawn only for the operator account, because the
+        routes themselves refuse everybody else — a link that answers 403 teaches nothing except that the page
         exists.
     *@
     <nav class="ark-nav" aria-label="Console">
@@ -55,6 +55,10 @@
         @if (isOperator)
         {
             <a class="ark-nav-link" href="@ViewBag.ProvisioningUrl" aria-current="@(page == "provisioning" ? "page" : null)">Provisioning</a>
+            @if (ViewBag.DataToolsEnabled == true)
+            {
+                <a class="ark-nav-link" href="@ViewBag.DataUrl" aria-current="@(page == "data" ? "page" : null)">Data</a>
+            }
         }
     </nav>
 

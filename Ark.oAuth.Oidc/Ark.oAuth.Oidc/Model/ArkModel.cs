@@ -146,6 +146,35 @@
         /// cookie in place until it expires.
         /// </summary>
         public string SignOutUrl { get; set; }
+
+        /// <summary>The operator's data page at /{tenant}/admin/data — see <see cref="ArkDataToolsConfig"/>.</summary>
+        public ArkDataToolsConfig DataTools { get; set; } = new ArkDataToolsConfig();
+    }
+
+    /// <summary>
+    /// Export, import and factory reset (<c>ark_oauth_server:Admin:DataTools</c>).
+    ///
+    /// All of it is restricted to the operator account whatever these say. They exist for the
+    /// deployment that wants the destructive half switched off outright — a production server
+    /// that is only ever restored by its own pipeline, say — without losing the export.
+    /// Every value defaults to on, so a configuration written before this section existed gets
+    /// the page as documented.
+    /// </summary>
+    public class ArkDataToolsConfig
+    {
+        /// <summary>The whole page and its API. Off hides the nav link and answers 404.</summary>
+        public bool Enabled { get; set; } = true;
+        /// <summary>Wipe every table and re-seed. Off refuses with 403 before anything is read.</summary>
+        public bool AllowReset { get; set; } = true;
+        /// <summary>Import in any mode. Off leaves export only.</summary>
+        public bool AllowImport { get; set; } = true;
+        /// <summary>
+        /// The <c>replace</c> import mode, which empties the database before loading the file.
+        /// Separate from <see cref="AllowImport"/> because the two merge modes never delete a row.
+        /// </summary>
+        public bool AllowReplace { get; set; } = true;
+        /// <summary>Largest import body accepted, in megabytes.</summary>
+        public int MaxImportMegabytes { get; set; } = 100;
     }
     public class ArkEmailConfig
     {

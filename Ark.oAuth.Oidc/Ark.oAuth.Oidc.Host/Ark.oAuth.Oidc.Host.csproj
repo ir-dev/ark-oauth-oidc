@@ -12,4 +12,9 @@
     <ProjectReference Include="..\Ark.oAuth.Oidc\Ark.oAuth.Oidc.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Local secrets and their template: never part of a published build. -->
+    <Content Update="appsettings.Development.json;appsettings.Development.sample.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
 </Project>

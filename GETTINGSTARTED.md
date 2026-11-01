@@ -142,11 +142,18 @@ naming the setting and **no database is created**, so you never end up with a ha
 that looks initialised.
 
 `appsettings.json` ships the placeholder `"<<set-before-first-run>>"`, and a value still in
-`<<…>>` counts as unset. Supply a real one in whichever way suits you:
+`<<…>>` counts as unset. Configuration is layered the standard ASP.NET Core way, first match wins:
+**environment variable → `appsettings.Development.json` → `appsettings.json`**. Supply a real one
+in whichever way suits you:
 
 ```bash
 # the scripts prompt for this on the first run and pass it to the child process only
 export ark_oauth_server__AdminUser__Password='a-real-password'
+
+# or keep it in the local settings file, which is gitignored and never published;
+# the committed sample lists the keys that belong there
+cp Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/appsettings.Development.sample.json \
+   Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/appsettings.Development.json
 
 # or store it, out of source control (the host project has no UserSecretsId yet, hence init)
 dotnet user-secrets init --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host
