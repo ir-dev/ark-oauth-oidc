@@ -244,11 +244,13 @@ namespace Ark.Client.Web.Controllers
 
         /// <summary>
         /// Grants a user access to the target client: Ark's per-user, per-client mapping, done
-        /// through the management API with the machine client's token.
+        /// with the provisioning API (<c>v1/provision/user</c>) and the machine client's token.
         ///
-        /// The mapping is one row per user and client, and saving it replaces the row's claims, so
-        /// the claims already there are read first and kept. Granting <c>sample.admin</c> must not
-        /// take <c>name</c> and <c>email</c> away.
+        /// One call covers both cases. An existing account is left exactly as it is and only
+        /// mapped; a missing one is created with the IdP's default password and the display name
+        /// given here (the username when it is blank). The IdP keeps the claims the mapping already
+        /// holds and always adds the identity claims, so granting <c>sample.admin</c> cannot take
+        /// <c>name</c> and <c>email</c> away.
         /// </summary>
         [HttpPost("register/map")]
         [ValidateAntiForgeryToken]
@@ -259,9 +261,8 @@ namespace Ark.Client.Web.Controllers
             model.ManageClientId = form.ManageClientId ?? "";
             model.ManageAccessToken = form.ManageAccessToken ?? "";
             model.MapUser = (form.MapUser ?? "").Trim().ToLowerInvariant();
+            model.MapDisplayName = (form.MapDisplayName ?? "").Trim();
             model.MapClaims = form.MapClaims ?? "";
-
-            var requested = ToJsonArray(model.MapClaims).Select(c => c!.GetValue<string>()).ToList();
 
             if (model.ManagementToken == null)
                 model.Mapping = Failed("not_ready", "Step 1 has no working machine secret, so the management API cannot be called.");
@@ -269,31 +270,32 @@ namespace Ark.Client.Web.Controllers
                 model.Mapping = Failed("unknown_client", $"'{model.TargetClientId}' is not registered on the IdP — register it in Step 2 first.");
             else if (model.MapUser.Length == 0)
                 model.Mapping = Failed("invalid_request", "name the user to grant access to.");
-            else if (model.Users.Count > 0 && !model.Users.Contains(model.MapUser, StringComparer.OrdinalIgnoreCase))
-                // the mapping table has no foreign key to users, so the IdP would store this happily
-                model.Mapping = Failed("unknown_user", $"there is no account '{model.MapUser}' on the IdP. Create it under Users in the admin console.");
-            else if (requested.Count == 0)
-                model.Mapping = Failed("invalid_request", "add at least one claim.");
             else
             {
-                var tenant = TenantId(model.Authority);
-                var existing = await ManagementAsync(HttpMethod.Get,
-                    $"user/list/client/claims/mapping/{Uri.EscapeDataString(model.MapUser)}/{Uri.EscapeDataString(tenant)}",
-                    model.ManagementToken);
-                var row = (existing.Data as JsonArray)?.FirstOrDefault(r =>
-                    string.Equals(Str(r, "client_id"), model.TargetClient.Id, StringComparison.OrdinalIgnoreCase));
-                var claims = ClaimsOf(row).Concat(requested).Distinct(StringComparer.Ordinal).ToList();
-
-                model.Mapping = await ManagementAsync(HttpMethod.Post, "user/client/claims/upsert", model.ManagementToken, new JsonObject
+                var body = new JsonObject
                 {
-                    ["email"] = model.MapUser,
-                    ["tenant_id"] = tenant,
-                    // the client's surrogate id: what the token endpoint joins on to resolve ark_claims
-                    ["client_id"] = model.TargetClient.Id,
-                    ["claims"] = new JsonArray(claims.Select(c => (JsonNode?)c).ToArray()),
-                    ["claims_"] = JsonSerializer.Serialize(claims)
-                });
-                if (model.Mapping.Succeeded) model.MappedClaims = claims;
+                    ["tenant_id"] = TenantId(model.Authority),
+                    ["client_id"] = model.TargetClient.ClientId,
+                    ["user_name"] = model.MapUser,
+                    ["claims"] = ToJsonArray(model.MapClaims)
+                };
+                if (model.MapDisplayName.Length > 0) body["user_display_name"] = model.MapDisplayName;
+
+                model.Mapping = await ManagementAsync(HttpMethod.Post, "provision/user", model.ManagementToken, body);
+                if (model.Mapping.Succeeded)
+                {
+                    model.MappedClaims = (model.Mapping.Data?["claims"] as JsonArray ?? new JsonArray())
+                        .Select(c => c?.GetValue<string>())
+                        .Where(c => !string.IsNullOrEmpty(c))
+                        .Select(c => c!)
+                        .ToList();
+                    model.MapUserCreated = model.Mapping.Data?["user_created"] is JsonValue created
+                        && created.TryGetValue<bool>(out var yes) && yes;
+                    model.MapUserCredential = Str(model.Mapping.Data, "user_credential");
+                    // a created account belongs in the user picker from now on
+                    if (model.MapUserCreated && !model.Users.Contains(model.MapUser, StringComparer.OrdinalIgnoreCase))
+                        model.Users = model.Users.Append(model.MapUser).OrderBy(u => u, StringComparer.OrdinalIgnoreCase).ToList();
+                }
             }
 
             return View("Register", model);
@@ -534,17 +536,6 @@ namespace Ark.Client.Web.Controllers
 
         private static string? Str(JsonNode? node, string name) =>
             node?[name] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
-
-        /// <summary>A mapping row's claims, sent as an array or as the JSON string column behind it.</summary>
-        private static List<string> ClaimsOf(JsonNode? row)
-        {
-            if (row?["claims"] is JsonArray array)
-                return array.Select(c => c?.GetValue<string>()).Where(c => !string.IsNullOrEmpty(c)).Select(c => c!).ToList();
-            var raw = Str(row, "claims_");
-            if (string.IsNullOrWhiteSpace(raw)) return new List<string>();
-            try { return JsonSerializer.Deserialize<List<string>>(raw) ?? new List<string>(); }
-            catch (JsonException) { return new List<string>(); }
-        }
 
         /// <summary>The host the management API is served from: the Authority without its tenant segment.</summary>
         private static string ManagementBase(string authority)

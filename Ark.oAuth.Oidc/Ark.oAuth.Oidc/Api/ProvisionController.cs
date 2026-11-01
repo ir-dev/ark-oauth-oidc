@@ -8,9 +8,10 @@ namespace Ark.oAuth.Oidc
     ///
     /// Everything here is doable in the admin console already; the point is that it is doable in
     /// one call, from another system, without a person clicking through five panels in the right
-    /// order. The two operations are:
+    /// order. The operations are:
     ///
     ///   * <c>POST v1/provision/client</c>   — register an application and give a user access to it.
+    ///   * <c>POST v1/provision/user</c>     — give another user access to an existing application.
     ///   * <c>POST v1/activation/{client|user}</c> — switch either of them off, and back on.
     ///
     /// Authorization is the same as the rest of the management API: operator only, through
@@ -99,6 +100,63 @@ namespace Ark.oAuth.Oidc
             {
                 da.LogError(ex, "provision", "v1/provision/client",
                     $"details : cn: {request?.client_name}, un: {request?.user_name}, ti: {request?.tenant_id}");
+                return StatusCode(500, new
+                {
+                    error = true,
+                    code = "provision_failed",
+                    msg = ex.Message,
+                    data = (object?)null
+                });
+            }
+        }
+
+        /// <summary>
+        /// Gives one user access to an application that is already registered — the user half of
+        /// <c>v1/provision/client</c>, for every user after the first.
+        ///
+        /// An existing account is not touched; only its mapping to the client is added (or has
+        /// claims added to it). A missing account is created with the configured default password
+        /// and the given display name, or the username when there is none. The mapping always
+        /// carries the identity claims, so the user can actually sign in afterwards.
+        /// </summary>
+        [HttpPost]
+        [Route("v1/provision/user")]
+        public async Task<IActionResult> ProvisionUser(
+            [FromServices] ArkProvisioning provisioning,
+            [FromServices] DataAccess da,
+            [FromBody] ArkProvisionUserRequest request)
+        {
+            try
+            {
+                var result = await provisioning.ProvisionUserAsync(request);
+                var what = result.user_created
+                    ? (result.user_credential == "activation_email"
+                        ? "the account was created and an activation link emailed"
+                        : "the account was created with the configured default password")
+                    : "the existing account was left unchanged";
+                return Ok(new
+                {
+                    error = false,
+                    code = "provisioned",
+                    msg = $"'{result.user_name}' can now sign in to '{result.client_id}' - {what}.",
+                    data = result
+                });
+            }
+            catch (ArkProvisionException ex)
+            {
+                da.Log("provision_refused", $"{request?.tenant_id}/{request?.client_id}", ex.Code, ex.Message, "warn");
+                return StatusCode(ex.StatusCode, new
+                {
+                    error = true,
+                    code = ex.Code,
+                    msg = ex.Message,
+                    data = ex.Data
+                });
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "provision_user", "v1/provision/user",
+                    $"details : ci: {request?.client_id}, un: {request?.user_name}, ti: {request?.tenant_id}");
                 return StatusCode(500, new
                 {
                     error = true,

@@ -373,8 +373,9 @@ else if (!Model.SupportsDynamicRegistration)
                 <td>A user account to sign in to the new client with</td>
                 <td><span class="pill">check</span></td>
                 <td>
-                    Any account in the tenant, the admin included. Create one under
-                    <strong>Users</strong> if you would rather keep the admin out of it.
+                    Any account in the tenant, the admin included. Name a new one in
+                    <a class="step" href="#step-3">Step 3</a> and it is created there, with the
+                    IdP's default password.
                 </td>
             </tr>
         </table>
@@ -738,6 +739,12 @@ else if (!Model.SupportsDynamicRegistration)
                 </datalist>
             </div>
 
+            <div>display name</div>
+            <div>
+                <input name="MapDisplayName" value="@Model.MapDisplayName" style="width:100%"
+                       autocomplete="off" placeholder="only for a new account — defaults to the user id" />
+            </div>
+
             <div>claims</div>
             <div><input name="MapClaims" value="@Model.MapClaims" style="width:100%" spellcheck="false" /></div>
         </div>
@@ -752,10 +759,13 @@ else if (!Model.SupportsDynamicRegistration)
         }
     </form>
     <p style="margin-bottom:0">
-        This writes the same row as <strong>Access mapping</strong> in the
-        <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>, through
-        the management API. Claims the user already has on this client are kept; the ones above are
-        added.
+        One call to the provisioning API (<code>POST /api/oauth/v1/provision/user</code>). An
+        existing account is left exactly as it is and only mapped; a new one is created with the
+        IdP's default password (<code>ark_oauth_server:DefaultPw</code>) and the display name above.
+        It writes the same row as <strong>Access mapping</strong> in the
+        <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>: claims
+        the user already has on this client are kept, <code>sub name email email_verified</code> are
+        always included, and the ones above are added.
     </p>
 
     @if (Model.Mapping != null)
@@ -764,8 +774,21 @@ else if (!Model.SupportsDynamicRegistration)
         {
             <div class="note ok">
                 <strong><code>@Model.MapUser</code> can now sign in to <code>@clientIdShown</code></strong>
-                with <code>@string.Join(" ", Model.MappedClaims)</code>. Claims are written into tokens
-                when they are issued, so sign out and back in (Step 4) to see them.
+                with <code>@string.Join(" ", Model.MappedClaims)</code>.
+                @if (Model.MapUserCredential == "default_password")
+                {
+                    <text>The account was created and signs in with the IdP's default password.</text>
+                }
+                else if (Model.MapUserCredential == "activation_email")
+                {
+                    <text>The account was created and an activation link emailed; it cannot sign in until the link is used.</text>
+                }
+                else
+                {
+                    <text>The account already existed and was not changed.</text>
+                }
+                Claims are written into tokens when they are issued, so sign out and back in (Step 4)
+                to see them.
             </div>
         }
         else

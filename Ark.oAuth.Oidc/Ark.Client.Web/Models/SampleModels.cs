@@ -162,9 +162,14 @@ namespace Ark.Client.Web.Models
 
         // Step 3, the access mapping form
         public string MapUser { get; set; } = "admin";
+        /// <summary>Used only if the account has to be created; the IdP falls back to the username.</summary>
+        public string MapDisplayName { get; set; } = "";
         public string MapClaims { get; set; } = "";
         public ArkManagementResult? Mapping { get; set; }
         public List<string> MappedClaims { get; set; } = new();
+        public bool MapUserCreated { get; set; }
+        /// <summary><c>default_password</c>, <c>activation_email</c> or <c>existing_account</c>.</summary>
+        public string? MapUserCredential { get; set; }
 
         /// <summary>Result of removing an existing client through the management API.</summary>
         public ArkManagementResult? Removal { get; set; }
