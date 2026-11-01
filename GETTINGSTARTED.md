@@ -368,14 +368,25 @@ trace.
 
 ### d. The machine client's secret — for `/flows/machine` and `/flows/register`
 
-`ark_idp_machine` is seeded **without** a secret on purpose. Give it one:
+`ark_idp_machine` is seeded **without** a secret on purpose, and seeded again without one whenever
+the IdP's database is recreated (deleting `data/` included), so a secret you kept from before stops
+working. Give it one:
 
 1. **Clients → `ark_idp_machine` → Regenerate secret.** The value is shown once — only a PBKDF2
    hash is stored.
-2. ```bash
-   dotnet user-secrets set "sample:Machine:ClientSecret" "<the secret>" \
-     --project Ark.oAuth.Oidc/Ark.Client.Web
+2. Paste it into **machine client_secret** on `/flows/register`, which tries it against the IdP and
+   stores it nowhere. To keep it across restarts, hand it to the sample at start-up instead of
+   writing it into a tracked file:
+   ```bash
+   export sample__Machine__ClientSecret='<the secret>'
+   ./run.sh
    ```
+   To make a recreated database get the same secret back, also set it on the IdP as
+   `ark_oauth_server:Management:MachineClientSecret` in the host's gitignored
+   `appsettings.Development.json`.
+
+`sample:Machine:ClientSecret` is the machine client's secret. It is not `ark_oauth_client:ClientSecret`,
+which is the sample's own sign-in client and stays `null`.
 
 Then re-run the checks:
 

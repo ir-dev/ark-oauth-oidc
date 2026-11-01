@@ -91,6 +91,18 @@ namespace Ark.Client.Web.Models
         public string MachineClientId { get; set; } = "";
         public bool MachineSecretConfigured { get; set; }
 
+        /// <summary>
+        /// What the IdP said when the secret was tried: <c>works</c>, <c>rejected</c>,
+        /// <c>unchecked</c> (the IdP could not be reached) or <c>not_set</c>. A value being present
+        /// says nothing about whether it still matches what the IdP holds.
+        /// </summary>
+        public string MachineSecretStatus { get; set; } = "not_set";
+        public string? MachineSecretError { get; set; }
+
+        /// <summary>Pasted on the page for this request. Echoed back to the form, stored nowhere.</summary>
+        public string? MachineSecret { get; set; }
+        public bool MachineSecretPasted => !string.IsNullOrWhiteSpace(MachineSecret);
+
         // What the walkthrough needs to say "change this, then sign in": where the console is,
         // and the client this app is signing in with right now.
         public string AdminConsoleUrl { get; set; } = "";

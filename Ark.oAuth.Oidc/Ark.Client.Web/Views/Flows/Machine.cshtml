@@ -75,14 +75,18 @@ else if (!Model.SupportsClientCredentials)
             </p>
             <ol style="margin:0 0 8px 18px;padding:0">
                 <li>
-                    Open the admin console at <code>@Model.AdminConsoleUrl</code>, find
-                    <code>@Model.ClientId</code> under <strong>Clients</strong>, and press
-                    <strong>Regenerate secret</strong>. It is shown once and stored only as a
-                    PBKDF2 hash, so it cannot be read back.
+                    Open the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
+                    (<code>@Model.AdminConsoleUrl</code>), find <code>@Model.ClientId</code> under
+                    <strong>Clients</strong>, and press <strong>Regenerate secret</strong>. It is shown
+                    once and stored only as a PBKDF2 hash, so it cannot be read back.
                 </li>
-                <li>Put it in user-secrets, not in appsettings.json:</li>
+                <li>
+                    Hand it to this app at start-up, not in <code>appsettings.json</code> (which is in
+                    source control) — or paste it on <a href="/flows/register">dynamic registration</a>
+                    for a single use:
+                </li>
             </ol>
-            <pre>dotnet user-secrets set "sample:Machine:ClientSecret" "&lt;the secret&gt;" --project Ark.Client.Web</pre>
+            <pre>export sample__Machine__ClientSecret='&lt;the secret&gt;'   # then restart this app</pre>
         </div>
     }
 </div>

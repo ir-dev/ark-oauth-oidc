@@ -259,9 +259,14 @@ The provider seeds a machine client, `<tenant>_machine`, with **no secret** — 
 source would be the same secret on every deployment. Give it one:
 
 1. Admin console → **Clients** → `ark_idp_machine` → **Regenerate secret** (shown once).
-2. ```bash
-   dotnet user-secrets set "sample:Machine:ClientSecret" "<the secret>" --project Ark.Client.Web
-   ```
+2. Paste it on `/flows/register` (**machine client_secret**; **View** shows it). It is used for
+   that request and stored nowhere. To keep it across restarts, export it before starting the app:
+   `export sample__Machine__ClientSecret='<the secret>'`. Don't write it into `appsettings.json`,
+   which is in source control.
+
+`/flows/register` tries the stored secret against the IdP on every load and shows *accepted*,
+*rejected* or *not set*. A secret goes stale silently when the IdP's database is recreated, because
+the new database seeds the machine client without one.
 
 ### `/flows/register` — dynamic client registration
 

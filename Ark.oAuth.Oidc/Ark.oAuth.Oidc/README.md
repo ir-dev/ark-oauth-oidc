@@ -323,6 +323,37 @@ Whoever can read this setting is the operator, so keep it out of `appsettings.js
 `Management:OperatorDeviceClients` admits device-code tokens approved by the operator, for a CLI;
 it is empty by default and best left so.
 
+### The machine client's secret, end to end
+
+Most "registration fails with `invalid_client`" reports come down to this, so here is the whole
+process.
+
+1. **Know which secret is which.** A client app has its *own* `ark_oauth_client:ClientSecret`
+   (`null` for a public client). The machine client `{TenantId}_machine` is a *different* client
+   with its own secret. A caller that registers clients or calls the management API needs the
+   second one.
+2. **Expect it to be missing.** The machine client is seeded with **no secret**: on first run, and
+   again whenever the database is recreated (deleted `data/`, factory reset, a `replace` import).
+   The IdP stores only a PBKDF2 hash, so any secret a caller already holds stops working with no
+   sign on the caller's side. "Configured" in a caller means only that it has *a* value.
+3. **Diagnose by trying it.** `invalid_client: client authentication failed.` means the secret
+   doesn't match. That includes the case where the IdP has none.
+   ```bash
+   curl -s -X POST https://<host>/<tenant>/oauth2/token -d grant_type=client_credentials \
+     -d client_id=<tenant>_machine --data-urlencode client_secret="$SECRET" -d scope=client.register
+   ```
+4. **Give it one**, either way:
+   * *Console:* **Clients → `{TenantId}_machine` → Regenerate secret**. It is shown once, so copy it
+     then.
+   * *Configuration:* `ark_oauth_server:Management:MachineClientSecret`, at least 16 characters. It
+     is applied during the bootstrap, so a recreated database gets it back automatically. Rotate it
+     by changing the setting; the console then refuses to regenerate it.
+5. **Hand it to the caller out of source control:** an environment variable, a key vault
+   reference, or pasted for a single use. Never `appsettings.json`. Whoever holds it is the
+   operator.
+6. **Verify:** step 3's command returns an `access_token`, and
+   `GET /api/oauth/v1/client/list` with `Authorization: Bearer <access_token>` answers 200.
+
 ## Admin console
 
 The console ships in this package. Referencing it is all the wiring there is:
