@@ -1,6 +1,6 @@
 {
   "name": "ark-oauth-client",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "The OAuth 2.1 / OpenID Connect client for Node.js applications, built for Ark.oAuth.Oidc. Authorization code + PKCE with state, nonce, iss and at_hash checks, JWKS rotation, silent refresh, client credentials, the device grant, PAR, introspection, revocation, dynamic client registration and RP-initiated logout \u2014 plus Express/Connect middleware for interactive sign-in and for protecting an API. No runtime dependencies.",
   "keywords": [
     "oauth",

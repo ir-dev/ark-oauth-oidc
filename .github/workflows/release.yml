@@ -66,7 +66,12 @@ jobs:
         id: version
         env:
           EXPECTED: ${{ inputs.version }}
-        run: echo "version=$(scripts/version.sh check "$EXPECTED")" >> "$GITHUB_OUTPUT"
+        # Assign first: inside `echo "...$(cmd)"` a failing check is swallowed by echo's exit 0,
+        # and every later job then runs with an empty VERSION.
+        run: |
+          version=$(scripts/version.sh check "$EXPECTED")
+          [ -n "$version" ] || { echo "::error::scripts/version.sh check printed no version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Not released yet
         env:
@@ -187,7 +192,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # uv.lock is gitignored, so the cache keys on pyproject.toml.
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v7
         with:
           cache-dependency-glob: ark_oauth_client_py/pyproject.toml
 
@@ -305,7 +310,7 @@ jobs:
           name: python
           path: dist
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
 
