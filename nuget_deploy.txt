@@ -4,6 +4,24 @@
  shipping 2.0.2 on 2026-08-19; only the version numbers have moved since.
 ================================================================================
 
+FROM CI INSTEAD  (the preferred path now)
+--------------------------------------------------------------------------------
+  .github/workflows/release.yml does STEPS 1 and 3-8 for both NuGet packages,
+  and for PyPI and npm at the same version: scripts/version.sh set X.Y.Z,
+  commit, push, then Actions -> Release -> Run workflow. It pushes with NuGet
+  Trusted Publishing (NuGet/login, a key that lives an hour), so STEP 0's API
+  key is not needed. One-time setup is in the workflow's header comment.
+
+  Two things it does differently from the steps below, on purpose:
+  * restore uses --source nuget.org, because Ark.oAuth.Oidc/nuget.config adds
+    a local Debug feed that does not exist on a clean machine;
+  * pack passes -p:GeneratePackageOnBuild=false. On a clean tree (no prior
+    build in bin/) pack otherwise fails with NU5026, the DLL "not found on
+    disk" -- the build packs before the DLL has been copied there.
+
+  The manual steps below still work and remain the fallback.
+
+
 WHAT SHIPS IN THIS RELEASE
 --------------------------------------------------------------------------------
   Ark.oAuth.Oidc     2.0.2  ->  2.0.3    the IdP / provider
