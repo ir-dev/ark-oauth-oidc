@@ -326,6 +326,31 @@ be read and edited on disk; the served copies always come from the assembly.
 The v1 console at `/oauth/{tenant}/v1/server/{client_id}/manage` is still served for existing
 deployments and is no longer developed.
 
+## Export, import and factory reset
+
+The operator account gets a **Data** page at `/{tenant_id}/admin/data`, over an API at
+`/api/oauth/v1/data/…`:
+
+* **Export** — every table and column (including password hashes, client secret hashes and
+  private signing keys) plus the app settings, as one JSON file. Give it a passphrase and it is
+  encrypted with AES-256-GCM; it carries a checksum either way. Treat it like a database backup:
+  whoever holds it can sign tokens as this server.
+* **Import** — analyse first. The server works out all three modes against the database as it is —
+  `replace` (empty this server, load the file exactly), `merge_skip` (add what is missing, keep what
+  is here) and `merge_overwrite` (add what is missing, take the file's version of the rest) — and
+  says, row by row, what each would do. A row that cannot be loaded safely is excluded by a named
+  rule (a tenant that differs only by letter case, a mapping to a missing client, a duplicate client
+  name, a `javascript:` redirect URI, a signing key that would collide…) together with everything
+  that depends on it; the rest loads, in one transaction. Same file and same database, same plan.
+* **Factory reset** — empties every table and runs the same first-run seed a new install gets,
+  after checking that an administrator password is configured, so it can never leave a server
+  nobody can sign in to.
+
+Configuration is compared on import, never applied. All three can be switched off under
+`ark_oauth_server:Admin:DataTools` (`Enabled`, `AllowReset`, `AllowImport`, `AllowReplace`,
+`MaxImportMegabytes`). The modes, every exclusion rule and the file format are specified in
+[API-GUIDE.md](API-GUIDE.md#data-tools-api--export-import-factory-reset-datatoolscontroller-base-apioauth).
+
 ## Branding
 
 The sign-in, consent and device pages show two marks in the header: the **host logo**, which says

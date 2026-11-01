@@ -100,9 +100,18 @@ Management API   (/api/oauth/v1/... , [Authorize])
  ├── Service token  v1/service/pw/reset
  └── Anti-patterns  editing rows directly in the DB instead of the API
 
+Data tools API   (/api/oauth/v1/data/... , operator account only; JSON POSTs)
+ ├── Export         POST /export {passphrase?, include_setting_secrets?} -> every table+column, AES-256-GCM if passphrase
+ ├── Analyse        POST /import/analyze {file, passphrase?, include?} -> all 3 modes, per-row actions + reasons, plan_hash
+ ├── Apply          POST /import/apply {..., mode, plan_hash, confirm?} -> one transaction; 409 plan_changed if DB moved
+ ├── Modes          replace (wipe + exact load; confirm = TenantId) | merge_skip | merge_overwrite (operator records protected)
+ ├── Reset          POST /reset {confirm: TenantId} -> wipe + first-run seed; 409 seed_unavailable before deleting anything
+ └── Anti-patterns  hand-rolling SQL dumps between servers; expecting import to apply app settings (compared only)
+
 Admin console (UI)
  ├── Path           /{tenant_id}/admin  (/admin redirects to the configured tenant)
  ├── Provisioning   /{tenant_id}/admin/provisioning  (forms + generated curl; admin-only)
+ ├── Data           /{tenant_id}/admin/data  (export / import / factory reset; operator-only)
  ├── Assets         /ark-admin/asset/ark-admin.css|.js  (served from the assembly)
  ├── Sign out       ark_oauth_server:Admin:SignOutUrl  (host route; only the host can drop its cookie)
  └── Anti-patterns  copying views into the host; expecting the console to end the host session itself

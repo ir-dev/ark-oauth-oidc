@@ -17,8 +17,9 @@
      * No third-party helper libraries. Tabulator is the single external
        dependency, pinned; the toast and DOM helpers below are ~20 lines.
 
-   One script, two pages. The console (/{tenant}/admin) and the provisioning page
-   (/{tenant}/admin/provisioning) share it, and neither draws all of it, so every
+   One script, three pages. The console (/{tenant}/admin), the provisioning page
+   (/{tenant}/admin/provisioning) and the data page (/{tenant}/admin/data) share
+   it, and none of them draws all of it, so every
    section here is wired only when the elements it drives are actually present —
    see byId/on/fillSelect below. A section that binds blindly throws on the page
    that does not have it, which stops the script before the sections that page
@@ -1482,6 +1483,585 @@
         tables.scope.addRow({ claims: [], require_consent: true, is_default: false, is_protocol: false });
     });
 
+    // ------------------------------------------------------- data: export / import / reset
+
+    /*
+     * The data page (/{tenant}/admin/data). The page decides nothing: the server works out what
+     * each import mode would do and why, and this draws it. Everything that comes out of an
+     * import file is somebody else's text, so it reaches the page through textContent only —
+     * never through el() or innerHTML.
+     */
+    var OPERATOR_TENANT = root.dataset.operatorTenant || "";
+    var SIGN_OUT_URL = root.dataset.signOutUrl || "";
+    var MODE_TEXT = {
+        replace: {
+            title: "Replace",
+            text: "Empty this server, then load the file exactly as exported. Use it to restore a backup or move a server."
+        },
+        merge_skip: {
+            title: "Merge — keep what is here",
+            text: "Add everything that is missing. A record that already exists here is left exactly as it is."
+        },
+        merge_overwrite: {
+            title: "Merge — take the file's version",
+            text: "Add everything that is missing, and update records that already exist here to the file's values."
+        }
+    };
+    var ACTION_TEXT = {
+        insert: "insert", update: "update", unchanged: "unchanged", skip_existing: "skip",
+        excluded: "excluded", not_selected: "not selected", adjusted: "adjusted"
+    };
+    var ACTION_ORDER = ["insert", "update", "unchanged", "skip_existing", "excluded", "not_selected"];
+
+    function node(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text !== undefined && text !== null) e.textContent = text;
+        return e;
+    }
+
+    function downloadBlob(blob, name) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    }
+
+    /** The export panel's choices, or null (with a toast) when the passphrases do not agree. */
+    function exportBody() {
+        var p1 = byId("ex-passphrase") ? byId("ex-passphrase").value : "";
+        var p2 = byId("ex-passphrase2") ? byId("ex-passphrase2").value : "";
+        if (p1 !== p2) { toast("w", "the two passphrases do not match", 4000); return null; }
+        return {
+            passphrase: p1 || null,
+            include_setting_secrets: !!(byId("ex-secrets") && byId("ex-secrets").checked)
+        };
+    }
+
+    /** Export answers with the file itself, not JSON, so it is fetched as a blob. */
+    function exportFile(body) {
+        return fetch(API + "/data/export", {
+            method: "POST",
+            body: JSON.stringify(body || {}),
+            headers: { Accept: "application/json", "Content-Type": "application/json" }
+        }).then(function (r) {
+            if (!r.ok) {
+                return r.text().then(function (text) {
+                    var payload = null;
+                    try { payload = JSON.parse(text); } catch (e) { payload = null; }
+                    throw new Error((payload && payload.msg) || (r.status + " " + r.statusText));
+                });
+            }
+            var disposition = r.headers.get("Content-Disposition") || "";
+            var match = /filename\*=UTF-8''([^;]+)/i.exec(disposition) || /filename="?([^";]+)"?/i.exec(disposition);
+            var name = match ? decodeURIComponent(match[1]) : "ark-idp-export.json";
+            return r.blob().then(function (blob) { downloadBlob(blob, name); return name; });
+        });
+    }
+
+    /** The backup the import and reset panels take first, with the export panel's passphrase. */
+    function backupFirst(checkboxId) {
+        var box = byId(checkboxId);
+        if (!box || !box.checked) return Promise.resolve();
+        var body = exportBody();
+        if (!body) return Promise.reject(Object.assign(new Error("fix the export passphrase first"), { reported: true }));
+        return exportFile(body).then(function (name) { toast("s", "backup downloaded: " + name, 4000); });
+    }
+
+    var dataSummary = null;
+
+    function loadDataSummary() {
+        return getJson(API + "/data/summary").then(function (res) {
+            dataSummary = res.data || {};
+            renderCounts(dataSummary);
+            renderSeedProblem();
+            return dataSummary;
+        });
+    }
+
+    function renderCounts(d) {
+        var host = byId("dt-counts");
+        if (!host) return;
+        host.textContent = "";
+        var counts = d.counts || {};
+        Object.keys(d.categories || {}).forEach(function (cat) {
+            var tables = d.categories[cat] || [];
+            if (!tables.length) return;
+            var box = node("div", "ark-data-cat");
+            var total = tables.reduce(function (n, t) { return n + (counts[t] || 0); }, 0);
+            var head = node("h4", null, cat + " ");
+            head.appendChild(node("span", "ark-hint", total + " rows"));
+            box.appendChild(head);
+            var dl = node("dl", "ark-kv");
+            tables.forEach(function (t) {
+                dl.appendChild(node("dt", null, t));
+                dl.appendChild(node("dd", null, String(counts[t] || 0)));
+            });
+            box.appendChild(dl);
+            host.appendChild(box);
+        });
+    }
+
+    on("dt-refresh", "click", function () {
+        loadDataSummary().catch(function (err) { toast("f", err.message, 6000); });
+    });
+
+    on("ex-submit", "click", function () {
+        var button = this;
+        var body = exportBody();
+        if (!body) return;
+        if (!body.passphrase && !window.confirm("Export without a passphrase? The file will hold every private key and password hash in plain text.")) return;
+        button.disabled = true;
+        exportFile(body)
+            .then(function (name) { toast("s", "downloaded " + name, 4000); })
+            .catch(function (err) { toast("f", err.message, 6000); })
+            .then(function () { button.disabled = false; });
+    });
+
+    // ---------------------------------------------------------------- import
+
+    var importState = { file: null, analysis: null, mode: null, filter: "notable" };
+
+    function includeList() {
+        var host = byId("im-include");
+        if (!host) return null;
+        return Array.prototype.slice.call(host.querySelectorAll("input[type=checkbox]"))
+            .filter(function (i) { return i.checked; })
+            .map(function (i) { return i.value; });
+    }
+
+    function resetAnalysis() {
+        importState.analysis = null;
+        importState.mode = null;
+        var host = byId("im-analysis");
+        if (host) { host.hidden = true; host.textContent = ""; }
+    }
+
+    on("im-file", "change", function () {
+        var chosen = this.files && this.files[0];
+        importState.file = null;
+        resetAnalysis();
+        byId("im-analyse").disabled = true;
+        byId("im-modified-field").hidden = true;
+        byId("im-allow-modified").checked = false;
+        var note = byId("im-file-note");
+        if (!chosen) return;
+        chosen.text().then(function (text) {
+            var json;
+            try { json = JSON.parse(text); } catch (e) {
+                note.textContent = "That file is not JSON, so it is not an Ark export.";
+                return;
+            }
+            importState.file = json;
+            var m = (json && json.manifest) || {};
+            byId("im-passphrase-field").hidden = !(json && json.payload);
+            note.textContent = (json && json.format === "ark-idp-export")
+                ? "Exported " + (m.exported_at || "at an unknown time") + " from " + (m.base_url || "an unknown server")
+                  + " (" + (m.package_version || "unknown version") + ")" + (json.payload ? ", encrypted." : ".")
+                : "This does not look like an Ark export; the analysis will say why.";
+            byId("im-analyse").disabled = false;
+        });
+    });
+
+    ["im-passphrase", "im-allow-modified"].forEach(function (id) { on(id, "change", resetAnalysis); });
+    var includeHost = byId("im-include");
+    if (includeHost) includeHost.addEventListener("change", resetAnalysis);
+
+    function importBody(extra) {
+        var body = {
+            file: importState.file,
+            passphrase: (byId("im-passphrase") && byId("im-passphrase").value) || null,
+            include: includeList(),
+            allow_modified: !!(byId("im-allow-modified") && byId("im-allow-modified").checked)
+        };
+        Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });
+        return body;
+    }
+
+    on("im-analyse", "click", function () {
+        var button = this;
+        if (!importState.file) { toast("w", "choose an export file first", 4000); return; }
+        button.disabled = true;
+        postJson(API + "/data/import/analyze", importBody())
+            .then(function (res) {
+                importState.analysis = res.data;
+                importState.mode = res.data.recommended_mode || null;
+                importState.filter = "notable";
+                renderAnalysis();
+            })
+            .catch(function (err) { toast("f", err.message, 7000); })
+            .then(function () { button.disabled = false; });
+    });
+
+    function issueList(cls, issues) {
+        var box = node("div", "ark-alert " + cls);
+        var ul = node("ul", "ark-list");
+        issues.forEach(function (i) {
+            var li = node("li");
+            li.appendChild(node("code", null, i.code));
+            li.appendChild(document.createTextNode(" " + i.msg));
+            ul.appendChild(li);
+        });
+        box.appendChild(ul);
+        return box;
+    }
+
+    function countsLine(summary, deletes) {
+        var parts = [];
+        ["insert", "update", "unchanged", "skip_existing", "excluded", "adjusted"].forEach(function (a) {
+            if (summary && summary[a]) parts.push(summary[a] + " " + ACTION_TEXT[a]);
+        });
+        var removed = 0;
+        Object.keys(deletes || {}).forEach(function (k) { removed += deletes[k]; });
+        if (removed) parts.unshift(removed + " deleted here first");
+        return parts.length ? parts.join(" · ") : "nothing to load";
+    }
+
+    function renderAnalysis() {
+        var a = importState.analysis;
+        var host = byId("im-analysis");
+        if (!a || !host) return;
+        host.hidden = false;
+        host.textContent = "";
+
+        var f = a.file || {};
+        var facts = node("dl", "ark-kv ark-import-file");
+        [
+            ["Exported", (f.exported_at || "?") + (f.exported_by ? " by " + f.exported_by : "")],
+            ["From", (f.base_url || "?") + " — tenant " + (f.operator_tenant || "?")],
+            ["Release", (f.package_version || "?") + ", " + (f.provider || "?") + ", format " + f.format_version],
+            ["Integrity", f.checksum_ok === true ? "checksum verified" : f.checksum_ok === false ? "checksum does not match - edited after export" : "no checksum"],
+            ["Settings", f.settings_secrets_redacted ? "exported with secrets redacted" : "exported with secrets"]
+        ].forEach(function (pair) {
+            facts.appendChild(node("dt", null, pair[0]));
+            facts.appendChild(node("dd", null, pair[1]));
+        });
+        host.appendChild(facts);
+
+        var codes = (a.blockers || []).map(function (b) { return b.code; });
+        byId("im-modified-field").hidden = !(codes.indexOf("checksum_mismatch") >= 0 || byId("im-allow-modified").checked);
+        if (codes.some(function (c) { return c.indexOf("passphrase") === 0; })) byId("im-passphrase-field").hidden = false;
+
+        if ((a.blockers || []).length) {
+            host.appendChild(node("h4", null, "This file cannot be imported"));
+            host.appendChild(issueList("", a.blockers));
+            return;
+        }
+        if ((a.warnings || []).length) host.appendChild(issueList("ark-alert-warn", a.warnings));
+
+        if (a.recommended_mode) {
+            var rec = node("p", "ark-import-rec");
+            rec.appendChild(node("strong", null, "Recommended: " + MODE_TEXT[a.recommended_mode].title + ". "));
+            rec.appendChild(document.createTextNode(a.recommendation || ""));
+            host.appendChild(rec);
+        }
+
+        var modes = node("div", "ark-modes");
+        ["merge_skip", "merge_overwrite", "replace"].forEach(function (mode) {
+            var plan = a.modes[mode];
+            if (!plan) return;
+            var allowed = mode !== "replace" || root.dataset.allowReplace === "true";
+            var card = node("label", "ark-mode");
+            card.dataset.selected = String(importState.mode === mode);
+            card.dataset.possible = String(plan.possible && allowed);
+            var radio = node("input");
+            radio.type = "radio";
+            radio.name = "im-mode";
+            radio.value = mode;
+            radio.checked = importState.mode === mode;
+            radio.disabled = !(plan.possible && allowed);
+            radio.addEventListener("change", function () {
+                importState.mode = mode;
+                importState.filter = "notable";
+                renderAnalysis();
+            });
+            card.appendChild(radio);
+            var body = node("div", "ark-mode-body");
+            var title = node("div", "ark-mode-title", MODE_TEXT[mode].title + " ");
+            if (a.recommended_mode === mode) title.appendChild(node("span", "ark-badge ark-badge-ok", "recommended"));
+            if (!(plan.possible && allowed)) title.appendChild(node("span", "ark-badge ark-badge-warn", "not possible"));
+            body.appendChild(title);
+            body.appendChild(node("div", "ark-mode-text", MODE_TEXT[mode].text));
+            body.appendChild(node("div", "ark-mode-counts", countsLine(plan.summary, plan.deletes)));
+            (plan.blockers || []).forEach(function (b) { body.appendChild(node("div", "ark-mode-blocker", b.msg)); });
+            (plan.warnings || []).forEach(function (w) {
+                var line = node("div", "ark-mode-warning");
+                line.appendChild(node("code", null, w.code));
+                line.appendChild(document.createTextNode(" " + w.msg));
+                body.appendChild(line);
+            });
+            if (!allowed) body.appendChild(node("div", "ark-mode-blocker", "switched off by ark_oauth_server:Admin:DataTools:AllowReplace."));
+            card.appendChild(body);
+            modes.appendChild(card);
+        });
+        host.appendChild(modes);
+
+        var plan = importState.mode && a.modes[importState.mode];
+        if (plan) {
+            host.appendChild(planTables(plan));
+            host.appendChild(planRecords(plan));
+        }
+        host.appendChild(settingsDiff(a));
+        if (plan && plan.possible) host.appendChild(applyBox(plan));
+    }
+
+    function planTables(plan) {
+        var wrap = node("div", "ark-table-wrap");
+        var table = node("table", "ark-table");
+        var head = node("tr");
+        head.appendChild(node("th", null, "table"));
+        ACTION_ORDER.forEach(function (a) { head.appendChild(node("th", "ark-num", ACTION_TEXT[a])); });
+        if (plan.mode === "replace") head.appendChild(node("th", "ark-num", "deleted first"));
+        var thead = node("thead");
+        thead.appendChild(head);
+        table.appendChild(thead);
+        var tbody = node("tbody");
+        var names = Object.keys(plan.tables || {});
+        Object.keys(plan.deletes || {}).forEach(function (t) { if (names.indexOf(t) < 0) names.push(t); });
+        names.forEach(function (t) {
+            var counts = plan.tables[t] || {};
+            var tr = node("tr");
+            tr.appendChild(node("td", null, t));
+            ACTION_ORDER.forEach(function (a) {
+                var td = node("td", "ark-num", counts[a] ? String(counts[a]) : "·");
+                if (a === "excluded" && counts[a]) td.className += " ark-num-bad";
+                tr.appendChild(td);
+            });
+            if (plan.mode === "replace") tr.appendChild(node("td", "ark-num", String((plan.deletes || {})[t] || 0)));
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        wrap.appendChild(table);
+        return wrap;
+    }
+
+    function planRecords(plan) {
+        var box = node("div", "ark-import-records");
+        var bar = node("div", "ark-activation-head");
+        bar.appendChild(node("h4", null, "Records that need a look"));
+        bar.appendChild(node("span", "ark-spacer"));
+        var select = node("select");
+        [["notable", "all of them"], ["excluded", "excluded"], ["skip_existing", "skipped"], ["update", "updated"], ["adjusted", "adjusted"]]
+            .forEach(function (o) { select.add(new Option(o[1], o[0])); });
+        select.value = importState.filter;
+        select.setAttribute("aria-label", "Filter records");
+        select.addEventListener("change", function () { importState.filter = select.value; renderAnalysis(); });
+        bar.appendChild(select);
+        box.appendChild(bar);
+
+        var rows = (plan.records || []).filter(function (r) {
+            if (importState.filter === "notable") return true;
+            if (importState.filter === "adjusted") return (r.adjustments || []).length > 0;
+            return r.action === importState.filter;
+        });
+        if (!rows.length) {
+            box.appendChild(node("p", "ark-empty", "None — every row is a plain insert or already identical here."));
+            return box;
+        }
+        var wrap = node("div", "ark-table-wrap");
+        var table = node("table", "ark-table");
+        var head = node("tr");
+        ["table", "record", "action", "why"].forEach(function (h) { head.appendChild(node("th", null, h)); });
+        var thead = node("thead");
+        thead.appendChild(head);
+        table.appendChild(thead);
+        var tbody = node("tbody");
+        rows.forEach(function (r) {
+            var tr = node("tr");
+            tr.dataset.action = r.action;
+            tr.appendChild(node("td", null, r.table));
+            tr.appendChild(node("td", "ark-mono", r.key));
+            var act = node("td");
+            act.appendChild(node("span", "ark-badge " + (r.action === "excluded" ? "ark-badge-warn" : r.action === "update" ? "ark-badge-ok" : "ark-badge-off"), ACTION_TEXT[r.action] || r.action));
+            tr.appendChild(act);
+            var why = node("td");
+            if (r.reason) why.appendChild(node("code", null, r.reason));
+            if (r.detail) why.appendChild(document.createTextNode(" " + r.detail));
+            (r.adjustments || []).forEach(function (adj) { why.appendChild(node("div", "ark-note", "↳ " + adj)); });
+            tr.appendChild(why);
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        wrap.appendChild(table);
+        box.appendChild(wrap);
+        if (plan.records_truncated) box.appendChild(node("p", "ark-note", plan.records_truncated + " more not listed; the counts above include them."));
+        return box;
+    }
+
+    function settingsDiff(a) {
+        var details = node("details", "ark-import-settings");
+        var diffs = a.settings || [];
+        details.appendChild(node("summary", null, "App settings — " + (diffs.length
+            ? diffs.length + " differ from this server's, " + a.settings_same + " match"
+            : "all " + a.settings_same + " match this server's")));
+        details.appendChild(node("p", "ark-note",
+            "Never applied by an import: configuration belongs to the host (appsettings, environment, a secret store), and the connection string in the file points at the database being imported from. Change these by hand where you need to."));
+        if (a.settings_file) {
+            var get = node("button", "ark-btn-ghost ark-btn-sm", "Download the file's settings as appsettings.json");
+            get.type = "button";
+            get.addEventListener("click", function () {
+                downloadBlob(new Blob([JSON.stringify(a.settings_file, null, 2)], { type: "application/json" }),
+                    "appsettings.imported.json");
+            });
+            var bar = node("div", "ark-note");
+            bar.appendChild(get);
+            bar.appendChild(document.createTextNode(a.file && a.file.settings_secrets_redacted
+                ? " Secrets were redacted at export - fill in the <<redacted>> values before using it."
+                : " Contains the secrets as exported - keep it out of source control."));
+            details.appendChild(bar);
+        }
+        if (!diffs.length) return details;
+        var wrap = node("div", "ark-table-wrap");
+        var table = node("table", "ark-table");
+        var head = node("tr");
+        ["setting", "here", "in the file", ""].forEach(function (h) { head.appendChild(node("th", null, h)); });
+        var thead = node("thead");
+        thead.appendChild(head);
+        table.appendChild(thead);
+        var tbody = node("tbody");
+        diffs.forEach(function (d) {
+            var tr = node("tr");
+            tr.appendChild(node("td", "ark-mono", d.key));
+            tr.appendChild(node("td", "ark-mono", d.here == null ? "—" : d.here));
+            tr.appendChild(node("td", "ark-mono", d.in_file == null ? "—" : d.in_file));
+            tr.appendChild(node("td", null, d.status.replace(/_/g, " ")));
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        wrap.appendChild(table);
+        details.appendChild(wrap);
+        return details;
+    }
+
+    function applyBox(plan) {
+        var box = node("div", "ark-import-apply");
+        if (plan.mode === "replace") {
+            var field = node("div", "ark-field");
+            var label = node("label", null, "Type " + OPERATOR_TENANT + " to confirm replacing everything on this server");
+            label.htmlFor = "im-confirm";
+            var input = node("input");
+            input.type = "text";
+            input.id = "im-confirm";
+            input.autocomplete = "off";
+            input.spellcheck = false;
+            field.appendChild(label);
+            field.appendChild(input);
+            box.appendChild(field);
+        }
+        var check = node("div", "ark-check");
+        var cb = node("input");
+        cb.type = "checkbox";
+        cb.id = "im-backup";
+        cb.checked = true;
+        var cbl = node("label", null, "Download an export of this server first (uses the export panel's passphrase)");
+        cbl.htmlFor = "im-backup";
+        check.appendChild(cb);
+        check.appendChild(cbl);
+        box.appendChild(check);
+
+        var actions = node("div", "ark-provision-actions");
+        var button = node("button", plan.mode === "replace" ? "ark-btn-danger-solid" : null, "Import — " + MODE_TEXT[plan.mode].title);
+        button.type = "button";
+        button.addEventListener("click", function () { applyImport(button); });
+        actions.appendChild(button);
+        actions.appendChild(node("span", "ark-note", countsLine(plan.summary, plan.deletes)));
+        box.appendChild(actions);
+        box.appendChild(node("div", null)).id = "im-result";
+        return box;
+    }
+
+    function applyImport(button) {
+        var a = importState.analysis;
+        var mode = importState.mode;
+        var plan = a && a.modes[mode];
+        if (!plan) return;
+        var confirmValue = mode === "replace" ? (byId("im-confirm").value || "").trim() : null;
+        if (mode === "replace" && confirmValue !== OPERATOR_TENANT) {
+            toast("w", "type " + OPERATOR_TENANT + " to confirm a replace", 5000);
+            return;
+        }
+        button.disabled = true;
+        backupFirst("im-backup")
+            .then(function () {
+                return postJson(API + "/data/import/apply", importBody({ mode: mode, plan_hash: plan.plan_hash, confirm: confirmValue }));
+            })
+            .then(function (res) {
+                toast("s", res.msg || "imported", 5000);
+                renderOutcome(byId("im-result"), res.msg, res.data && res.data.follow_up, mode === "replace");
+                importState.analysis = null;
+                return loadDataSummary();
+            })
+            .catch(function (err) {
+                if (!err.reported) toast("f", err.message, 8000);
+                if (err.payload && err.payload.code === "plan_changed") resetAnalysis();
+                button.disabled = false;
+            });
+    }
+
+    function renderOutcome(host, heading, followUp, offerSignOut) {
+        if (!host) return;
+        host.textContent = "";
+        host.className = "ark-provision-result ark-outcome";
+        host.appendChild(node("h4", null, "Result"));
+        host.appendChild(node("div", "ark-toast ark-toast-s ark-outcome-head", heading || "done"));
+        var ul = node("ul");
+        (followUp || []).forEach(function (line) {
+            var li = node("li");
+            li.appendChild(node("span", null, line));
+            ul.appendChild(li);
+        });
+        host.appendChild(ul);
+        if (offerSignOut && SIGN_OUT_URL) {
+            var a = node("a", "ark-btn", "Sign out now");
+            a.href = SIGN_OUT_URL;
+            host.appendChild(a);
+        }
+    }
+
+    // ----------------------------------------------------------------- reset
+
+    function renderSeedProblem() {
+        var box = byId("rs-seed-problem");
+        if (!box) return;
+        var problem = dataSummary && dataSummary.seed_problem;
+        box.hidden = !problem;
+        box.textContent = problem ? "A reset cannot run: " + problem : "";
+        syncResetButton();
+    }
+
+    function syncResetButton() {
+        var button = byId("rs-submit");
+        if (!button) return;
+        var typed = (byId("rs-confirm").value || "").trim();
+        button.disabled = typed !== OPERATOR_TENANT || !!(dataSummary && dataSummary.seed_problem);
+    }
+
+    on("rs-confirm", "input", syncResetButton);
+
+    on("rs-submit", "click", function () {
+        var button = this;
+        var typed = (byId("rs-confirm").value || "").trim();
+        if (typed !== OPERATOR_TENANT) return;
+        if (!window.confirm("Delete everything on this server and re-seed it? This cannot be undone without an export.")) return;
+        button.disabled = true;
+        backupFirst("rs-backup")
+            .then(function () { return postJson(API + "/data/reset", { confirm: typed }); })
+            .then(function (res) {
+                toast("s", res.msg || "reset", 6000);
+                byId("rs-confirm").value = "";
+                renderOutcome(byId("rs-result"), res.msg, res.data && res.data.follow_up, true);
+                return loadDataSummary();
+            })
+            .catch(function (err) {
+                if (!err.reported) toast("f", err.message, 8000);
+                syncResetButton();
+            });
+    });
+
     // ----------------------------------------------------------------- start
 
     // Each page loads what it draws. The provisioning page needs the three lists its selects and
@@ -1490,6 +2070,8 @@
 
     var boot = PAGE === "provisioning"
         ? loadTenants().then(loadClients).then(loadUsers).then(renderCurl)
+        : PAGE === "data"
+        ? loadDataSummary()
         : Promise.all([loadTenants(), loadScopes(), loadClaims()])
             .then(loadClients)
             .then(loadUsers)

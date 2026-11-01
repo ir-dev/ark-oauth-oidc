@@ -1,0 +1,197 @@
+@*
+    Export, import and factory reset, on a page of their own.
+
+    The three operations here act on the whole server rather than on a row, and two of them can
+    replace or delete everything on it — so they are reachable deliberately, by the operator
+    account only (AdminController.IsOperator), and never as panels scrolled past on the way to
+    something else.
+
+    The page decides nothing itself. Import is two API calls: analyse, which works out every
+    mode against the database as it is and says which rows each one would insert, update, skip
+    or exclude and why; then apply, with the mode the operator picked and the hash of the plan
+    they were shown. A script driving the same API gets the same answers this page draws.
+
+    Self-contained for the same reason Manage.cshtml is: a view rendered out of a NuGet package
+    cannot assume the host has a layout, a _ViewStart or tag helpers.
+*@
+@{
+    Layout = null;
+    var tenant = ViewBag.Tenant as Ark.oAuth.ArkTenant;
+    var title = tenant?.display ?? tenant?.name ?? (ViewBag.TenantId as string);
+    var allowImport = ViewBag.AllowImport == true;
+    var allowReset = ViewBag.AllowReset == true;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin" />
+    <title>Data — @title</title>
+    <link href="@ViewBag.ConsoleCss" rel="stylesheet" />
+</head>
+<body>
+@await Html.PartialAsync("_ConsoleHeader")
+
+<main class="ark-main"
+      id="ark-admin"
+      data-page="data"
+      data-app-root="@ViewBag.AppRoot"
+      data-tenant-id="@ViewBag.TenantId"
+      data-operator-tenant="@ViewBag.OperatorTenant"
+      data-user-password-mode="@ViewBag.UserPasswordMode"
+      data-allow-import="@(allowImport.ToString().ToLowerInvariant())"
+      data-allow-replace="@((ViewBag.AllowReplace == true).ToString().ToLowerInvariant())"
+      data-allow-reset="@(allowReset.ToString().ToLowerInvariant())"
+      data-sign-out-url="@ViewBag.SignOutUrl">
+
+    @*
+        What is on the server now, by table and category. The same four categories are the
+        choices on the import panel, so the operator can see what "grants" or "history" means in
+        rows before deciding whether to bring them across.
+    *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>This server</h2>
+            <span class="ark-hint">every table the identity server keeps, and how many rows each holds</span>
+            <span class="ark-spacer"></span>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="dt-refresh">Refresh</button>
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-data-counts" id="dt-counts"><p class="ark-empty">Loading…</p></div>
+        </div>
+    </section>
+
+    @*
+        Export. Every mapped table and column — including the password hashes, client secret
+        hashes and private signing keys the management API never returns — so the file is as
+        sensitive as the database. Hence the passphrase: AES-256-GCM, applied on the server, with
+        nothing about the key stored anywhere.
+    *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Export</h2>
+            <span class="ark-hint">tenants, clients, users, mappings, signing keys, scopes, claims, grants, history and app settings — one JSON file</span>
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-alert ark-alert-warn">
+                The file holds every private signing key and password hash on this server. Anyone holding it can sign
+                tokens as this identity provider. Encrypt it, and keep it where you keep database backups.
+            </div>
+            <div class="ark-grid-2">
+                <div class="ark-field">
+                    <label for="ex-passphrase">Passphrase</label>
+                    <input type="password" id="ex-passphrase" autocomplete="new-password" placeholder="leave blank for a plain JSON file" />
+                    <div class="ark-note">Needed again to import the file. It is not stored anywhere and cannot be recovered.</div>
+                </div>
+                <div class="ark-field">
+                    <label for="ex-passphrase2">Passphrase, again</label>
+                    <input type="password" id="ex-passphrase2" autocomplete="new-password" />
+                </div>
+            </div>
+            <div class="ark-check">
+                <input type="checkbox" id="ex-secrets" />
+                <label for="ex-secrets">Include secret app settings (passwords, client secrets, connection strings) instead of redacting them</label>
+            </div>
+            <div class="ark-provision-actions">
+                <button type="button" id="ex-submit">Download export</button>
+                <span class="ark-note" style="margin:0">App settings are exported for reference: an import compares them with this server's but never changes configuration.</span>
+            </div>
+        </div>
+    </section>
+
+    @if (allowImport)
+    {
+        @*
+            Import. Analyse first: the server works out all three modes against the database as it
+            is now, and the operator picks one with the consequences in front of them. Rows the
+            server cannot load safely are excluded by rule, not by guess, and each one says which
+            rule — the same file against the same database always gives the same plan.
+        *@
+        <section class="ark-panel">
+            <div class="ark-panel-head">
+                <h2>Import</h2>
+                <span class="ark-hint">analyse a file, choose how to load it, then load it in one transaction</span>
+            </div>
+            <div class="ark-panel-body">
+                <div class="ark-grid-2">
+                    <div class="ark-field">
+                        <label for="im-file">Export file</label>
+                        <input type="file" id="im-file" accept=".json,application/json" />
+                        <div class="ark-note" id="im-file-note">Read in this browser and sent to the server as JSON.</div>
+                    </div>
+                    <div class="ark-field" id="im-passphrase-field" hidden>
+                        <label for="im-passphrase">Passphrase <span class="ark-req">encrypted file</span></label>
+                        <input type="password" id="im-passphrase" autocomplete="off" />
+                    </div>
+                </div>
+                <div class="ark-field">
+                    <label>Load these categories</label>
+                    <div class="ark-check-row" id="im-include">
+                        <span class="ark-check"><input type="checkbox" id="im-cat-configuration" value="configuration" checked disabled /><label for="im-cat-configuration">configuration</label></span>
+                        <span class="ark-check"><input type="checkbox" id="im-cat-grants" value="grants" checked /><label for="im-cat-grants">grants <span class="ark-hint">sessions, refresh tokens, consents</span></label></span>
+                        <span class="ark-check"><input type="checkbox" id="im-cat-transient" value="transient" checked /><label for="im-cat-transient">transient <span class="ark-hint">codes still in flight</span></label></span>
+                        <span class="ark-check"><input type="checkbox" id="im-cat-history" value="history" checked /><label for="im-cat-history">history <span class="ark-hint">audit trail, sign-in counters</span></label></span>
+                        <span class="ark-check"><input type="checkbox" id="im-cat-other" value="other" checked /><label for="im-cat-other">other</label></span>
+                    </div>
+                    <div class="ark-note">Configuration is always loaded — everything else points at it. Changing a box needs a new analysis.</div>
+                </div>
+                <div class="ark-check" id="im-modified-field" hidden>
+                    <input type="checkbox" id="im-allow-modified" />
+                    <label for="im-allow-modified">The file was edited after export on purpose — import it anyway</label>
+                </div>
+                <div class="ark-provision-actions">
+                    <button type="button" id="im-analyse" disabled>Analyse</button>
+                    <span class="ark-note" style="margin:0">Nothing is written until you choose a mode and press Import.</span>
+                </div>
+
+                <div id="im-analysis" class="ark-import" hidden></div>
+            </div>
+        </section>
+    }
+
+    @if (allowReset)
+    {
+        @*
+            Factory reset. Deletes every row in every table and runs the seed a brand-new database
+            gets, in one transaction — the schema and its migration history are kept, so the server
+            is current, just empty. The server checks the seed can run (an administrator password is
+            configured) before deleting anything; the panel shows that check up front.
+        *@
+        <section class="ark-panel ark-panel-danger">
+            <div class="ark-panel-head">
+                <h2>Factory reset</h2>
+                <span class="ark-hint">delete everything and start again from the first-run seed</span>
+            </div>
+            <div class="ark-panel-body">
+                <ul class="ark-list">
+                    <li>Every tenant, client, user, mapping, signing key, scope edit, session, token and audit row is deleted.</li>
+                    <li>The server then seeds itself exactly as a new install does: tenant <code>@ViewBag.OperatorTenant</code>, its admin console and machine clients, a new signing key, the standard scopes and claims, and the administrator account.</li>
+                    <li>The administrator password goes back to the one configured in <code>ark_oauth_server:AdminUser:Password</code>. Every application has to be registered again.</li>
+                </ul>
+                <div class="ark-alert" id="rs-seed-problem" hidden></div>
+                <div class="ark-grid-2">
+                    <div class="ark-field">
+                        <label for="rs-confirm">Type <code>@ViewBag.OperatorTenant</code> to confirm</label>
+                        <input type="text" id="rs-confirm" autocomplete="off" spellcheck="false" />
+                    </div>
+                </div>
+                <div class="ark-check">
+                    <input type="checkbox" id="rs-backup" checked />
+                    <label for="rs-backup">Download an export of everything first</label>
+                </div>
+                <div class="ark-provision-actions">
+                    <button type="button" class="ark-btn-danger-solid" id="rs-submit" disabled>Reset this server</button>
+                </div>
+                <div id="rs-result"></div>
+            </div>
+        </section>
+    }
+</main>
+
+<div class="ark-toasts" id="ark-toasts" aria-live="polite"></div>
+
+<script src="@ViewBag.ConsoleJs"></script>
+</body>
+</html>

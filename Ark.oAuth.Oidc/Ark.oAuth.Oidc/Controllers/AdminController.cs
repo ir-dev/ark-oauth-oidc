@@ -97,6 +97,34 @@ namespace Ark.oAuth.Oidc.Controllers
         }
 
         /// <summary>
+        /// Export, import and factory reset of the whole server.
+        ///
+        /// Operator only, for the same reason as provisioning and more so: an export carries every
+        /// private signing key and password hash, and the other two can replace or delete
+        /// everything. The page is a shell — what each mode of an import would do is worked out by
+        /// the API (<see cref="ArkDataTools"/>), so a script gets the same answers the screen does.
+        /// </summary>
+        [HttpGet("/{tenant_id}/admin/data")]
+        public async Task<IActionResult> Data([FromRoute] string tenant_id)
+        {
+            var tenant = await _da.GetTenant(tenant_id);
+            if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
+            if (!DataToolsEnabled) return NotFound();
+            if (!IsOperator())
+                return StatusCode(403, "Export, import and reset are restricted to the administrator account.");
+
+            BuildConsoleView(tenant, "data");
+            var tools = ServerConfig.Admin?.DataTools ?? new ArkDataToolsConfig();
+            ViewBag.OperatorTenant = ServerConfig.TenantId;
+            ViewBag.AllowReset = tools.AllowReset;
+            ViewBag.AllowImport = tools.AllowImport;
+            ViewBag.AllowReplace = tools.AllowImport && tools.AllowReplace;
+            return View();
+        }
+
+        private bool DataToolsEnabled => ServerConfig.Admin?.DataTools?.Enabled ?? true;
+
+        /// <summary>
         /// The view data both console pages share: branding, endpoints, asset URLs and identity.
         /// </summary>
         private void BuildConsoleView(ArkTenant tenant, string page)
@@ -151,6 +179,8 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.IsOperator = IsOperator();
             ViewBag.ConsoleUrl = $"{appRoot}/{tenant.tenant_id}/admin";
             ViewBag.ProvisioningUrl = $"{appRoot}/{tenant.tenant_id}/admin/provisioning";
+            ViewBag.DataUrl = $"{appRoot}/{tenant.tenant_id}/admin/data";
+            ViewBag.DataToolsEnabled = DataToolsEnabled;
         }
 
         /// <summary>Whether the signed-in principal is the operator account — see <see cref="ArkOperator"/>.</summary>

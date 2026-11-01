@@ -142,157 +142,7 @@ namespace Ark.oAuth.Oidc
                         // seed is one SaveChanges, so it either happens whole or is tried again on
                         // the next start.
                         if (!dbContext.tenants.Any())
-                        {
-                            var admin = ResolveAdminUser(ser);
-                            var htp = scope.ServiceProvider.GetService<IHttpContextAccessor>();
-                            var util = scope.ServiceProvider.GetRequiredService<ArkUtil>();
-                            // Signing keys are generated here, in this process. They used to be
-                            // fetched from an external HTTPS service, which put the tenant's
-                            // private key on the wire and on someone else's machine.
-                            var (publicKey, privateKey) = Protocol.ArkCrypto.GenerateRsaKeyPair();
-                            var baseurl = !string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{htp.HttpContext.Request.Scheme}://{htp.HttpContext.Request.Host}";
-                            var domain = new Uri(baseurl).Host;
-                            // Every URL registered below has to be built from the same public root
-                            // the client will actually call back to, BasePath included.
-                            var approot = Protocol.ArkOidcEndpoints.PublicRoot(
-                                new ArkAuthServerConfig { BaseUrl = baseurl, BasePath = ser.BasePath });
-                            //1st time -> create client for server to manage users
-                            var tt = new ArkTenant()
-                            {
-                                tenant_id = ser.TenantId,
-                                name = ser.TenantId,
-                                display = $"{ser.TenantId} Admin Console",
-                                audience = $"{baseurl}/ark/oauth/v1/aud",
-                                issuer = $"{baseurl}/ark/oauth/v1/iss",
-                                expire_mins = 480,
-                                rsa_private = privateKey,
-                                rsa_public = publicKey,
-                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
-                            };
-                            dbContext.tenants.Add(tt);
-                            dbContext.signing_keys.Add(new ArkSigningKey()
-                            {
-                                // kid == tenant_id keeps tokens verifiable by clients that were
-                                // configured against the pre-JWKS key layout
-                                kid = ser.TenantId,
-                                tenant_id = ser.TenantId,
-                                alg = "RS256",
-                                usage = "sig",
-                                public_key = publicKey,
-                                private_key = privateKey,
-                                status = "active",
-                                created_at = DateTime.UtcNow
-                            });
-                            // No scopes here: ReconcileScopeCatalogue adds the missing ones below,
-                            // and a database that reached this point unseeded may already hold them.
-                            var cll = new ArkClient()
-                            {
-                                tenant_id = ser.TenantId,
-                                client_id = $"{ser.TenantId}_client", //same as server id
-                                display = $"{ser.TenantId} Client App (Display)",
-                                domain = $"{domain}",
-                                expire_mins = 480,
-                                name = $"{ser.TenantId} name",
-                                redirect_relative = $"{(ser.BasePath.AnyNull() ? "" : $"/{ser.BasePath}")}/oauth/{ser.TenantId}/v1/server/{ser.TenantId}_client/manage",
-                                //redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/{{0}}/manage",
-                                redirect_url = $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
-                                logout_url = $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/logoff",
-                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-
-                                // standard registration metadata for the admin console client.
-                                // It runs in a browser, so it is public and must use PKCE.
-                                client_name = $"{ser.TenantId} Admin Console",
-                                application_type = "web",
-                                token_endpoint_auth_method = "none",
-                                require_pkce = true,
-                                refresh_token_rotation = true,
-                                is_active = true,
-                                grant_types = new List<string>() { "authorization_code", "refresh_token" },
-                                response_types = new List<string>() { "code" },
-                                scopes = new List<string>() { "openid", "profile", "email", "offline_access" },
-                                redirect_uris = new List<string>()
-                                {
-                                    // the v1 callback, kept so existing deployments keep working
-                                    $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
-                                    // the standard callback used by the ASP.NET Core OIDC handler
-                                    $"{approot}/signin-oidc"
-                                },
-                                post_logout_redirect_uris = new List<string>()
-                                {
-                                    $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/logoff",
-                                    $"{approot}/signout-callback-oidc"
-                                }
-                            };
-                            dbContext.clients.Add(cll);
-                            dbContext.clients.Add(BuildMachineClient(ser.TenantId, domain));
-                            var lls = new List<string>()
-                            {
-                                "sub",
-                                "iss",
-                                "aud",
-                                "exp",
-                                "iat",
-                                "name",
-                                "family_name",
-                                "given_name",
-                                "email",
-                                "email_verified",
-                                "gender",
-                                "phone_number",
-                                "address"
-                            };
-                            var existingClaims = dbContext.claims.Select(c => c.key).ToList();
-                            foreach (var item in lls.Where(k => !existingClaims.Contains(k)))
-                            {
-                                dbContext.claims.Add(new ArkClaim() { key = item, display = item });
-                            }
-                            //admin user — credentials come from configuration, see ResolveAdminUser
-                            dbContext.users.Add(new ArkUser()
-                            {
-                                //claims = lls,
-                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                                //client_id = $"{ser.TenantId}_client",
-                                email = admin.Username,
-                                emailed = false,
-                                hash_pw = util.HashPasswordPBKDF2(admin.Password),
-                                reset_mode = false,
-                                type = "user",
-                                name = admin.Name
-                            });
-                            dbContext.user_client_claims.Add(new ArkUserClientClaim()
-                            {
-                                claims = lls,
-                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                                client_id = $"{cll.id}",
-                                tenant_id = $"{ser.TenantId}",
-                                // no mapping row for this client means the admin cannot sign in to
-                                // the console at all — the username here has to be the seeded one
-                                email = admin.Username
-                            });
-                            var ts = scope.ServiceProvider.GetRequiredService<TokenServer>();
-                            //service user service_user
-                            dbContext.users.Add(new ArkUser()
-                            {
-                                //claims = lls,
-                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                                //client_id = $"{ser.TenantId}_client",
-                                email = $"service_account_{ser.TenantId}",
-                                emailed = false,
-                                hash_pw = (await ts.BuildAsymmetric_AccessToken(tt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role") }, 525600)).Item1, // secret
-                                reset_mode = false,
-                                type = "service",
-                                name = "Service Account (Default)"
-                            });
-                            dbContext.user_client_claims.Add(new ArkUserClientClaim()
-                            {
-                                claims = new List<string>() { "service_role" },
-                                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
-                                client_id = $"{cll.id}",
-                                tenant_id = $"{ser.TenantId}",
-                                email = $"service_account_{ser.TenantId}"
-                            });
-                            dbContext.SaveChanges();
-                        }
+                            await SeedDatabase(scope.ServiceProvider, ser, context);
                         // Tenants, but not the configured one: TenantId was changed after the
                         // database was seeded. Every step below assumes that tenant, and the
                         // first insert would fail on the foreign key without naming either value.
@@ -304,9 +154,7 @@ namespace Ark.oAuth.Oidc
                                 "with; set it back to that value (tenant ids are compared case-sensitively).");
                         }
 
-                        ReconcileAdminConsoleClient(scope.ServiceProvider);
-                        ReconcileScopeCatalogue(scope.ServiceProvider);
-                        ReconcileMachineClient(scope.ServiceProvider);
+                        Reconcile(scope.ServiceProvider);
                     }
                     catch (Exception ex)
                     {
@@ -320,6 +168,196 @@ namespace Ark.oAuth.Oidc
                 }
                 await next();
             });
+        }
+
+        /// <summary>
+        /// Writes the first-run data: the operator tenant and its signing key, the admin console
+        /// client, the machine client, the identity claims, the administrator account and the
+        /// default service account, with the two access mappings that let them sign in.
+        ///
+        /// Pulled out of the bootstrap so a factory reset (<see cref="ArkDataTools"/>) seeds with
+        /// exactly the same code a new database does — two copies of a seed drift, and a reset that
+        /// produced a subtly different database from a fresh install would be worse than none.
+        /// Assumes the tables are empty; the caller decides that. One SaveChanges, so it either
+        /// happens whole or not at all.
+        /// </summary>
+        /// <param name="http">
+        /// The current request, used for the public address only when <c>BaseUrl</c> is unset.
+        /// </param>
+        /// <param name="thumbprintKid">
+        /// Name the signing key by its thumbprint rather than by the tenant id. A new database uses
+        /// the tenant id, for clients configured against the pre-JWKS layout. A reset must not: the
+        /// previous key had that kid too, and a relying party holding a cached JWKS finds the kid it
+        /// knows, never refetches, and fails every signature — the host's own console first.
+        /// </param>
+        internal static async Task SeedDatabase(IServiceProvider services, ArkAuthServerConfig ser, HttpContext? http, bool thumbprintKid = false)
+        {
+            var dbContext = services.GetRequiredService<ArkDataContext>();
+            var admin = ResolveAdminUser(ser);
+            var util = services.GetRequiredService<ArkUtil>();
+            // Signing keys are generated here, in this process. They used to be
+            // fetched from an external HTTPS service, which put the tenant's
+            // private key on the wire and on someone else's machine.
+            var (publicKey, privateKey) = Protocol.ArkCrypto.GenerateRsaKeyPair();
+            var baseurl = !string.IsNullOrEmpty(ser.BaseUrl)
+                ? ser.BaseUrl
+                : http != null
+                    ? $"{http.Request.Scheme}://{http.Request.Host}"
+                    : throw new ApplicationException("ark_oauth_server:BaseUrl is not set and there is no request to derive it from.");
+            var domain = new Uri(baseurl).Host;
+            // Every URL registered below has to be built from the same public root
+            // the client will actually call back to, BasePath included.
+            var approot = Protocol.ArkOidcEndpoints.PublicRoot(
+                new ArkAuthServerConfig { BaseUrl = baseurl, BasePath = ser.BasePath });
+            //1st time -> create client for server to manage users
+            var tt = new ArkTenant()
+            {
+                tenant_id = ser.TenantId,
+                name = ser.TenantId,
+                display = $"{ser.TenantId} Admin Console",
+                audience = $"{baseurl}/ark/oauth/v1/aud",
+                issuer = $"{baseurl}/ark/oauth/v1/iss",
+                expire_mins = 480,
+                rsa_private = privateKey,
+                rsa_public = publicKey,
+                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")
+            };
+            dbContext.tenants.Add(tt);
+            dbContext.signing_keys.Add(new ArkSigningKey()
+            {
+                // kid == tenant_id keeps tokens verifiable by clients that were
+                // configured against the pre-JWKS key layout
+                kid = thumbprintKid ? Protocol.ArkCrypto.ComputeKid(publicKey) : ser.TenantId,
+                tenant_id = ser.TenantId,
+                alg = "RS256",
+                usage = "sig",
+                public_key = publicKey,
+                private_key = privateKey,
+                status = "active",
+                created_at = DateTime.UtcNow
+            });
+            // No scopes here: ReconcileScopeCatalogue adds the missing ones below,
+            // and a database that reached this point unseeded may already hold them.
+            var cll = new ArkClient()
+            {
+                tenant_id = ser.TenantId,
+                client_id = $"{ser.TenantId}_client", //same as server id
+                display = $"{ser.TenantId} Client App (Display)",
+                domain = $"{domain}",
+                expire_mins = 480,
+                name = $"{ser.TenantId} name",
+                redirect_relative = $"{(ser.BasePath.AnyNull() ? "" : $"/{ser.BasePath}")}/oauth/{ser.TenantId}/v1/server/{ser.TenantId}_client/manage",
+                //redirect_relative = $"/auth/oauth/{ser.TenantId}/v1/server/{{0}}/manage",
+                redirect_url = $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
+                logout_url = $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/logoff",
+                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+
+                // standard registration metadata for the admin console client.
+                // It runs in a browser, so it is public and must use PKCE.
+                client_name = $"{ser.TenantId} Admin Console",
+                application_type = "web",
+                token_endpoint_auth_method = "none",
+                require_pkce = true,
+                refresh_token_rotation = true,
+                is_active = true,
+                grant_types = new List<string>() { "authorization_code", "refresh_token" },
+                response_types = new List<string>() { "code" },
+                scopes = new List<string>() { "openid", "profile", "email", "offline_access" },
+                redirect_uris = new List<string>()
+                {
+                    // the v1 callback, kept so existing deployments keep working
+                    $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/callback",
+                    // the standard callback used by the ASP.NET Core OIDC handler
+                    $"{approot}/signin-oidc"
+                },
+                post_logout_redirect_uris = new List<string>()
+                {
+                    $"{approot}/oauth/{ser.TenantId}/v1/client/{ser.TenantId}_client/logoff",
+                    $"{approot}/signout-callback-oidc"
+                }
+            };
+            dbContext.clients.Add(cll);
+            dbContext.clients.Add(BuildMachineClient(ser.TenantId, domain));
+            var lls = new List<string>()
+            {
+                "sub",
+                "iss",
+                "aud",
+                "exp",
+                "iat",
+                "name",
+                "family_name",
+                "given_name",
+                "email",
+                "email_verified",
+                "gender",
+                "phone_number",
+                "address"
+            };
+            var existingClaims = dbContext.claims.Select(c => c.key).ToList();
+            foreach (var item in lls.Where(k => !existingClaims.Contains(k)))
+            {
+                dbContext.claims.Add(new ArkClaim() { key = item, display = item });
+            }
+            //admin user — credentials come from configuration, see ResolveAdminUser
+            dbContext.users.Add(new ArkUser()
+            {
+                //claims = lls,
+                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+                //client_id = $"{ser.TenantId}_client",
+                email = admin.Username,
+                emailed = false,
+                hash_pw = util.HashPasswordPBKDF2(admin.Password),
+                reset_mode = false,
+                type = "user",
+                name = admin.Name
+            });
+            dbContext.user_client_claims.Add(new ArkUserClientClaim()
+            {
+                claims = lls,
+                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+                client_id = $"{cll.id}",
+                tenant_id = $"{ser.TenantId}",
+                // no mapping row for this client means the admin cannot sign in to
+                // the console at all — the username here has to be the seeded one
+                email = admin.Username
+            });
+            var ts = services.GetRequiredService<TokenServer>();
+            //service user service_user
+            dbContext.users.Add(new ArkUser()
+            {
+                //claims = lls,
+                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+                //client_id = $"{ser.TenantId}_client",
+                email = $"service_account_{ser.TenantId}",
+                emailed = false,
+                hash_pw = (await ts.BuildAsymmetric_AccessToken(tt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role") }, 525600)).Item1, // secret
+                reset_mode = false,
+                type = "service",
+                name = "Service Account (Default)"
+            });
+            dbContext.user_client_claims.Add(new ArkUserClientClaim()
+            {
+                claims = new List<string>() { "service_role" },
+                at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss"),
+                client_id = $"{cll.id}",
+                tenant_id = $"{ser.TenantId}",
+                email = $"service_account_{ser.TenantId}"
+            });
+            dbContext.SaveChanges();
+        }
+
+        /// <summary>
+        /// The start-up reconciliations, in their start-up order. Each adds only what is missing
+        /// and never overwrites an operator's edit, so running them again after an import or a
+        /// reset is safe — and necessary, because the imported console client carries the
+        /// callback URLs of the server it was exported from.
+        /// </summary>
+        internal static void Reconcile(IServiceProvider services)
+        {
+            ReconcileAdminConsoleClient(services);
+            ReconcileScopeCatalogue(services);
+            ReconcileMachineClient(services);
         }
 
         /// <summary>
@@ -337,7 +375,7 @@ namespace Ark.oAuth.Oidc
         /// <c>DefaultPw</c> is accepted as the fallback because it already means "the initial
         /// password for an account created without one", which is exactly what this is.
         /// </summary>
-        private static (string Username, string Password, string Name) ResolveAdminUser(ArkAuthServerConfig ser)
+        internal static (string Username, string Password, string Name) ResolveAdminUser(ArkAuthServerConfig ser)
         {
             var cfg = ser.AdminUser ?? new ArkAdminUserConfig();
 
@@ -603,6 +641,7 @@ namespace Ark.oAuth.Oidc
             services.AddSingleton<ArkUtil>();
             services.AddScoped<Onboard>();
             services.AddScoped<ArkProvisioning>();
+            services.AddScoped<ArkDataTools>();
 
             // standard OAuth 2.1 / OIDC protocol services
             services.AddMemoryCache();

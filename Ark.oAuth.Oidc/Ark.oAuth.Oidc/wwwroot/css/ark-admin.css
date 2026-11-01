@@ -626,6 +626,81 @@ legend {
     font-size: 13px;
 }
 
+/* ---------- data page: export / import / reset ---------- */
+.ark-alert-warn {
+    background: var(--ark-warn-soft);
+    color: var(--ark-warn);
+    border-color: color-mix(in srgb, var(--ark-warn) 35%, transparent);
+}
+.ark-alert .ark-list { margin: 0; }
+.ark-list { margin: 0 0 14px; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; line-height: 1.5; }
+.ark-check-row { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.ark-check-row .ark-check { margin-bottom: 4px; }
+.ark-check-row .ark-hint { color: var(--ark-fg-muted); font-weight: 400; font-size: 12px; }
+
+.ark-data-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.ark-data-cat {
+    border: 1px solid var(--ark-border);
+    border-radius: var(--ark-radius-sm);
+    padding: 12px 14px;
+    background: var(--ark-surface-2);
+}
+.ark-data-cat h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ark-fg-muted); }
+.ark-data-cat .ark-hint { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.ark-data-cat .ark-kv { grid-template-columns: 1fr auto; gap: 4px 12px; font-size: 12.5px; }
+.ark-data-cat .ark-kv dd { text-align: right; font-variant-numeric: tabular-nums; }
+.ark-empty { color: var(--ark-fg-muted); font-style: italic; margin: 0; }
+
+.ark-panel-danger { border-color: color-mix(in srgb, var(--ark-danger) 40%, var(--ark-border)); }
+.ark-panel-danger .ark-panel-head h2 { color: var(--ark-danger); }
+button.ark-btn-danger-solid { background: var(--ark-danger); color: #fff; }
+button.ark-btn-danger-solid:hover { background: color-mix(in srgb, var(--ark-danger) 85%, #000); }
+
+.ark-import { margin-top: 18px; border-top: 1px solid var(--ark-border); padding-top: 16px; display: grid; gap: 14px; }
+.ark-import h4 { margin: 0; font-size: 13px; }
+.ark-import-file { font-size: 12.5px; }
+.ark-import-rec { margin: 0; font-size: 13px; line-height: 1.5; }
+.ark-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.ark-mode {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border: 1px solid var(--ark-border-strong);
+    border-radius: var(--ark-radius-sm);
+    background: var(--ark-surface);
+    cursor: pointer;
+}
+.ark-mode input { width: auto; margin: 3px 0 0; }
+.ark-mode[data-selected="true"] { border-color: var(--ark-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ark-accent) 25%, transparent); }
+.ark-mode[data-possible="false"] { cursor: not-allowed; background: var(--ark-surface-2); }
+.ark-mode-body { min-width: 0; display: grid; gap: 4px; }
+.ark-mode-title { font-weight: 650; font-size: 13.5px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ark-mode-text { font-size: 12.5px; color: var(--ark-fg-muted); line-height: 1.45; }
+.ark-mode-counts { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.ark-mode-blocker { font-size: 12.5px; color: var(--ark-danger); line-height: 1.45; }
+.ark-mode-warning { font-size: 12.5px; color: var(--ark-warn); line-height: 1.45; }
+
+.ark-table-wrap { overflow-x: auto; border: 1px solid var(--ark-border); border-radius: var(--ark-radius-sm); }
+.ark-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ark-table th, .ark-table td { padding: 6px 10px; border-bottom: 1px solid var(--ark-border); text-align: left; vertical-align: top; }
+.ark-table th { background: var(--ark-surface-2); color: var(--ark-fg-muted); font-weight: 600; white-space: nowrap; }
+.ark-table tr:last-child td { border-bottom: none; }
+.ark-table .ark-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ark-table .ark-num-bad { color: var(--ark-danger); font-weight: 600; }
+.ark-table tr[data-action="excluded"] td { background: var(--ark-danger-soft); }
+.ark-table .ark-note { font-size: 12px; color: var(--ark-fg-muted); margin-top: 2px; }
+.ark-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; }
+.ark-import-records { display: grid; gap: 8px; }
+.ark-import-records .ark-activation-head { margin: 0; }
+.ark-import-records select { width: auto; }
+.ark-import-settings summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.ark-import-settings .ark-note { font-size: 12px; color: var(--ark-fg-muted); }
+.ark-import-apply { border-top: 1px solid var(--ark-border); padding-top: 14px; }
+.ark-outcome { margin-top: 14px; }
+.ark-outcome-head { margin-bottom: 12px; }
+.ark-outcome .ark-btn { display: inline-block; }
+
 /* ---------- tabulator theming ---------- */
 .tabulator {
     background: var(--ark-surface);

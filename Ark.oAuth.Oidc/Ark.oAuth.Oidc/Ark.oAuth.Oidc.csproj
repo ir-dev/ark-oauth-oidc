@@ -54,6 +54,25 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+Next release — export, import and factory reset, on an operator-only Data page.
+
+* **Export everything.** One JSON file with every mapped table and column — tenants, signing keys,
+  clients (with secret hashes), users (with password hashes), access mappings, scopes, claims,
+  sessions, refresh tokens, consents, audit trail — plus the app settings, secrets redacted unless
+  asked for. Read from the EF model, so a column a later release adds is exported without a change
+  here. Optionally encrypted with a passphrase (AES-256-GCM, PBKDF2-SHA256), always checksummed.
+* **Import that says what it will do before it does it.** Analyse works out all three modes —
+  replace, merge keeping existing records, merge taking the file's — against the database as it is,
+  row by row. Rows that cannot be loaded safely (case-only collisions, broken references, duplicate
+  names, unsafe redirect URIs, conflicting key material, expired grants…) are excluded by a named
+  rule along with everything that depends on them; the rest loads. Apply runs the chosen plan in one
+  transaction and refuses if the plan changed since it was shown.
+* **Factory reset.** Empties every table and runs the same seed a new database gets — after first
+  checking the seed can run, so a reset can never leave a server nobody can sign in to.
+* **Additive.** No schema change, no migration, no change to an existing route. Switches under
+  ark_oauth_server:Admin:DataTools (Enabled, AllowReset, AllowImport, AllowReplace,
+  MaxImportMegabytes), all on by default. Specified in API-GUIDE.md.
+
 2.0.3 — back-channel logout, sign-out that covers the whole browser, and a dependency graph that
 is only what this package uses.
 

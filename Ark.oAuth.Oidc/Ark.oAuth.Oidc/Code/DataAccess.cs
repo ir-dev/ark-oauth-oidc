@@ -373,7 +373,7 @@ namespace Ark.oAuth.Oidc
         /// through the console. Usernames are kept to characters that survive a URL path segment
         /// unescaped, since they travel in the claims-mapping routes.
         /// </summary>
-        static bool IsValidLoginId(string id) =>
+        internal static bool IsValidLoginId(string id) =>
             ark.net.util.EmailUtil.IsValidFormat(id) ||
             System.Text.RegularExpressions.Regex.IsMatch(id, @"^[a-z0-9][a-z0-9._-]{1,63}$");
 
@@ -684,6 +684,36 @@ namespace Ark.oAuth.Oidc
                     details = details,
                     by = "ark_admin",
                     ip = "",
+                    at = DateTime.UtcNow
+                });
+                _ctx.SaveChanges();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+        }
+        /// <summary>
+        /// An audit row written whatever <c>EnableLogTrace</c> says, naming who did it.
+        ///
+        /// For the operations that change the deployment as a whole — an import, a factory reset.
+        /// <see cref="Log"/> is a trace and is off on most production servers, which would leave
+        /// "who emptied the database" with no answer at exactly the moment it is asked.
+        /// </summary>
+        public void Record(string? ref_key, string? ref_val, string? message, string? details, string? by, string? ip)
+        {
+            try
+            {
+                _ctx.ChangeTracker.Clear();
+                _ctx.audit_trace.Add(new ArkAudit()
+                {
+                    ref_key = ref_key,
+                    ref_val = ref_val,
+                    log_type = "audit",
+                    message = message,
+                    details = details,
+                    by = string.IsNullOrWhiteSpace(by) ? "ark_admin" : by,
+                    ip = ip ?? "",
                     at = DateTime.UtcNow
                 });
                 _ctx.SaveChanges();
