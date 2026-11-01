@@ -23,6 +23,9 @@ builder.Services.AddControllersWithViews();
 // Used by the "call a downstream API" demo on /home/downstream.
 builder.Services.AddHttpClient("downstream", c => c.Timeout = TimeSpan.FromSeconds(15));
 
+// Used by /flows/register to look up, remove and map clients through the IdP's management API.
+builder.Services.AddHttpClient("ark-management", c => c.Timeout = TimeSpan.FromSeconds(15));
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())

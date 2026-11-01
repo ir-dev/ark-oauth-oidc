@@ -97,8 +97,8 @@ Change the port in `launchSettings.json` and both registrations have to change w
 home page prints the current values so there is nothing to work out by hand.
 
 > Registration is also available over the wire as RFC 7591 dynamic client registration
-> (`POST /{tenant}/oauth2/register`), but it is off by default. The admin console is the normal
-> path.
+> (`POST /{tenant}/oauth2/register`), but it is off by default. With it on, `/flows/register` does
+> Steps 2 and 3 for this app from forms — see [below](#flowsregister--dynamic-client-registration).
 
 ---
 
@@ -259,8 +259,8 @@ The provider seeds a machine client, `<tenant>_machine`, with **no secret** — 
 source would be the same secret on every deployment. Give it one:
 
 1. Admin console → **Clients** → `ark_idp_machine` → **Regenerate secret** (shown once).
-2. Paste it on `/flows/register` (**machine client_secret**; **View** shows it). It is used for
-   that request and stored nowhere. To keep it across restarts, export it before starting the app:
+2. Paste it on `/flows/register` (**machine client_secret** in Step 1; **View** shows it). Each
+   form on the page sends it along; it is stored nowhere. To keep it across restarts, export it before starting the app:
    `export sample__Machine__ClientSecret='<the secret>'`. Don't write it into `appsettings.json`,
    which is in source control.
 
@@ -294,6 +294,22 @@ re-derived; lose it and the registration can only be removed by an operator with
 Registering a client is also not the same as authorizing anyone to use it: on Ark a user still has
 to be mapped to the new client under **Access mapping**, or their sign-in fails in a way that looks
 like a wrong password.
+
+**The form registers this app itself.** `client_id` and `client_name` are prefilled with
+`ark_oauth_client:ClientId` (`ark_sample_web`), and the redirect URIs, scopes and
+`token_endpoint_auth_method` with this app's own. Ark honours a requested `client_id` when it is
+free, so the client created is the one the app already signs in as: nothing to reconfigure, nothing
+to restart. Clear `client_id` to have the IdP mint one, and Step 4 prints the user-secrets to switch.
+
+The machine client's token also drives the IdP's management API, which the rest of the page uses:
+
+* it checks whether the client already exists, and offers **Remove** when it does — RFC 7592's
+  delete needs the registration access token, which is gone once the page is reloaded;
+* Step 3, **Grant access**, writes the user's access mapping, keeping any claims they already have
+  on the client and adding the ones in the form (by default `name email email_verified sample.admin`).
+
+That works only when `Authority` names the IdP's operator tenant: the management API accepts tokens
+issued to that tenant's `<tenant>_machine` and nothing else.
 
 ---
 
