@@ -359,7 +359,8 @@ check_readiness() {
 
     # -- the machine client, used by /flows/machine and /flows/register ------------------------
     local secret
-    secret="${ARK_MACHINE_SECRET:-}"
+    # the same variable the sample reads (sample:Machine:ClientSecret), then the older names
+    secret="${sample__Machine__ClientSecret:-${ARK_MACHINE_SECRET:-}}"
     if [ -z "$secret" ]; then
         secret=$(dotnet user-secrets list --project "$CLIENT_PROJ" 2>/dev/null \
             | sed -n 's/^sample:Machine:ClientSecret = //p' | head -1)
@@ -371,15 +372,16 @@ check_readiness() {
 
     if [ -z "$secret" ]; then
         warn "no secret for '$MACHINE_CLIENT' — /flows/machine and /flows/register will fail"
-        hint "$ADMIN_CONSOLE → Clients → $MACHINE_CLIENT → Regenerate secret, then:"
-        hint "  dotnet user-secrets set 'sample:Machine:ClientSecret' '<secret>' --project $CLIENT_PROJ"
+        hint "$ADMIN_CONSOLE → Clients → $MACHINE_CLIENT → Regenerate secret, then either paste it on"
+        hint "  $APP_URL/flows/register, or:  export sample__Machine__ClientSecret='<secret>'  and re-run"
     elif "${CURL[@]}" -X POST "$ISSUER/oauth2/token" \
             -d "grant_type=client_credentials" -d "client_id=$MACHINE_CLIENT" \
             -d "client_secret=$secret" -d "scope=client.register" 2>/dev/null | grep -q '"access_token"'; then
         ok "'$MACHINE_CLIENT' can obtain a token — /flows/machine and /flows/register will work"
     else
         warn "the configured secret for '$MACHINE_CLIENT' was rejected"
-        hint "regenerate it in the console and store the new value in user-secrets."
+        hint "a recreated IdP database seeds $MACHINE_CLIENT with no secret. Regenerate it in the console,"
+        hint "then:  export sample__Machine__ClientSecret='<secret>'  and re-run"
     fi
 }
 

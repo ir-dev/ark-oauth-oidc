@@ -156,14 +156,30 @@ namespace Ark.Client.Web.Controllers
             model.TokenEndpointAuthMethod = form.TokenEndpointAuthMethod;
             model.ApplicationType = form.ApplicationType;
 
+            // The page can carry a secret pasted from the admin console. It is echoed back to the
+            // form and kept nowhere else, so the response must not be cached either.
+            Response.Headers.CacheControl = "no-store";
+            var pasted = (form.MachineSecret ?? "").Trim();
+            model.MachineSecret = pasted;
+
             string? initialAccessToken = null;
-            var secret = MachineSecret();
+            var secret = pasted.Length > 0 ? pasted : MachineSecret();
             if (!string.IsNullOrWhiteSpace(secret))
             {
-                // Cached: within this token's hour the second registration skips the round trip.
-                model.InitialAccessToken = await _clientCredentials.GetTokenAsync(
-                    model.MachineClientId, secret!, new[] { "client.register" });
+                // A configured secret is served from the cache: within this token's hour the second
+                // registration skips the round trip. A pasted one never is — the cache is keyed by
+                // client, not secret, so a token minted with an older secret would hide a wrong paste.
+                model.InitialAccessToken = pasted.Length > 0
+                    ? await _clientCredentials.RequestTokenAsync(model.MachineClientId, pasted, new[] { "client.register" })
+                    : await _clientCredentials.GetTokenAsync(model.MachineClientId, secret!, new[] { "client.register" });
                 initialAccessToken = model.InitialAccessToken.AccessToken;
+
+                if (pasted.Length > 0)
+                {
+                    model.MachineSecretStatus = model.InitialAccessToken.Succeeded ? "works" : "rejected";
+                    model.MachineSecretError = model.InitialAccessToken.Succeeded
+                        ? null : $"{model.InitialAccessToken.Error}: {model.InitialAccessToken.ErrorDescription}";
+                }
             }
 
             var metadata = new JsonObject
@@ -287,6 +303,26 @@ namespace Ark.Client.Web.Controllers
             catch (Exception ex)
             {
                 model.DiscoveryError = ex.Message;
+            }
+
+            // A configured value is not a working one. The IdP keeps only a hash, and a recreated
+            // IdP database seeds the machine client with no secret at all, so the only way to tell
+            // is to try it. Uncached on purpose: a token cached from before the IdP changed would
+            // report "works" for up to an hour after it stopped being true.
+            var configured = MachineSecret();
+            if (!string.IsNullOrWhiteSpace(configured))
+            {
+                if (model.DiscoveryOk)
+                {
+                    var check = await _clientCredentials.RequestTokenAsync(
+                        model.MachineClientId, configured!, new[] { "client.register" });
+                    model.MachineSecretStatus = check.Succeeded ? "works" : "rejected";
+                    model.MachineSecretError = check.Succeeded ? null : $"{check.Error}: {check.ErrorDescription}";
+                }
+                else
+                {
+                    model.MachineSecretStatus = "unchecked";
+                }
             }
 
             return model;

@@ -7,6 +7,10 @@
     var newClientId = reg?.Succeeded == true ? reg.ClientId : null;
     var clientIdShown = newClientId ?? "<client_id from step 2>";
     var newIsConfidential = reg?.Succeeded == true && !string.IsNullOrEmpty(reg.ClientSecret);
+    // What the IdP said about the machine secret — see BuildRegisterModelAsync. "Configured" alone
+    // only meant a value was present, which a recreated IdP database silently invalidates.
+    var secretWorks = Model.MachineSecretStatus == "works";
+    var secretSource = Model.MachineSecretPasted ? "pasted on this page" : "sample:Machine:ClientSecret";
     var signedIn = User.Identity?.IsAuthenticated == true;
     var signedInAs = User.FindFirst("name")?.Value ?? User.FindFirst("email")?.Value ?? "a user";
 
@@ -44,6 +48,13 @@
     .legend .r::before { border-top-style: dashed; }
     .legend .op::before { border-top-color: var(--warn); }
     a.step { white-space: nowrap; }
+    /* the layout styles text inputs only; the machine secret field is a password input */
+    .secret-field { display: flex; gap: 8px; align-items: center; }
+    .secret-field input {
+        flex: 1; min-width: 0; font: inherit; font-size: 13.5px; padding: 5px 8px;
+        background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 7px;
+    }
+    .secret-src { color: var(--fg-muted); font-size: 12.5px; margin-left: 6px; }
     /* the layout leaves links at the browser default, which is unreadable on a dark card */
     main a:not(.btn) { color: var(--accent); }
 </style>
@@ -272,14 +283,17 @@ else if (!Model.SupportsDynamicRegistration)
                 </td>
             </tr>
             <tr>
-                <td>This app knows the secret of the machine client <code>@Model.MachineClientId</code></td>
+                <td>This app has a working secret for the machine client <code>@Model.MachineClientId</code></td>
                 <td>
-                    @if (Model.MachineSecretConfigured) { <span class="pill ok">ok</span> }
+                    @if (secretWorks) { <span class="pill ok">ok</span> }
+                    else if (Model.MachineSecretStatus == "rejected") { <span class="pill bad">rejected</span> }
+                    else if (Model.MachineSecretStatus == "unchecked") { <span class="pill warn">unknown</span> }
                     else { <span class="pill bad">not set</span> }
                 </td>
                 <td>
-                    Regenerate it in the admin console and store it with user-secrets, as described on
-                    the <a href="/flows/machine">client credentials</a> page.
+                    Regenerate it in the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
+                    and paste it in <a class="step" href="#step-2">Step 2</a> —
+                    <a class="step" href="#get-machine-secret">how</a>.
                 </td>
             </tr>
             <tr>
@@ -323,26 +337,65 @@ else if (!Model.SupportsDynamicRegistration)
         <div>machine client_id</div><div><code>@Model.MachineClientId</code></div>
         <div>client_secret</div>
         <div>
-            @if (Model.MachineSecretConfigured)
+            @switch (Model.MachineSecretStatus)
             {
-                <span class="pill ok">configured</span>
-            }
-            else
-            {
-                <span class="pill bad">not set</span>
+                case "works":
+                    <span class="pill ok">accepted by the IdP</span><span class="secret-src">@secretSource</span>
+                    break;
+                case "rejected":
+                    <span class="pill bad">rejected by the IdP</span><span class="secret-src">@secretSource</span>
+                    break;
+                case "unchecked":
+                    <span class="pill warn">set, not checked — the IdP is unreachable</span>
+                    break;
+                default:
+                    <span class="pill bad">not set</span>
+                    break;
             }
         </div>
         <div>scope</div><div><code>client.register</code></div>
         <div>registration_endpoint</div><div><code>@(Model.RegistrationEndpoint ?? "—")</code></div>
     </div>
 
-    @if (!Model.MachineSecretConfigured)
+    @if (!secretWorks)
     {
-        <div class="note warn">
-            Without the machine client's secret the registration below is sent unauthenticated. If
-            the provider requires an initial access token — it does by default — it will answer
-            <code>invalid_client</code>. Set the secret on the
-            <a href="/flows/machine">client credentials</a> page first.
+        <div class="note warn" id="get-machine-secret">
+            @if (Model.MachineSecretStatus == "rejected")
+            {
+                <text><strong>The IdP refused the secret @secretSource.</strong>
+                <br />It answered <code>@Model.MachineSecretError</code>. The IdP keeps only a hash of
+                the secret, so a value stops working without any sign on this side — most often because
+                the IdP's database was recreated (a new database seeds <code>@Model.MachineClientId</code>
+                with no secret at all), or because the secret was regenerated since.</text>
+            }
+            else
+            {
+                <text><strong>This app has no secret for <code>@Model.MachineClientId</code>.</strong>
+                <br />Without one, the registration below is sent unauthenticated, and the IdP — which
+                requires an initial access token by default — answers <code>invalid_client</code>.</text>
+            }
+            <ol class="steps" style="margin:10px 0 8px">
+                <li>
+                    Open the <a href="@Model.AdminConsoleUrl" target="_blank" rel="noopener">admin console</a>
+                    (<code>@Model.AdminConsoleUrl</code>) and sign in as the administrator — the account
+                    in <code>ark_oauth_server:AdminUser</code> on the IdP.
+                </li>
+                <li>
+                    Under <strong>Clients</strong>, open <code>@Model.MachineClientId</code> and press
+                    <strong>Regenerate secret</strong>. The IdP stores only a hash of it, so this is the one
+                    time the value is shown: copy it now.
+                </li>
+                <li>
+                    Paste it into <strong>machine client_secret</strong> in
+                    <a class="step" href="#step-2">Step 2</a>; <strong>View</strong> shows what you pasted.
+                    It is used for that registration only and kept nowhere — not by this app, not by the IdP.
+                </li>
+            </ol>
+            To reuse it after you leave this page, keep it wherever suits you and hand it to this app
+            at start-up — for example <code>export sample__Machine__ClientSecret='…'</code> before
+            <code>./run.sh</code>. Not in <code>appsettings.json</code>: that file is in source control.
+            If the IdP sets <code>ark_oauth_server:Management:MachineClientSecret</code>, the console will
+            not regenerate this client's secret; use that value instead.
         </div>
     }
 
@@ -409,9 +462,30 @@ else if (!Model.SupportsDynamicRegistration)
                     <option value="native" selected="@(Model.ApplicationType == "native")">native</option>
                 </select>
             </div>
+
+            <div>machine client_secret</div>
+            <div class="secret-field">
+                <input type="password" name="MachineSecret" id="machine-secret" value="@Model.MachineSecret"
+                       autocomplete="off" spellcheck="false"
+                       placeholder="@(secretWorks && !Model.MachineSecretPasted ? "optional — the configured secret works" : "paste the secret from the admin console (Step 1)")" />
+                <button class="btn ghost" type="button" id="machine-secret-view">View</button>
+            </div>
         </div>
         <button class="btn" type="submit">Register</button>
     </form>
+    <script>
+        // View/Hide for the pasted machine secret. It never leaves the form except in this post.
+        (function () {
+            var input = document.getElementById("machine-secret");
+            var button = document.getElementById("machine-secret-view");
+            if (!input || !button) return;
+            button.addEventListener("click", function () {
+                var show = input.type === "password";
+                input.type = show ? "text" : "password";
+                button.textContent = show ? "Hide" : "View";
+            });
+        })();
+    </script>
 
     <div class="note">
         Redirect URIs are matched exactly and must be absolute. <code>https</code> is required

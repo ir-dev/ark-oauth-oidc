@@ -203,6 +203,28 @@ grant_type=client_credentials&client_id=my_idp_machine&client_secret=<secret>&sc
 - The same token drives the management API (`/api/oauth/v1/...`): send it as `Authorization: Bearer`.
   Only `{tenant}_machine` tokens are admitted — giving `client.register` to another client does not.
 - **Mistake:** expecting `{tenant}_machine` to work immediately — regenerate its secret first.
+- **Mistake:** confusing the two secrets. `ark_oauth_client:ClientSecret` is the calling app's *own*
+  client secret (`null` for a public client); the machine secret belongs to `{tenant}_machine` and
+  lives in a setting of the caller's choosing (the sample uses `sample:Machine:ClientSecret`).
+- **Mistake:** trusting a stored machine secret after the IdP's database was recreated (deleted
+  `data/`, factory reset, `replace` import). The new database seeds the machine client with **no
+  secret**, so every caller gets `invalid_client: client authentication failed.` A caller showing the
+  secret as "configured" only knows it holds a value — try it against `/oauth2/token` to know it
+  works. Fix it permanently with `Management:MachineClientSecret`, which the bootstrap re-applies to
+  every new database.
+- **Mistake:** committing the secret. Hand it over as an environment variable
+  (`sample__Machine__ClientSecret`, `ark_oauth_server__Management__MachineClientSecret`) or a key
+  vault reference. A machine token is operator authority.
+
+**Process for a caller that registers clients** (what `Ark.Client.Web`'s `/flows/register` does):
+1. On load, try the stored secret with `RequestTokenAsync` (uncached). Show *accepted*, *rejected* or
+  *not set*, never just "configured".
+2. If it is not accepted, link to `{issuer}/admin` with the steps: sign in as the administrator →
+  **Clients** → `{tenant}_machine` → **Regenerate secret** → copy (shown once).
+3. Accept a pasted secret for the one request, use it uncached (`ArkClientCredentials` caches by
+  client and scope, not by secret), and store it nowhere. Send `Cache-Control: no-store` on the
+  response that echoes it back.
+4. Use the token as the initial access token (`Authorization: Bearer`) for `POST /oauth2/register`.
 
 ---
 
