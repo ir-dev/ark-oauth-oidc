@@ -32,7 +32,8 @@
 #   c. PyPI: pypi.org/manage/project/ark-oauth-client/settings/publishing -> add a GitHub publisher.
 #   d. npm: ark-oauth-client has never been published, and npm offers a trusted publisher only on
 #      a package that exists. Publish the first version by hand (`npm publish --access public` in
-#      ark_oauth_client_nodejs), then npmjs.com -> the package -> Settings -> Trusted publisher.
+#      ark_oauth_client_nodejs), then npmjs.com -> the package -> Settings -> Trusted publisher,
+#      and tick "npm publish" under Allowed actions: new publishers allow only `npm stage publish`.
 
 name: Release
 
@@ -394,7 +395,7 @@ jobs:
           npm install -g npm@latest
           if ! npm publish ./npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
             reason=$(grep -m1 -E 'npm (error|ERR!) (code |404|403|401)|ENEEDAUTH|E40[134]' "$RUNNER_TEMP/npm.log" || true)
-            echo "::error::npm publish failed: ${reason:-see the job log}. If it is an auth error, check the trusted publisher on npmjs.com: owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release."
+            echo "::error::npm publish failed: ${reason:-see the job log}. If it is an auth error, check the trusted publisher on npmjs.com: owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release, and 'npm publish' ticked under Allowed actions (a publisher created after 2026-09-03 allows only 'npm stage publish', which fails as E403 'OIDC permission denied for this action')."
             exit 1
           fi
 
