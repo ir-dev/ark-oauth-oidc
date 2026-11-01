@@ -385,12 +385,14 @@ jobs:
           [ "$code" = 200 ] || { echo "::error::registry.npmjs.org answered HTTP $code"; exit 1; }
 
       # Trusted Publishing needs npm 11.5.1 or later; provenance is attached automatically. npm's
-      # own reason is raised as an annotation, because raw logs need auth to read.
+      # own reason is raised as an annotation, because raw logs need auth to read. The tarball is
+      # given as ./npm/...: a bare npm/x.tgz is read as the GitHub shorthand owner/repo, which
+      # current npm refuses with EALLOWGIT.
       - name: Publish
         run: |
           set -o pipefail
           npm install -g npm@latest
-          if ! npm publish npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
+          if ! npm publish ./npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
             reason=$(grep -m1 -E 'npm (error|ERR!) (code |404|403|401)|ENEEDAUTH|E40[134]' "$RUNNER_TEMP/npm.log" || true)
             echo "::error::npm publish failed: ${reason:-see the job log}. If it is an auth error, check the trusted publisher on npmjs.com: owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release."
             exit 1
