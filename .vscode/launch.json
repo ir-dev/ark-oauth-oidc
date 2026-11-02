@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // F5: the zero-config IdP. cwd is the project folder because the content root (and so
+      // ark-idp-data/, where the setup wizard writes) follows it. Delete ark-idp-data/ to see
+      // the wizard again.
+      "name": "QuickStart IdP",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build: QuickStart",
+      "program": "${workspaceFolder}/Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart/bin/Debug/net9.0/Ark.oAuth.Oidc.QuickStart.dll",
+      "cwd": "${workspaceFolder}/Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart",
+      "args": [],
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "https://localhost:7300;http://localhost:5300"
+      },
+      "stopAtEntry": false,
+      "justMyCode": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+        "uriFormat": "https://localhost:7300"
+      },
+      "console": "internalConsole"
+    }
+  ]
+}
