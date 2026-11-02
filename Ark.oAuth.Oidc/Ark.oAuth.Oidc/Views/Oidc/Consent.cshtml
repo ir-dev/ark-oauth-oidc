@@ -19,7 +19,7 @@
 <form method="post" action="@Model.ActionUrl">
     @Html.AntiForgeryToken()
 
-    <p style="font-size:13.5px;color:var(--ark-fg-muted);margin:0 0 12px;">
+    <p style="font-size: calc(13.5px * var(--ark-text-scale, 1));color:var(--ark-fg-muted);margin:0 0 12px;">
         @Model.ClientDisplay is requesting permission to:
     </p>
 

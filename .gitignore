@@ -11,10 +11,13 @@ data/
 
 # The admin console's stylesheet and script live in the Ark.oAuth.Oidc package and are served
 # from the assembly. AddArkOidcServer still unpacks every embedded resource into the host's
-# content root in Development, so these two reappear on disk in the sample host; they are copies,
+# content root in Development, so these reappear on disk in the sample host; they are copies,
 # not sources, and committing them is how the host and the package drifted apart before.
+# ark-theme.* (appearance picker) is served the same way, to the sign-in pages as well.
 Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/wwwroot/css/ark-admin.css
 Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/wwwroot/js/ark-admin.js
+Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/wwwroot/css/ark-theme.css
+Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/wwwroot/js/ark-theme.js
 
 # User-specific files
 *.rsuser

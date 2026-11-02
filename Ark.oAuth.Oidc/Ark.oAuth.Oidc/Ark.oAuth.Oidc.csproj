@@ -120,7 +120,24 @@ Also in the next release — export, import and factory reset, on an operator-on
   ark_oauth_server:Admin:DataTools (Enabled, AllowReset, AllowImport, AllowReplace,
   MaxImportMegabytes), all on by default. Specified in API-GUIDE.md.
 
-2.0.3 — back-channel logout, sign-out that covers the whole browser, and a dependency graph that
+Also in the next release — themes and text size chosen by the viewer, and a "Powered by" mark.
+
+* **Appearance picker on every page the package draws.** Sign-in, consent, device, signed-out,
+  error, password reset, the admin console and the setup wizard all carry an Appearance button:
+  System, Light, Dark, Midnight, Graphite, Forest, Rose, Paper, High contrast, High contrast dark,
+  or Custom (light/dark mode, accent and background, with borders, muted text and button labels
+  derived to stay readable). Text size from 80% to 160%, every font-size following one variable.
+* **Saved per browser, applied before first paint.** localStorage on the IdP's origin, so a choice
+  made at sign-in holds in the console, and other open tabs follow. Under the wizard's strict CSP
+  too: values are set through CSSOM, never inline styles. Without storage, or without the script,
+  the pages render exactly as before.
+* **Powered by Ark Identity Server.** The Ark shield under the sign-in card, in the console footer
+  and as the wizard's mark. New anonymous assets at /ark-admin/asset/: ark-theme.js, ark-theme.css,
+  ark-shield-64.png, ark-shield-512.png.
+* The password-reset confirmation page (/oauth/PwdResetThank) is rebuilt on the shared layout; it was
+  the last page of the reset flow still on its own stylesheet.
+
+2.0.3 —back-channel logout, sign-out that covers the whole browser, and a dependency graph that
 is only what this package uses.
 
 * **Back-Channel Logout 1.0.** A client that registers a backchannel_logout_uri is now POSTed a

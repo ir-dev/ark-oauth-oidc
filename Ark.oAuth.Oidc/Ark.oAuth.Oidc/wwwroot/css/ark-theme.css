@@ -1,0 +1,245 @@
+/* ---------------------------------------------------------------------------
+   Ark IdP appearance picker, and the "Powered by" mark.
+
+   Shared by the sign-in pages, the admin console and the setup wizard, beside
+   ark-theme.js. A stylesheet rather than styles injected by the script: the
+   wizard runs under style-src 'self', which refuses an injected <style>.
+
+   Only --ark-* tokens are used, so the picker is drawn in the theme it is
+   currently showing.
+   --------------------------------------------------------------------------- */
+
+/* ---------- Powered by ---------- */
+.ark-powered {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--ark-fg-muted);
+    font-size: calc(12px * var(--ark-text-scale, 1));
+    text-decoration: none;
+    white-space: nowrap;
+}
+.ark-powered img {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    flex: none;
+    display: block;
+}
+.ark-powered strong { font-weight: 600; color: var(--ark-fg); }
+a.ark-powered:hover { color: var(--ark-accent); text-decoration: none; }
+a.ark-powered:hover strong { color: var(--ark-accent); }
+
+/* ---------- trigger ---------- */
+.ark-ap { display: inline-block; }
+
+/* The pages this sits in style bare elements — the console paints every <button> as a filled
+   accent button (and again on :hover), the wizard makes every <input> a full-width text box.
+   Each control below states what it needs, and this resets what it does not. */
+.ark-ap button {
+    margin: 0;
+    font-weight: inherit;
+    letter-spacing: normal;
+    text-transform: none;
+    box-shadow: none;
+    transition: none;
+    min-width: 0;
+    height: auto;
+}
+.ark-ap input { margin: 0; }
+.ark-ap-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    font: inherit;
+    font-size: calc(12.5px * var(--ark-text-scale, 1));
+    color: var(--ark-fg-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--ark-radius-sm, 9px);
+    cursor: pointer;
+    line-height: 1.2;
+}
+.ark-ap-btn:hover { color: var(--ark-accent); border-color: var(--ark-border); background: transparent; }
+.ark-ap-btn[aria-expanded="true"] { color: var(--ark-accent); border-color: var(--ark-border-strong); background: var(--ark-surface); }
+.ark-ap-btn:focus-visible,
+.ark-ap-panel button:focus-visible,
+.ark-ap-panel input:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ark-accent) 40%, transparent);
+}
+.ark-ap-btn svg { flex: none; }
+
+/* ---------- panel ---------- */
+.ark-ap-panel {
+    position: fixed;
+    z-index: 1000;
+    width: min(340px, calc(100vw - 16px));
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+    padding: 14px;
+    background: var(--ark-surface);
+    color: var(--ark-fg);
+    border: 1px solid var(--ark-border-strong);
+    border-radius: var(--ark-radius, 14px);
+    box-shadow: var(--ark-shadow);
+    text-align: left;
+    font-size: calc(13px * var(--ark-text-scale, 1));
+    line-height: 1.4;
+}
+.ark-ap-panel[hidden] { display: none; }
+
+.ark-ap-group { border: 0; margin: 0 0 14px; padding: 0; min-width: 0; }
+.ark-ap-group legend {
+    padding: 0;
+    margin-bottom: 8px;
+    font-size: calc(11.5px * var(--ark-text-scale, 1));
+    font-weight: 650;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--ark-fg-muted);
+}
+
+/* ---------- theme grid ---------- */
+.ark-ap-themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.ark-ap-theme {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border: 1px solid var(--ark-border);
+    border-radius: var(--ark-radius-sm, 9px);
+    background: var(--ark-surface-2);
+    cursor: pointer;
+    min-width: 0;
+}
+.ark-ap-theme:hover { border-color: var(--ark-accent); }
+.ark-ap-theme input { position: absolute; opacity: 0; pointer-events: none; }
+.ark-ap-theme:has(input:checked) {
+    border-color: var(--ark-accent);
+    box-shadow: inset 0 0 0 1px var(--ark-accent);
+    background: var(--ark-accent-soft);
+}
+.ark-ap-theme:has(input:focus-visible) { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ark-accent) 40%, transparent); }
+/* Wraps rather than truncates: at the larger text sizes "High contrast dark" would otherwise
+   lose the one word that tells it apart from its neighbour. */
+.ark-ap-theme-name { min-width: 0; overflow-wrap: anywhere; font-weight: 550; line-height: 1.25; }
+
+.ark-ap-swatch {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 6px;
+    background: var(--sw-bg, var(--ark-bg));
+    border: 1px solid color-mix(in srgb, var(--ark-fg) 18%, transparent);
+}
+.ark-ap-swatch i { width: 7px; height: 14px; border-radius: 2px; display: block; }
+.ark-ap-swatch--system { background: linear-gradient(135deg, #f4f6fb 50%, #0d1017 50%); }
+.ark-ap-swatch--system i:nth-child(1) { background: #ffffff; }
+.ark-ap-swatch--system i:nth-child(2) { background: #3457d5; }
+.ark-ap-swatch--system i:nth-child(3) { background: #7b96ff; }
+
+/* ---------- custom ---------- */
+.ark-ap-custom {
+    margin-top: 8px;
+    padding: 10px;
+    border: 1px dashed var(--ark-border-strong);
+    border-radius: var(--ark-radius-sm, 9px);
+    display: grid;
+    gap: 8px;
+}
+.ark-ap-custom[hidden] { display: none; }
+.ark-ap-row { display: flex; align-items: center; gap: 10px; }
+.ark-ap-row-label { flex: 1; color: var(--ark-fg-muted); }
+.ark-ap-color {
+    width: 44px;
+    height: 28px;
+    padding: 2px;
+    border: 1px solid var(--ark-border-strong);
+    border-radius: 7px;
+    background: var(--ark-surface);
+    cursor: pointer;
+}
+
+/* ---------- segmented buttons (mode, text size) ---------- */
+.ark-ap-seg {
+    display: inline-flex;
+    border: 1px solid var(--ark-border-strong);
+    border-radius: var(--ark-radius-sm, 9px);
+    overflow: hidden;
+    background: var(--ark-surface-2);
+}
+.ark-ap-seg button {
+    font: inherit;
+    padding: 5px 12px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ark-fg);
+    cursor: pointer;
+    line-height: 1.2;
+}
+.ark-ap-seg button + button { border-left: 1px solid var(--ark-border); }
+.ark-ap-seg button:hover { color: var(--ark-accent); background: transparent; }
+.ark-ap-seg button[aria-pressed="true"],
+.ark-ap-seg button[aria-pressed="true"]:hover { background: var(--ark-accent); color: var(--ark-accent-fg); }
+
+.ark-ap-sizes { display: flex; width: 100%; margin-bottom: 8px; }
+.ark-ap-sizes button { flex: 1; font-weight: 650; padding: 4px 0; min-height: 34px; }
+/* Fixed sizes, not scaled: each button is a preview of the size it picks. */
+.ark-ap-sizes .ark-ap-size-0 { font-size: 12px; }
+.ark-ap-sizes .ark-ap-size-1 { font-size: 14px; }
+.ark-ap-sizes .ark-ap-size-2 { font-size: 16px; }
+.ark-ap-sizes .ark-ap-size-3 { font-size: 18px; }
+.ark-ap-sizes .ark-ap-size-4 { font-size: 20px; }
+
+.ark-ap-range {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    accent-color: var(--ark-accent);
+}
+.ark-ap-out {
+    min-width: 46px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--ark-fg-muted);
+}
+
+/* ---------- footer ---------- */
+.ark-ap-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--ark-border);
+    color: var(--ark-fg-muted);
+}
+.ark-ap-foot small { flex: 1; font-size: calc(11.5px * var(--ark-text-scale, 1)); }
+.ark-ap-reset {
+    font: inherit;
+    padding: 5px 12px;
+    border: 1px solid var(--ark-border-strong);
+    border-radius: var(--ark-radius-sm, 9px);
+    background: var(--ark-surface-2);
+    color: var(--ark-fg);
+    cursor: pointer;
+}
+.ark-ap-reset:hover { border-color: var(--ark-accent); color: var(--ark-accent); background: var(--ark-surface-2); }
+
+@media (max-width: 720px) {
+    /* In a crowded top bar the icon is enough; the button keeps its title and aria. */
+    .ark-topbar .ark-ap-btn-label,
+    .top .ark-ap-btn-label { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ark-ap-btn, .ark-ap-theme { transition: none !important; }
+}

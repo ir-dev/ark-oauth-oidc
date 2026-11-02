@@ -442,7 +442,11 @@ namespace Ark.oAuth.Oidc
         {
             ["wizard.css"] = ("Ark.oAuth.Oidc.wwwroot.setup.wizard.css", "text/css; charset=utf-8"),
             ["wizard.js"] = ("Ark.oAuth.Oidc.wwwroot.setup.wizard.js", "text/javascript; charset=utf-8"),
-            ["ark-logo.png"] = ("Ark.oAuth.Oidc.wwwroot.img.ark_logo_1.png", "image/png")
+            // The same appearance files the sign-in pages and console load from /ark-admin/asset —
+            // served here as well because, until install, every browser request is the wizard's.
+            ["ark-theme.css"] = ("Ark.oAuth.Oidc.wwwroot.css.ark-theme.css", "text/css; charset=utf-8"),
+            ["ark-theme.js"] = ("Ark.oAuth.Oidc.wwwroot.js.ark-theme.js", "text/javascript; charset=utf-8"),
+            ["ark-shield.png"] = ("Ark.oAuth.Oidc.wwwroot.img.ark-shield-64.png", "image/png")
         };
 
         static async Task ServePageAsync(HttpContext context, string basePath)

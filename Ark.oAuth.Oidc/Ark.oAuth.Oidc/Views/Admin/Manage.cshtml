@@ -31,6 +31,9 @@
        silently took whatever version was published that day. *@
     <link href="https://unpkg.com/tabulator-tables@@5.5.2/dist/css/tabulator.min.css" rel="stylesheet" />
     <link href="@ViewBag.ConsoleCss" rel="stylesheet" />
+    <link href="@ViewBag.ThemeCss" rel="stylesheet" />
+    @* Not deferred: applies the viewer's saved theme and text size before the first paint. *@
+    <script src="@ViewBag.ThemeJs"></script>
 </head>
 <body>
 @await Html.PartialAsync("_ConsoleHeader")

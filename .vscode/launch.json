@@ -18,10 +18,13 @@
       },
       "stopAtEntry": false,
       "justMyCode": false,
+      // uriFormat must hold exactly one %s, which VS Code fills from the pattern's capture group.
+      // The pattern matches only the https line, so the browser opens https://localhost:7300
+      // rather than whichever of the two addresses Kestrel happens to log first.
       "serverReadyAction": {
         "action": "openExternally",
-        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
-        "uriFormat": "https://localhost:7300"
+        "pattern": "\\bNow listening on:\\s+(https://\\S+)",
+        "uriFormat": "%s"
       },
       "console": "internalConsole"
     }

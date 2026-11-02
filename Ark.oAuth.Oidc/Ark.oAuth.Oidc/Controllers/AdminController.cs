@@ -155,6 +155,9 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.HostName = ser.EmailConfig?.host_company_display ?? ser.EmailConfig?.host_company_name ?? "Identity Provider";
             ViewBag.ConsoleCss = AssetUrl(appRoot, CssAsset);
             ViewBag.ConsoleJs = AssetUrl(appRoot, JsAsset);
+            ViewBag.ThemeCss = AssetUrl(appRoot, ThemeCssAsset);
+            ViewBag.ThemeJs = AssetUrl(appRoot, ThemeJsAsset);
+            ViewBag.ShieldUrl = AssetUrl(appRoot, ShieldAsset);
             // Named in the footer: which build of the server package is serving this console.
             ViewBag.PackageVersion = PackageVersion;
             ViewBag.UserPasswordMode = ser.EffectiveUserPasswordMode switch
@@ -193,9 +196,17 @@ namespace Ark.oAuth.Oidc.Controllers
 
         public const string CssAsset = "ark-admin.css";
         public const string JsAsset = "ark-admin.js";
+        /// <summary>Appearance (theme, text size) script — every IdP page, see wwwroot/js/ark-theme.js.</summary>
+        public const string ThemeJsAsset = "ark-theme.js";
+        /// <summary>The appearance picker and "Powered by" mark styling, beside <see cref="ThemeJsAsset"/>.</summary>
+        public const string ThemeCssAsset = "ark-theme.css";
+        /// <summary>The Ark shield, small: the "Powered by" mark.</summary>
+        public const string ShieldAsset = "ark-shield-64.png";
+        /// <summary>The Ark shield, full size, for touch icons and anywhere it is drawn large.</summary>
+        public const string ShieldLargeAsset = "ark-shield-512.png";
 
         /// <summary>
-        /// The two files the console is built from, as embedded resources.
+        /// The files the console and the sign-in pages are built from, as embedded resources.
         ///
         /// An allow-list rather than a name-to-resource translation: the route segment is
         /// attacker-supplied, and every string in this assembly's manifest — the migration
@@ -205,7 +216,11 @@ namespace Ark.oAuth.Oidc.Controllers
             new(StringComparer.OrdinalIgnoreCase)
             {
                 [CssAsset] = ("Ark.oAuth.Oidc.wwwroot.css.ark-admin.css", "text/css; charset=utf-8"),
-                [JsAsset] = ("Ark.oAuth.Oidc.wwwroot.js.ark-admin.js", "text/javascript; charset=utf-8")
+                [JsAsset] = ("Ark.oAuth.Oidc.wwwroot.js.ark-admin.js", "text/javascript; charset=utf-8"),
+                [ThemeCssAsset] = ("Ark.oAuth.Oidc.wwwroot.css.ark-theme.css", "text/css; charset=utf-8"),
+                [ThemeJsAsset] = ("Ark.oAuth.Oidc.wwwroot.js.ark-theme.js", "text/javascript; charset=utf-8"),
+                [ShieldAsset] = ("Ark.oAuth.Oidc.wwwroot.img.ark-shield-64.png", "image/png"),
+                [ShieldLargeAsset] = ("Ark.oAuth.Oidc.wwwroot.img.ark-shield-512.png", "image/png")
             };
 
         /// <summary>The package version, used to bust the cache of the URLs below on upgrade.</summary>

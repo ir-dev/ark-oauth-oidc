@@ -30,7 +30,7 @@ else if (Model.Stage == "confirm")
 
     @if (Model.Scopes.Count > 0)
     {
-        <p style="font-size:13.5px;color:var(--ark-fg-muted);margin:0 0 12px;">It will be able to:</p>
+        <p style="font-size: calc(13.5px * var(--ark-text-scale, 1));color:var(--ark-fg-muted);margin:0 0 12px;">It will be able to:</p>
         <ul class="ark-scopes">
             @foreach (var scope in Model.Scopes)
             {

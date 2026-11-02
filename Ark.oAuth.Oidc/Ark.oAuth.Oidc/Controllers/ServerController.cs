@@ -98,6 +98,8 @@ namespace Ark.oAuth.Oidc.Controllers
         [Route("PwdResetThank")]
         public async Task<IActionResult> PwdResetThank()
         {
+            // The same branding PasswordReset draws, so the flow does not change look on its last page.
+            ViewBag.config = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>()?.EmailConfig;
             return View();
         }
         [Route("{tenant_id}/v1/connect/authorize")]

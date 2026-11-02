@@ -15,14 +15,14 @@
 <style>
     .ark-card--doc { max-width: 860px; text-align: left; }
     .ark-card--doc h1 { text-align: left; }
-    .ark-doc-sub { color: var(--ark-fg-muted); margin: 0 0 26px; font-size: 14px; }
+    .ark-doc-sub { color: var(--ark-fg-muted); margin: 0 0 26px; font-size: calc(14px * var(--ark-text-scale, 1)); }
     .ark-sec { margin-top: 30px; }
     .ark-sec h2 {
-        font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em;
+        font-size: calc(12px * var(--ark-text-scale, 1)); font-weight: 650; text-transform: uppercase; letter-spacing: .06em;
         color: var(--ark-fg-muted); margin: 0 0 10px;
     }
     .ark-kv { display: grid; grid-template-columns: minmax(140px, auto) 1fr; gap: 1px; border: 1px solid var(--ark-border); border-radius: var(--ark-radius-sm); overflow: hidden; background: var(--ark-border); }
-    .ark-kv > div { background: var(--ark-surface); padding: 9px 12px; font-size: 13.5px; }
+    .ark-kv > div { background: var(--ark-surface); padding: 9px 12px; font-size: calc(13.5px * var(--ark-text-scale, 1)); }
     .ark-kv > div:nth-child(odd) { background: var(--ark-surface-2); font-weight: 560; }
     .ark-kv code { background: none; border: none; padding: 0; word-break: break-all; }
     pre {
@@ -30,31 +30,31 @@
         background: var(--ark-surface-2); border: 1px solid var(--ark-border);
         border-radius: var(--ark-radius-sm);
         font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-        font-size: 12.5px; line-height: 1.6;
+        font-size: calc(12.5px * var(--ark-text-scale, 1)); line-height: 1.6;
     }
     .ark-note {
         border-left: 3px solid var(--ark-accent); background: var(--ark-accent-soft);
         padding: 11px 14px; border-radius: 0 var(--ark-radius-sm) var(--ark-radius-sm) 0;
-        font-size: 13.5px; margin-top: 12px;
+        font-size: calc(13.5px * var(--ark-text-scale, 1)); margin-top: 12px;
     }
     .ark-pill {
-        display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 11.5px;
+        display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: calc(11.5px * var(--ark-text-scale, 1));
         font-weight: 600; background: var(--ark-accent-soft); color: var(--ark-accent);
         border: 1px solid color-mix(in srgb, var(--ark-accent) 30%, transparent);
     }
 
     /* ---------- live flow ---------- */
     .ark-try { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-bottom: 12px; }
-    .ark-try label { font-size: 12.5px; color: var(--ark-fg-muted); display: block; margin-bottom: 4px; }
+    .ark-try label { font-size: calc(12.5px * var(--ark-text-scale, 1)); color: var(--ark-fg-muted); display: block; margin-bottom: 4px; }
     .ark-try select {
-        font: inherit; font-size: 13px; padding: 8px 10px; max-width: 100%;
+        font: inherit; font-size: calc(13px * var(--ark-text-scale, 1)); padding: 8px 10px; max-width: 100%;
         color: var(--ark-fg); background: var(--ark-surface-2);
         border: 1px solid var(--ark-border-strong); border-radius: var(--ark-radius-sm);
     }
     .ark-try .ark-try-field { flex: 1 1 320px; min-width: 0; }
     .ark-try .ark-try-field select { width: 100%; }
     .ark-try button {
-        font: inherit; font-size: 13px; font-weight: 600; padding: 9px 15px; cursor: pointer;
+        font: inherit; font-size: calc(13px * var(--ark-text-scale, 1)); font-weight: 600; padding: 9px 15px; cursor: pointer;
         border-radius: var(--ark-radius-sm); border: 1px solid transparent;
         background: var(--ark-accent); color: var(--ark-accent-fg);
     }
@@ -62,7 +62,7 @@
         background: var(--ark-surface); color: var(--ark-fg); border-color: var(--ark-border-strong);
     }
     .ark-try button[disabled] { opacity: .5; cursor: not-allowed; }
-    .ark-try-toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ark-fg); }
+    .ark-try-toggle { display: flex; align-items: center; gap: 7px; font-size: calc(13px * var(--ark-text-scale, 1)); color: var(--ark-fg); }
     .ark-try-toggle input { accent-color: var(--ark-accent); width: 15px; height: 15px; margin: 0; }
     .ark-try-toggle label { margin: 0; color: inherit; font-size: inherit; }
 
@@ -73,7 +73,7 @@
     }
     .ark-frame-bar {
         display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-        font-size: 12px; color: var(--ark-fg-muted); margin: 8px 2px 0;
+        font-size: calc(12px * var(--ark-text-scale, 1)); color: var(--ark-fg-muted); margin: 8px 2px 0;
     }
 </style>
 

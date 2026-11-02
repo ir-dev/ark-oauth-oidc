@@ -1,108 +1,31 @@
-﻿@{
-    Layout = null;
+@*
+    Password reset, done.
+
+    Rebuilt on the shared IdP layout, like PasswordReset.cshtml which leads here — it was the one
+    page of the reset flow still on its own stylesheet. The old "Close The Browser" button is gone:
+    window.close() only works on a window a script opened, and this one was opened from an email.
+*@
+@{
+    Layout = "~/Views/Oidc/_ArkLayout.cshtml";
+    var cfg = ViewBag.config as Ark.oAuth.Oidc.ArkEmailConfig;
+    ViewBag.Brand = new Ark.oAuth.Oidc.Endpoints.OidcBrandModel
+    {
+        HostLogo = cfg?.host_logo,
+        ClientLogo = cfg?.client_logo,
+        HostName = cfg?.host_company_display ?? cfg?.host_company_name ?? "Identity Provider",
+        PrivacyUrl = cfg?.privacy_policy_url,
+        TermsUrl = cfg?.terms_url
+    };
+    ViewBag.PageTitle = "Password updated";
 }
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Password Reset Successful</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
 
-        body {
-            background-color: #f5f7fa;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 20px;
-        }
+<div class="ark-icon-badge ark-icon-badge--success" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <path d="M5 10.5l3.2 3.2L15 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+</div>
 
-        .thank-you-container {
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-            padding: 40px;
-            max-width: 500px;
-            width: 100%;
-            text-align: center;
-        }
+<h1>Password updated</h1>
+<p class="ark-sub">You can now sign in with your new password. It is safe to close this window.</p>
 
-        .success-icon {
-            color: #4CAF50;
-            font-size: 60px;
-            margin-bottom: 20px;
-        }
-
-        h1 {
-            color: #2c3e50;
-            margin-bottom: 15px;
-            font-size: 28px;
-        }
-
-        p {
-            color: #7f8c8d;
-            margin-bottom: 25px;
-            line-height: 1.6;
-        }
-
-        .login-button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            text-decoration: none;
-            display: inline-block;
-        }
-
-            .login-button:hover {
-                background-color: #2980b9;
-            }
-
-        .additional-info {
-            margin-top: 30px;
-            font-size: 14px;
-            color: #95a5a6;
-        }
-
-        @@media (max-width: 480px) {
-            .thank-you-container
-
-        {
-            padding: 30px 20px;
-        }
-
-        h1 {
-            font-size: 24px;
-        }
-
-        }
-    </style>
-</head>
-<body>
-    <div class="thank-you-container">
-        <div class="success-icon">✓</div>
-        <h1>Password Reset Successful!</h1>
-        <p>Your password has been successfully updated. You can now log in to your account using your new password.</p>
-        <a href="javascript:void(0);" class="login-button">Close The Browser</a>
-        <div class="additional-info">
-            <p>If you didn't request this password reset, please contact our support team immediately.</p>
-        </div>
-    </div>
-    <script>
-        document.querySelector(".login-button").addEventListener('click', evt => {
-            window.close();
-        });
-    </script>
-</body>
-</html>
+<p class="ark-meta">If you didn't request this password reset, contact your administrator immediately.</p>

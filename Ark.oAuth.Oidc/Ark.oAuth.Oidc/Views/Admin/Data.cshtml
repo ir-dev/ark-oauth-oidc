@@ -30,6 +30,9 @@
     <meta name="referrer" content="strict-origin" />
     <title>Data — @title</title>
     <link href="@ViewBag.ConsoleCss" rel="stylesheet" />
+    <link href="@ViewBag.ThemeCss" rel="stylesheet" />
+    @* Not deferred: applies the viewer's saved theme and text size before the first paint. *@
+    <script src="@ViewBag.ThemeJs"></script>
 </head>
 <body>
 @await Html.PartialAsync("_ConsoleHeader")

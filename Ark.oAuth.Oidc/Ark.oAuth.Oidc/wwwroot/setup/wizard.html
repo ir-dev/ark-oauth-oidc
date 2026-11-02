@@ -5,17 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex, nofollow" />
     <title>Set up Ark IdP</title>
+    <link rel="icon" type="image/png" href="{{BASE}}/assets/ark-shield.png" />
     <link rel="stylesheet" href="{{BASE}}/assets/wizard.css" />
+    <link rel="stylesheet" href="{{BASE}}/assets/ark-theme.css" />
+    <!-- Not deferred: applies the saved theme and text size before the first paint. -->
+    <script src="{{BASE}}/assets/ark-theme.js"></script>
     <script src="{{BASE}}/assets/wizard.js" defer></script>
 </head>
 <body data-base="{{BASE}}">
     <header class="top">
-        <img src="{{BASE}}/assets/ark-logo.png" alt="" class="top-logo" />
+        <img src="{{BASE}}/assets/ark-shield.png" alt="" class="top-logo" width="36" height="36" />
         <div class="top-title">
             <strong>Ark Identity Provider</strong>
             <span>First-run setup</span>
         </div>
         <span class="top-version">v{{VERSION}}</span>
+        <div data-ark-appearance></div>
     </header>
 
     <div class="shell" id="shell">
