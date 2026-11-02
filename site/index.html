@@ -4,50 +4,60 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ARK Identity Server</title>
-<meta name="description" content="A self-hosted OAuth 2.1 / OpenID Connect identity provider for ASP.NET Core, with client libraries for .NET, Python and Node that configure themselves from discovery.">
+<meta name="description" content="A self-hosted OAuth 2.1 / OpenID Connect identity provider for ASP.NET Core. Two lines and a setup wizard make it your IdP; one call onboards an app; one console governs every tenant. Clients for .NET, Python and Node.">
 <meta property="og:title" content="ARK Identity Server">
-<meta property="og:description" content="Your own OAuth 2.1 / OpenID Connect provider, and three clients that already know how to talk to it.">
+<meta property="og:description" content="Your own OAuth 2.1 / OpenID Connect provider in two lines of C#. Sign-in for any app with two settings. Every tenant governed from one console.">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="#a437db">
+<meta property="og:image" content="https://ir-dev.github.io/ark-oauth-oidc/assets/img/og-card.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0b1533">
 <link rel="icon" type="image/png" href="assets/favicon.png">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="alternate" type="text/plain" title="llms.txt" href="llms.txt">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --brand: #a437db;
-    --brand-strong: #8a24c2;
-    --brand-soft: #f4e9fb;
-    --ink: #1c1426;
-    --text: #2b2433;
-    --muted: #6b6276;
-    --line: #e7e1ee;
-    --bg: #fbfafc;
+    --brand: #2450d8;
+    --brand-strong: #1b3db0;
+    --brand-soft: #e9eefc;
+    --cyan: #0a8fb0;
+    --gold: #b77b04;
+    --gold-bright: #f4b733;
+    --ink: #0b1533;
+    --text: #24304d;
+    --muted: #5d6883;
+    --line: #e1e6f0;
+    --bg: #f5f7fb;
     --surface: #ffffff;
-    --code-bg: #17111f;
-    --code-text: #e9e3f0;
-    --code-muted: #9a8fab;
-    --code-key: #d7a8f5;
-    --code-str: #a5e3c4;
-    --ok: #1f8a5b;
+    --plate: #ffffff;
+    --code-bg: #0a1128;
+    --code-text: #e4eaf8;
+    --code-muted: #8d9abb;
+    --code-key: #9ab5ff;
+    --code-str: #8fe3cf;
+    --ok: #12805a;
     --warn: #b4540a;
     --radius: 14px;
-    --shadow: 0 1px 2px rgba(28, 20, 38, .05), 0 8px 28px rgba(28, 20, 38, .06);
+    --shadow: 0 1px 2px rgba(11, 21, 51, .05), 0 8px 28px rgba(11, 21, 51, .07);
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --brand: #c27ef0;
-      --brand-strong: #d49bf5;
-      --brand-soft: #2a1d36;
-      --ink: #f3eef8;
-      --text: #ddd5e6;
-      --muted: #a097ab;
-      --line: #2e2638;
-      --bg: #121016;
-      --surface: #1a1720;
-      --code-bg: #0c0a10;
+      --brand: #7fa2ff;
+      --brand-strong: #a3bcff;
+      --brand-soft: #13214a;
+      --cyan: #3fd0ee;
+      --gold: #f5c451;
+      --ink: #eef3ff;
+      --text: #ccd5ea;
+      --muted: #8e9ab7;
+      --line: #1d2a4b;
+      --bg: #060c1d;
+      --surface: #0d1630;
+      --plate: #f4f6fb;
+      --code-bg: #040916;
       --ok: #4cc38a;
       --warn: #f0a35e;
       --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px rgba(0, 0, 0, .35);
@@ -55,24 +65,36 @@
     }
   }
   :root[data-theme="dark"] {
-    --brand: #c27ef0;
-    --brand-strong: #d49bf5;
-    --brand-soft: #2a1d36;
-    --ink: #f3eef8;
-    --text: #ddd5e6;
-    --muted: #a097ab;
-    --line: #2e2638;
-    --bg: #121016;
-    --surface: #1a1720;
-    --code-bg: #0c0a10;
+    --brand: #7fa2ff;
+    --brand-strong: #a3bcff;
+    --brand-soft: #13214a;
+    --cyan: #3fd0ee;
+    --gold: #f5c451;
+    --ink: #eef3ff;
+    --text: #ccd5ea;
+    --muted: #8e9ab7;
+    --line: #1d2a4b;
+    --bg: #060c1d;
+    --surface: #0d1630;
+    --plate: #f4f6fb;
+    --code-bg: #040916;
     --ok: #4cc38a;
     --warn: #f0a35e;
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px rgba(0, 0, 0, .35);
     color-scheme: dark;
   }
+  /* images that exist in a light and a dark version */
+  .on-dark { display: none; }
+  :root[data-theme="dark"] .on-dark { display: inline-block; }
+  :root[data-theme="dark"] .on-light { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .on-dark { display: inline-block; }
+    :root:not([data-theme="light"]) .on-light { display: none; }
+  }
 
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   body {
     margin: 0;
     background: var(--bg);
@@ -80,45 +102,46 @@
     font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
+  img { max-width: 100%; height: auto; }
   a { color: var(--brand); text-decoration: none; }
   a:hover { text-decoration: underline; text-underline-offset: 3px; }
   code, pre { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
   :not(pre) > code {
-    font-size: .88em;
+    font-size: .86em;
     background: var(--brand-soft);
     color: var(--ink);
     padding: .1em .38em;
     border-radius: 6px;
+    overflow-wrap: anywhere;
   }
   h1, h2, h3 { color: var(--ink); line-height: 1.15; margin: 0; }
-  h2 { font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: clamp(1.75rem, 3.4vw, 2.4rem); letter-spacing: -.01em; }
-  h3 { font-size: 1.05rem; font-weight: 600; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
-  /* grid children default to min-width:auto, so a long <pre> would widen the page instead of scrolling */
-  .hero .wrap > *, .flow > *, .panel > *, .pkgs > *, .two > *, .builder > *, .stack > *, .specs > *, .pitfalls > * { min-width: 0; }
+  h1, h2 { font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif; }
+  h2 { font-weight: 800; font-size: clamp(1.7rem, 3.4vw, 2.4rem); letter-spacing: -.02em; }
+  h3 { font-size: 1.04rem; font-weight: 600; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 16px; }
   @media (min-width: 720px) { .wrap { padding: 0 32px; } }
+  /* grid children default to min-width:auto, so a long <pre> would widen the page instead of scrolling */
+  .hero .wrap > *, .steps > *, .flow > *, .panel > *, .pkgs > *, .two > *, .builder > *, .stack > *,
+  .specs > *, .pitfalls > *, .caps > *, .fleet > *, .agents > *, .gallery > *, .secband .wrap > * { min-width: 0; }
 
   /* ---------- nav ---------- */
   .nav {
     position: sticky; top: 0; z-index: 10;
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    background: color-mix(in srgb, var(--bg) 84%, transparent);
     backdrop-filter: saturate(1.4) blur(12px);
     -webkit-backdrop-filter: saturate(1.4) blur(12px);
     border-bottom: 1px solid var(--line);
   }
-  .nav .wrap { display: flex; align-items: center; gap: 24px; height: 60px; }
-  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 600; }
+  .nav .wrap { display: flex; align-items: center; gap: 20px; height: 62px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 700; font-family: "Plus Jakarta Sans", Inter, sans-serif; letter-spacing: -.01em; }
   .brand:hover { text-decoration: none; }
-  .brand .tile {
-    width: 34px; height: 34px; border-radius: 9px; background: #a437db;
-    display: grid; place-items: center; overflow: hidden;
-  }
-  .brand .tile img { width: 40px; }
-  .nav-links { display: flex; gap: 22px; margin-left: auto; align-items: center; }
-  .nav-links a { color: var(--muted); font-size: .92rem; font-weight: 500; }
+  .brand img { width: 34px; height: 34px; border-radius: 9px; }
+  .brand small { font-weight: 600; color: var(--brand); }
+  .nav-links { display: flex; gap: 20px; margin-left: auto; align-items: center; }
+  .nav-links a { color: var(--muted); font-size: .9rem; font-weight: 500; }
   .nav-links a:hover { color: var(--ink); text-decoration: none; }
   .nav-links .hide-sm { display: none; }
-  @media (min-width: 820px) { .nav-links .hide-sm { display: inline; } }
+  @media (min-width: 980px) { .nav-links .hide-sm { display: inline; } }
   .theme-btn {
     border: 1px solid var(--line); background: var(--surface); color: var(--muted);
     width: 34px; height: 34px; border-radius: 9px; cursor: pointer; display: grid; place-items: center;
@@ -129,26 +152,26 @@
   .hero {
     position: relative; overflow: hidden;
     background:
-      radial-gradient(900px 420px at 85% -10%, rgba(164, 55, 219, .55), transparent 60%),
-      radial-gradient(700px 400px at -10% 110%, rgba(110, 40, 180, .45), transparent 60%),
-      #150d1e;
-    color: #efe7f7;
+      radial-gradient(900px 460px at 88% -12%, rgba(36, 80, 216, .55), transparent 62%),
+      radial-gradient(640px 380px at -8% 112%, rgba(10, 143, 176, .40), transparent 62%),
+      #050b1d;
+    color: #e7edfb;
   }
-  .hero .wrap { display: grid; gap: 48px; padding-top: 72px; padding-bottom: 80px; }
-  @media (min-width: 960px) { .hero .wrap { grid-template-columns: 1.05fr 1fr; align-items: center; padding-top: 96px; padding-bottom: 104px; } }
+  .hero .wrap { display: grid; gap: 44px; padding-top: 64px; padding-bottom: 72px; }
+  @media (min-width: 980px) { .hero .wrap { grid-template-columns: 1.08fr .92fr; align-items: center; padding-top: 88px; padding-bottom: 96px; } }
   .eyebrow {
-    display: inline-flex; align-items: center; gap: 8px;
+    display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
     font-size: .8rem; font-weight: 500; letter-spacing: .04em;
-    color: #e2c8f6; background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .12);
+    color: #c9d6fb; background: rgba(255, 255, 255, .07); border: 1px solid rgba(255, 255, 255, .12);
     padding: 5px 12px; border-radius: 999px;
   }
-  .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: #6ee7a8; box-shadow: 0 0 0 3px rgba(110, 231, 168, .18); }
+  .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: #5eead4; box-shadow: 0 0 0 3px rgba(94, 234, 212, .18); }
   .hero h1 {
-    font-family: Fraunces, Georgia, serif; font-weight: 600; color: #fff;
-    font-size: clamp(2.3rem, 5.6vw, 3.7rem); letter-spacing: -.02em; margin: 22px 0 18px;
+    font-weight: 800; color: #fff;
+    font-size: clamp(2.2rem, 5.4vw, 3.7rem); letter-spacing: -.03em; margin: 22px 0 18px;
   }
-  .hero h1 em { font-style: normal; color: #dcaaf8; }
-  .hero p.lede { font-size: 1.12rem; color: #cfc3dc; max-width: 34em; margin: 0 0 30px; }
+  .hero h1 em { font-style: normal; background: linear-gradient(90deg, #8fb0ff, #5ee1f5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p.lede { font-size: 1.1rem; color: #c3cde6; max-width: 35em; margin: 0 0 30px; }
   .cta { display: flex; flex-wrap: wrap; gap: 12px; }
   .btn {
     display: inline-flex; align-items: center; gap: 8px;
@@ -156,26 +179,33 @@
     border: 1px solid transparent; transition: transform .15s ease, background .15s ease;
   }
   .btn:hover { text-decoration: none; transform: translateY(-1px); }
-  .btn-primary { background: #a437db; color: #fff; }
-  .btn-primary:hover { background: #b24ee6; }
-  .btn-ghost { color: #efe7f7; border-color: rgba(255, 255, 255, .22); }
+  .btn-primary { background: #2f5ff0; color: #fff; }
+  .btn-primary:hover { background: #4370ff; }
+  .btn-ghost { color: #e7edfb; border-color: rgba(255, 255, 255, .22); }
   .btn-ghost:hover { background: rgba(255, 255, 255, .06); }
-  .facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 34px; font-size: .88rem; color: #b6a8c6; }
-  .facts span::before { content: "✓"; color: #6ee7a8; margin-right: 7px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 32px; font-size: .88rem; color: #a9b5d3; }
+  .facts span::before { content: "✓"; color: #5eead4; margin-right: 7px; }
+  .hero-art { position: relative; justify-self: center; width: min(100%, 480px); }
+  .hero-art .emblem {
+    width: 100%; border-radius: 22px; display: block;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .08);
+  }
+  .hero-art .code { position: absolute; left: -6%; right: 12%; bottom: -26px; }
+  @media (max-width: 560px) { .hero-art .code { position: static; margin-top: 16px; } }
 
   /* ---------- code blocks ---------- */
   .code {
     background: var(--code-bg); color: var(--code-text); border-radius: var(--radius);
     border: 1px solid rgba(255, 255, 255, .08); overflow: hidden; position: relative;
   }
-  .hero .code { box-shadow: 0 30px 80px rgba(0, 0, 0, .45); }
+  .hero .code { box-shadow: 0 24px 70px rgba(0, 0, 0, .5); }
   .code-head {
     display: flex; align-items: center; gap: 8px; padding: 10px 14px;
     border-bottom: 1px solid rgba(255, 255, 255, .07);
-    font: 500 .78rem "JetBrains Mono", monospace; color: var(--code-muted);
+    font: 500 .76rem "JetBrains Mono", monospace; color: var(--code-muted);
   }
-  .code-head .verb { color: #6ee7a8; font-weight: 600; }
-  .code pre { margin: 0; padding: 16px 18px; overflow-x: auto; font-size: .82rem; line-height: 1.7; }
+  .code-head .verb { color: #5eead4; font-weight: 600; }
+  .code pre { margin: 0; padding: 15px 18px; overflow-x: auto; font-size: .8rem; line-height: 1.7; }
   .code .k { color: var(--code-key); }
   .code .s { color: var(--code-str); }
   .code .c { color: var(--code-muted); }
@@ -187,19 +217,138 @@
   .copy:hover { color: #fff; }
 
   /* ---------- sections ---------- */
-  section { padding: 88px 0; }
+  section { padding: 84px 0; }
   section + section { border-top: 1px solid var(--line); }
-  .section-head { max-width: 680px; margin-bottom: 44px; }
-  .kicker { font-size: .78rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--brand); margin-bottom: 12px; }
-  .section-head p { color: var(--muted); font-size: 1.05rem; margin: 14px 0 0; }
+  .section-head { max-width: 720px; margin-bottom: 40px; }
+  .kicker { font-size: .78rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--brand); margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .section-head p, .lead { color: var(--muted); font-size: 1.04rem; margin: 14px 0 0; }
+  .pill { font-size: .72rem; letter-spacing: .02em; text-transform: none; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--gold) 55%, var(--line)); color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, transparent); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+
+  /* three steps */
+  .steps { display: grid; gap: 16px; counter-reset: step; }
+  @media (min-width: 900px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+  .step { padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+  .step .num { display: flex; align-items: center; gap: 10px; font-size: .78rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .step .num b { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--brand); color: #fff; font-size: .85rem; letter-spacing: 0; }
+  .step .big { font-family: "Plus Jakarta Sans", Inter, sans-serif; font-weight: 800; font-size: 1.5rem; color: var(--ink); letter-spacing: -.02em; }
+  .step .big span { color: var(--brand); }
+  .step p { margin: 0; color: var(--muted); font-size: .93rem; }
+  .step .code pre { font-size: .76rem; }
+  .step a.more { margin-top: auto; font-weight: 600; font-size: .9rem; }
+
+  /* two-column layouts */
+  .two { display: grid; gap: 32px; }
+  @media (min-width: 980px) { .two { grid-template-columns: 1fr 1fr; align-items: start; } }
+  .stack { display: grid; gap: 14px; }
+  .checklist { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 10px; }
+  .checklist li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; font-size: .94rem; }
+  .checklist .n {
+    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--brand-soft); color: var(--brand); font-weight: 600; font-size: .8rem;
+  }
+  .note { margin: 18px 0 0; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: .9rem; color: var(--muted); }
+  .note strong { color: var(--ink); }
+
+  /* wizard mock */
+  .window { overflow: hidden; }
+  .window-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 70%, var(--surface)); }
+  .window-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: inline-block; }
+  .window-bar .url { margin-left: 8px; flex: 1; min-width: 0; font: .76rem "JetBrains Mono", monospace; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 4px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wiz { display: grid; grid-template-columns: 1fr; }
+  @media (min-width: 620px) { .wiz { grid-template-columns: 210px 1fr; } }
+  .wiz-steps { list-style: none; margin: 0; padding: 14px 10px; border-right: 1px solid var(--line); display: none; }
+  @media (min-width: 620px) { .wiz-steps { display: block; } }
+  .wiz-steps li { display: flex; gap: 9px; align-items: center; padding: 7px 8px; border-radius: 8px; font-size: .82rem; color: var(--muted); }
+  .wiz-steps li b { width: 20px; height: 20px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: .7rem; border: 1px solid var(--line); color: var(--muted); }
+  .wiz-steps li.done b { background: var(--brand-soft); color: var(--brand); border-color: transparent; }
+  .wiz-steps li.on { background: var(--brand-soft); color: var(--ink); font-weight: 600; }
+  .wiz-steps li.on b { background: var(--brand); color: #fff; border-color: transparent; }
+  .wiz-body { padding: 20px 22px 24px; min-height: 260px; display: flex; flex-direction: column; gap: 12px; }
+  .wiz-top { display: flex; align-items: center; gap: 10px; }
+  .wiz-top img { width: 28px; height: 28px; border-radius: 7px; }
+  .wiz-top span { font-size: .78rem; color: var(--muted); }
+  .wiz-body h3 { font-size: 1.12rem; }
+  .field { display: grid; gap: 4px; }
+  .field label { font-size: .74rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .field div { font: .84rem "JetBrains Mono", monospace; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere; }
+  .wiz-foot { margin-top: auto; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .wiz-foot .bar { flex: 1; min-width: 120px; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; }
+  .wiz-foot .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--brand), var(--cyan)); transition: width .4s ease; }
+  .wiz-foot button { font: 600 .84rem Inter, sans-serif; border: 0; border-radius: 8px; padding: 8px 14px; background: var(--brand); color: #fff; cursor: pointer; }
+  .wiz-foot button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+
+  /* sign-in mock: always the light sign-in page, as the IdP draws it by default */
+  .signin {
+    position: relative; border-radius: var(--radius); overflow: hidden; min-height: 420px;
+    display: grid; place-items: center; padding: 28px 16px;
+    background: #0b1533 url("assets/img/photo-signin-bg.jpg") center / cover no-repeat;
+  }
+  .signin::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5, 11, 29, .35), rgba(5, 11, 29, .7)); }
+  .signin-card {
+    position: relative; width: min(100%, 360px); background: #fff; color: #24304d; border-radius: 14px;
+    padding: 22px 22px 18px; box-shadow: 0 24px 60px rgba(0, 0, 0, .4); display: grid; gap: 12px;
+  }
+  .signin-logos { display: flex; align-items: center; justify-content: center; gap: 14px; padding-bottom: 12px; border-bottom: 1px solid #e6eaf2; }
+  .signin-logos img { height: 40px; width: auto; }
+  .signin-logos .div { width: 1px; height: 34px; background: #dfe4ee; }
+  .signin-card h4 { margin: 0; font: 700 1.05rem "Plus Jakarta Sans", Inter, sans-serif; color: #0b1533; text-align: center; }
+  .signin-card .in { border: 1px solid #d9dfeb; border-radius: 8px; padding: 9px 11px; font-size: .86rem; color: #5d6883; background: #f8fafd; }
+  .signin-card .go { border-radius: 8px; padding: 10px; text-align: center; font-weight: 600; font-size: .9rem; color: #fff; background: #3457d5; }
+  .powered { display: flex; align-items: center; justify-content: center; gap: 7px; font-size: .74rem; color: #7a849c; }
+  .powered img { width: 16px; height: 16px; border-radius: 4px; }
+
+  /* provisioning result */
+  .prov { padding: 18px 20px; display: grid; gap: 14px; }
+  .prov-row { display: grid; grid-template-columns: auto 1fr auto 1fr; align-items: center; gap: 12px; }
+  .prov-row img.av { width: 44px; height: 44px; border-radius: 50%; }
+  .prov-row .plate { background: #fff; border: 1px solid #e3e8f1; border-radius: 10px; padding: 6px 8px; display: grid; place-items: center; }
+  .prov-row .plate img { height: 40px; width: auto; }
+  .prov-row .who { font-size: .82rem; color: var(--muted); line-height: 1.3; }
+  .prov-row .who b { display: block; color: var(--ink); font-size: .9rem; }
+  .prov-row .link { color: var(--brand); font-size: 1.3rem; }
+  .prov ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: .86rem; }
+  .prov li { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px dashed var(--line); padding-top: 6px; }
+  .prov li span:last-child { color: var(--ok); font-weight: 600; }
+  @media (max-width: 480px) {
+    .prov-row { grid-template-columns: auto 1fr; }
+    .prov-row .link { display: none; }
+    .prov-row .plate { grid-column: 1 / -1; justify-self: start; }
+  }
+
+  /* govern */
+  .fleet { display: grid; gap: 16px; }
+  .operator { padding: 20px 22px; display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center;
+    border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); background: linear-gradient(135deg, var(--brand-soft), var(--surface) 70%); }
+  .operator img { width: 64px; height: 64px; border-radius: 14px; }
+  @media (max-width: 560px) { .operator { grid-template-columns: 1fr; } .operator img { width: 52px; height: 52px; } }
+  .operator h3 { font-size: 1.1rem; }
+  .operator p { margin: 4px 0 0; color: var(--muted); font-size: .92rem; }
+  .operator .apis { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .operator .apis code { font-size: .74rem; }
+  .tenants { display: grid; gap: 16px; position: relative; }
+  @media (min-width: 760px) { .tenants { grid-template-columns: repeat(3, 1fr); } }
+  .tenant { padding: 16px; display: grid; gap: 10px; }
+  .tenant .plate { background: var(--plate); border-radius: 10px; height: 92px; display: grid; place-items: center; padding: 10px; border: 1px solid var(--line); }
+  .tenant .plate img { max-height: 70px; width: auto; }
+  .tenant ul { list-style: none; margin: 0; padding: 0; font-size: .84rem; display: grid; gap: 4px; }
+  .tenant li { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .tenant li span:first-child { color: var(--muted); }
+  .fleet-note { color: var(--muted); font-size: .86rem; margin: 0; }
+  .caps { display: grid; gap: 14px; margin-top: 36px; }
+  @media (min-width: 640px) { .caps { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1040px) { .caps { grid-template-columns: repeat(4, 1fr); } }
+  .cap { padding: 18px; display: grid; gap: 6px; align-content: start; }
+  .cap .ico { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
+  .cap h3 { font-size: .98rem; margin-top: 4px; }
+  .cap p { margin: 0; font-size: .87rem; color: var(--muted); }
+  .cap code { font-size: .74rem; }
+  .instances { margin-top: 40px; }
 
   /* discovery diagram */
   .flow { display: grid; gap: 16px; align-items: stretch; }
   @media (min-width: 900px) { .flow { grid-template-columns: 1fr auto 1.15fr auto 1fr; } }
-  .flow-card {
-    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 22px; box-shadow: var(--shadow);
-  }
+  .flow-card { padding: 22px; }
   .flow-card .tag { font-size: .74rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
   .flow-card h3 { margin: 6px 0 14px; }
   .flow-card ul { margin: 0; padding: 0; list-style: none; font-size: .9rem; }
@@ -225,16 +374,12 @@
   .panel .explain p { margin: 0 0 12px; }
   .panel .explain ul { margin: 0; padding-left: 18px; color: var(--muted); }
   .panel .explain li { margin: 4px 0; }
-  .stack { display: grid; gap: 14px; min-width: 0; }
 
   /* packages */
   .pkgs { display: grid; gap: 16px; }
   @media (min-width: 720px) { .pkgs { grid-template-columns: repeat(2, 1fr); } }
   @media (min-width: 1040px) { .pkgs { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-  .pkg {
-    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 20px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow);
-  }
+  .pkg { padding: 20px; display: flex; flex-direction: column; gap: 10px; }
   .pkg .reg { font-size: .74rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); display: flex; justify-content: space-between; }
   .pkg .ver { font-family: "JetBrains Mono", monospace; color: var(--brand); text-transform: none; letter-spacing: 0; }
   .pkg h3 { font-family: "JetBrains Mono", monospace; font-size: .98rem; word-break: break-all; }
@@ -242,6 +387,31 @@
   .pkg .install { font: .78rem "JetBrains Mono", monospace; background: var(--brand-soft); color: var(--ink); padding: 8px 10px; border-radius: 8px; overflow-x: auto; white-space: nowrap; }
   .pkg .links { display: flex; gap: 14px; font-size: .86rem; font-weight: 500; }
   .same-version { margin-top: 22px; color: var(--muted); font-size: .93rem; }
+
+  /* agents */
+  .agents { display: grid; gap: 24px; }
+  @media (min-width: 980px) { .agents { grid-template-columns: 1fr 1.1fr; align-items: start; } }
+  .agent-list { display: grid; gap: 12px; }
+  .agent-item { padding: 16px 18px; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+  .agent-item .ico { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); font: 600 .8rem "JetBrains Mono", monospace; }
+  .agent-item p { margin: 3px 0 0; font-size: .88rem; color: var(--muted); }
+  .agents pre { white-space: pre-wrap; }
+
+  /* security band */
+  .secband {
+    position: relative; color: #e7edfb; border-top: 0 !important;
+    background: #050b1d url("assets/img/photo-security.jpg") center / cover no-repeat;
+  }
+  .secband::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(5, 11, 29, .96) 0%, rgba(5, 11, 29, .86) 55%, rgba(5, 11, 29, .55) 100%); }
+  .secband .wrap { position: relative; display: grid; gap: 28px; }
+  @media (min-width: 900px) { .secband .wrap { grid-template-columns: 1fr 1fr; align-items: center; } }
+  .secband h2 { color: #fff; }
+  .secband .kicker { color: #8fb0ff; }
+  .secband p { color: #c3cde6; }
+  .secband ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .secband li { padding: 12px 14px; border-radius: 10px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .1); font-size: .92rem; }
+  .secband li b { color: #fff; }
+  .secband code { background: rgba(255, 255, 255, .1) !important; color: #fff !important; }
 
   /* standards */
   .specs { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
@@ -254,34 +424,22 @@
   .not-supported { margin-top: 20px; font-size: .92rem; color: var(--muted); }
   .not-supported strong { color: var(--ink); }
 
-  /* run the provider */
-  .two { display: grid; gap: 28px; }
-  @media (min-width: 960px) { .two { grid-template-columns: 1fr 1fr; align-items: start; } }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
-  .chip { font-size: .84rem; font-weight: 500; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); }
-  .chip.on { border-color: color-mix(in srgb, var(--brand) 50%, var(--line)); background: var(--brand-soft); color: var(--ink); }
-  .checklist { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 10px; }
-  .checklist li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; font-size: .95rem; }
-  .checklist .n {
-    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-    background: var(--brand-soft); color: var(--brand); font-weight: 600; font-size: .8rem;
-  }
-
   /* pitfalls */
   .pitfalls { display: grid; gap: 16px; }
   @media (min-width: 720px) { .pitfalls { grid-template-columns: repeat(2, 1fr); } }
-  .pitfall {
-    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 22px 22px 22px 24px; border-left: 3px solid var(--warn);
-  }
+  .pitfall { padding: 22px 22px 22px 24px; border-left: 3px solid var(--warn); }
   .pitfall .symptom { font-size: .8rem; font-weight: 600; color: var(--warn); text-transform: uppercase; letter-spacing: .06em; }
   .pitfall h3 { margin: 6px 0 8px; }
   .pitfall p { margin: 0; font-size: .92rem; color: var(--muted); }
 
   /* PKCE builder */
+  .try-head { display: grid; gap: 20px; align-items: center; margin-bottom: 36px; }
+  @media (min-width: 760px) { .try-head { grid-template-columns: 1fr auto; } }
+  .try-head .section-head { margin-bottom: 0; }
+  .try-head img { width: 150px; height: 150px; justify-self: center; }
   .builder { display: grid; gap: 24px; }
   @media (min-width: 960px) { .builder { grid-template-columns: 1fr 1.25fr; align-items: start; } }
-  .form { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; display: grid; gap: 14px; box-shadow: var(--shadow); }
+  .form { padding: 22px; display: grid; gap: 14px; }
   .form label { display: grid; gap: 6px; font-size: .84rem; font-weight: 600; color: var(--ink); }
   .form label small { font-weight: 400; color: var(--muted); }
   .form input {
@@ -294,14 +452,33 @@
     font: 600 .92rem Inter, sans-serif; cursor: pointer; border-radius: 9px; padding: 10px 16px;
     background: var(--brand); color: #fff; border: 0;
   }
+  :root[data-theme="dark"] .form button:not(.secondary) { color: #06102a; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .form button:not(.secondary) { color: #06102a; } }
   .form button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
   .privacy { font-size: .82rem; color: var(--muted); margin: 0; }
   .out { display: grid; gap: 14px; min-width: 0; }
   .out pre { white-space: pre-wrap; word-break: break-all; }
 
+  /* brand gallery */
+  .brand-hero-wrap { text-align: center; margin: 0 0 34px; }
+  .brand-hero { width: min(100%, 760px); border-radius: 16px; vertical-align: top; }
+  .gallery-title { font-size: .8rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 28px 0 12px; }
+  .gallery { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+  @media (min-width: 640px) { .gallery { grid-template-columns: repeat(4, 1fr); } }
+  @media (min-width: 1040px) { .gallery { grid-template-columns: repeat(6, 1fr); } }
+  .gallery figure { margin: 0; border-radius: 12px; border: 1px solid var(--line); overflow: hidden; background: var(--surface); }
+  .gallery .tile { height: 116px; display: grid; place-items: center; padding: 10px; overflow: hidden; }
+  .gallery .tile img { max-height: 96px; width: auto; object-fit: contain; }
+  .gallery .tile.light { background: #ffffff; }
+  .gallery .tile.dark { background: #0a1430; }
+  .gallery .tile.full { padding: 0; }
+  .gallery .tile.full img { max-height: none; width: 100%; height: 116px; object-fit: cover; display: block; }
+  .gallery figcaption { font-size: .72rem; color: var(--muted); padding: 7px 9px; border-top: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
   /* footer */
   footer { border-top: 1px solid var(--line); padding: 40px 0 56px; color: var(--muted); font-size: .9rem; }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center; }
+  footer .lockup img { height: 44px; width: auto; }
   footer .spacer { flex: 1; }
 </style>
 </head>
@@ -310,13 +487,15 @@
 <header class="nav">
   <div class="wrap">
     <a class="brand" href="#top" aria-label="ARK Identity Server, home">
-      <span class="tile"><img src="assets/ark-logo.svg" alt=""></span>
-      ARK Identity
+      <img src="assets/img/ark-shield-64.png" alt="" width="34" height="34">
+      ARK Identity <small>RAPID</small>
     </a>
     <nav class="nav-links" aria-label="Sections">
-      <a class="hide-sm" href="#how">How it works</a>
+      <a class="hide-sm" href="#setup">Set up</a>
+      <a class="hide-sm" href="#onboard">Onboard</a>
+      <a class="hide-sm" href="#govern">Govern</a>
       <a class="hide-sm" href="#quickstart">Quickstart</a>
-      <a class="hide-sm" href="#standards">Standards</a>
+      <a class="hide-sm" href="#agents">AI agents</a>
       <a class="hide-sm" href="#try">Try it</a>
       <a href="https://github.com/ir-dev/ark-oauth-oidc">GitHub</a>
       <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle colour theme">
@@ -332,16 +511,16 @@
   <div class="hero">
     <div class="wrap">
       <div>
-        <span class="eyebrow"><span class="dot"></span>OAuth 2.1 · OpenID Connect · MIT</span>
-        <h1>Your own identity provider. <em>Three clients that already speak it.</em></h1>
+        <span class="eyebrow"><span class="dot"></span>OAuth 2.1 · OpenID Connect · Multi-tenant · MIT</span>
+        <h1>Your own identity provider, <em>in two lines.</em></h1>
         <p class="lede">
-          ARK is a self-hosted, multi-tenant OAuth 2.1 / OpenID Connect provider for ASP.NET Core.
-          It ships its own sign-in, consent and admin console. The client libraries for .NET, Python
-          and Node configure themselves from two settings.
+          ARK is a self-hosted OAuth 2.1 / OpenID Connect provider for ASP.NET Core. Add two lines, open a
+          browser and answer the setup wizard: the same process is now your IdP. Apps sign in with two
+          settings in .NET, Python or Node, and one console governs every tenant.
         </p>
         <div class="cta">
-          <a class="btn btn-primary" href="#quickstart">Sign an app in →</a>
-          <a class="btn btn-ghost" href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/GETTINGSTARTED.md">Run it locally</a>
+          <a class="btn btn-primary" href="#setup">Set up an IdP →</a>
+          <a class="btn btn-ghost" href="#quickstart">Sign an app in</a>
           <a class="btn btn-ghost" href="https://github.com/ir-dev/ark-oauth-oidc">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
             Source
@@ -349,36 +528,301 @@
         </div>
         <div class="facts">
           <span>PKCE S256 enforced</span>
-          <span>Key rotation, no redeploys</span>
+          <span>Keys rotate, nothing redeploys</span>
           <span>SQLite · MySQL · PostgreSQL</span>
+          <span>Written for AI agents</span>
         </div>
       </div>
 
-      <div class="code" aria-label="Example discovery document">
-        <div class="code-head"><span class="verb">GET</span> /my_idp/.well-known/openid-configuration</div>
-<pre>{
-  <span class="k">"issuer"</span>: <span class="s">"https://idp.example.com/my_idp"</span>,
-  <span class="k">"authorization_endpoint"</span>: <span class="s">"…/oauth2/authorize"</span>,
-  <span class="k">"token_endpoint"</span>: <span class="s">"…/oauth2/token"</span>,
-  <span class="k">"jwks_uri"</span>: <span class="s">"…/.well-known/jwks.json"</span>,
-  <span class="k">"end_session_endpoint"</span>: <span class="s">"…/oauth2/logout"</span>,
-  <span class="k">"code_challenge_methods_supported"</span>: [<span class="s">"S256"</span>],
-  <span class="k">"grant_types_supported"</span>: [
-    <span class="s">"authorization_code"</span>, <span class="s">"refresh_token"</span>,
-    <span class="s">"client_credentials"</span>,
-    <span class="s">"urn:ietf:params:oauth:grant-type:device_code"</span>
-  ],
-  <span class="k">"backchannel_logout_supported"</span>: true
-}</pre>
+      <div class="hero-art">
+        <img class="emblem" src="assets/img/ark-emblem-circuit.png" width="800" height="800" alt="ARK RAPID emblem: a shield with an ark and a keyhole, circled by an orbit, over a circuit pattern">
+        <div class="code" aria-label="The whole identity provider">
+          <div class="code-head">Program.cs<button class="copy" type="button">Copy</button></div>
+<pre><span class="k">var</span> builder = WebApplication.CreateBuilder(args);
+builder.AddArkIdp();     <span class="c">// that's the configuration</span>
+<span class="k">var</span> app = builder.Build();
+app.UseArkIdp();         <span class="c">// wizard → IdP, no restart</span>
+app.Run();</pre>
+        </div>
       </div>
     </div>
   </div>
+
+  <!-- ===== Three steps ===== -->
+  <section id="start">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">Zero to signed-in</div>
+        <h2>Three steps, and each one is the whole job.</h2>
+        <p>Most identity setups are a week of config. With Ark, each of these steps is complete as written: nothing is left to wire afterwards.</p>
+      </div>
+      <div class="steps">
+        <article class="card step">
+          <div class="num"><b>1</b>Run the provider</div>
+          <div class="big"><span>2</span> lines of C#</div>
+          <p>Add <code>AddArkIdp()</code> and <code>UseArkIdp()</code>, then run. A browser wizard asks for the rest, and the same process becomes the IdP.</p>
+          <div class="code"><pre>dotnet add package Ark.oAuth.Oidc</pre></div>
+          <a class="more" href="#setup">The setup wizard →</a>
+        </article>
+        <article class="card step">
+          <div class="num"><b>2</b>Onboard the app</div>
+          <div class="big"><span>1</span> call</div>
+          <p>One request registers the client and both redirect URIs, creates the user and maps them to the app. Forgetting that mapping is what usually breaks sign-in.</p>
+          <div class="code"><pre><span class="verb" style="color:#5eead4">POST</span> /api/oauth/v1/provision/client</pre></div>
+          <a class="more" href="#onboard">Onboarding →</a>
+        </article>
+        <article class="card step">
+          <div class="num"><b>3</b>Sign users in</div>
+          <div class="big"><span>2</span> settings</div>
+          <p><code>authority</code> and <code>client_id</code>. Endpoints, keys and capabilities come from discovery, in .NET, Python or Node.</p>
+          <div class="code"><pre>pip install "ark-oauth-client[flask]"</pre></div>
+          <a class="more" href="#quickstart">Quickstart →</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Setup wizard ===== -->
+  <section id="setup">
+    <div class="wrap two">
+      <div>
+        <div class="kicker">Set up an IdP <span class="pill">on main · ships in the next release</span></div>
+        <h2>Install the package. Run it. Answer eight questions.</h2>
+        <p class="lead">
+          Started with no tenant and no database, the server sends every page to a setup wizard at
+          <code>/ark-idp/setup</code>. When you press <strong>Install</strong> it writes the settings,
+          creates and seeds the database and reloads its configuration. The same running process then
+          serves the sign-in page and the admin console, with no restart.
+        </p>
+        <ol class="checklist">
+          <li><span class="n">1</span><span><strong>Any database.</strong> SQLite, PostgreSQL or MySQL, with <em>Test connection</em>. Point it at an existing Ark database and it attaches instead of re-seeding.</span></li>
+          <li><span class="n">2</span><span><strong>Your keys.</strong> Generate RSA 2048, 3072 or 4096, or import a PEM. The private half goes into the database, never into the settings file.</span></li>
+          <li><span class="n">3</span><span><strong>Safe on a network.</strong> From anywhere but localhost the wizard asks for the setup code printed in the start-up log. After install, <code>/ark-idp/setup</code> answers 404.</span></li>
+          <li><span class="n">4</span><span><strong>Overridable.</strong> The wizard's <code>settings.json</code> sits below user secrets and environment variables, so a key vault can still override any value.</span></li>
+        </ol>
+        <div class="stack" style="margin-top:22px">
+          <div class="code">
+            <div class="code-head">try it today, from a clone<button class="copy" type="button">Copy</button></div>
+<pre>git clone https://github.com/ir-dev/ark-oauth-oidc
+cd ark-oauth-oidc
+dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart
+<span class="c"># open https://localhost:7300 → the wizard</span></pre>
+          </div>
+        </div>
+        <p class="note"><strong>Pipeline-built?</strong> A host that already has <code>TenantId</code> and a connection string never sees the wizard. The configured route, <code>AddArkOidcServer</code>, is released on NuGet today. See the <a href="https://github.com/ir-dev/ark-oauth-oidc#s8--stand-up-the-identity-provider">S8 scenario</a>.</p>
+      </div>
+
+      <div class="card window" aria-label="Illustration of the setup wizard">
+        <div class="window-bar"><i></i><i></i><i></i><span class="url">https://localhost:7300/ark-idp/setup</span></div>
+        <div class="wiz">
+          <ol class="wiz-steps" id="wizSteps"></ol>
+          <div class="wiz-body">
+            <div class="wiz-top"><img src="assets/img/ark-shield-64.png" alt="" width="28" height="28"><span>Ark Identity Server · setup</span></div>
+            <h3 id="wizTitle">Organization &amp; branding</h3>
+            <div id="wizFields" class="stack"></div>
+            <div class="wiz-foot">
+              <div class="bar" aria-hidden="true"><i id="wizBar" style="width:12%"></i></div>
+              <button type="button" class="ghost" id="wizPrev">Back</button>
+              <button type="button" id="wizNext">Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Onboard ===== -->
+  <section id="onboard">
+    <div class="wrap two">
+      <div>
+        <div class="kicker">Onboard an app</div>
+        <h2>Four steps, one call, nothing forgotten.</h2>
+        <p class="lead">
+          Standing up an application means registering the client, registering its redirect URIs,
+          creating the account and mapping that account to the client. The mapping is the step that gets
+          forgotten, and without it sign-in fails exactly like a wrong password. Provisioning does all four
+          steps, or none of them.
+        </p>
+        <div class="stack" style="margin-top:22px">
+          <div class="code">
+            <div class="code-head"><span class="verb">POST</span> /api/oauth/v1/provision/client<button class="copy" type="button">Copy</button></div>
+<pre>{
+  <span class="k">"client_name"</span>: <span class="s">"Nexus Grid Portal"</span>,
+  <span class="k">"user_name"</span>:   <span class="s">"jane@example.com"</span>,
+  <span class="k">"redirect_uris"</span>: [<span class="s">"https://portal.example.com/signin-oidc"</span>],
+  <span class="k">"post_logout_redirect_uris"</span>: [<span class="s">"https://portal.example.com/signout-callback-oidc"</span>],
+  <span class="k">"client_logo"</span>: <span class="s">"data:image/png;base64,…"</span>
+}</pre>
+          </div>
+        </div>
+        <ul class="checklist">
+          <li><span class="n">✓</span><span><strong>Safe on collision.</strong> A taken name answers <code>409 client_exists</code> and writes nothing, so a script can never rewrite a live app's redirect URIs.</span></li>
+          <li><span class="n">✓</span><span><strong>Second apps are one call too.</strong> <code>provision/user</code> maps an existing account to another app without touching the account itself.</span></li>
+          <li><span class="n">✓</span><span><strong>A form if you prefer.</strong> <code>/{tenant}/admin/provisioning</code> does the same, and shows you the <code>curl</code> for what you typed.</span></li>
+        </ul>
+      </div>
+
+      <div class="stack">
+        <div class="card prov" aria-label="Illustration of a provisioning result">
+          <div class="prov-row">
+            <img class="av" src="assets/img/avatar.png" alt="" width="44" height="44">
+            <div class="who"><b>jane@example.com</b>new account</div>
+            <span class="link" aria-hidden="true">⇄</span>
+            <div class="plate"><img src="assets/img/tenant-nexus-grid-white.png" alt="Nexus Grid logo (example)" width="476" height="182"></div>
+          </div>
+          <ul>
+            <li><span>client_created</span><span>true</span></li>
+            <li><span>redirect URIs (sign-in + sign-out)</span><span>registered</span></li>
+            <li><span>user_credential</span><span>default_password</span></li>
+            <li><span>mapping_created</span><span>true</span></li>
+            <li><span>setup_url</span><span>/oauth2/integrate/nexus_grid_portal</span></li>
+          </ul>
+        </div>
+        <div class="signin" aria-label="Illustration of the sign-in page Jane sees">
+          <div class="signin-card">
+            <div class="signin-logos">
+              <img src="assets/img/ark-ship-wide-clear.png" alt="Host logo: ARK RAPID" width="900" height="260">
+              <span class="div" aria-hidden="true"></span>
+              <img src="assets/img/tenant-sentinel-forge-white.png" alt="Client logo: Sentinel Forge (example)" width="445" height="195">
+            </div>
+            <h4>Sign in to Sentinel Forge</h4>
+            <div class="in">jane@example.com</div>
+            <div class="in">••••••••••</div>
+            <div class="go">Sign in</div>
+            <div class="powered"><img src="assets/img/ark-shield-64.png" alt="" width="16" height="16">Powered by Ark Identity Server</div>
+          </div>
+        </div>
+        <p class="fleet-note">The sign-in page shows two logos: the host's, so users can see who is asking for their password, and the app's own <code>client_logo</code>, so they can see what they are signing in to. Theme and text size are the viewer's choice on every page.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Govern ===== -->
+  <section id="govern">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">Govern</div>
+        <h2>One operator. Every tenant. Every instance.</h2>
+        <p>
+          Each tenant is its own issuer, with its own signing key, discovery document and branding.
+          Administration is deliberately single-operator: the tenant you named in the wizard governs all
+          of them, from one console and one API that a pipeline can drive too.
+        </p>
+      </div>
+
+      <div class="fleet">
+        <div class="card operator">
+          <img src="assets/img/ark-shield-512.png" alt="" width="64" height="64">
+          <div>
+            <h3>Operator tenant · <code>ark_idp</code></h3>
+            <p>Admin console at <code>/ark_idp/admin</code>, with Provisioning and Data pages. Management API at <code>/api/oauth/v1/…</code>, open to the operator's console session or its machine client's token.</p>
+            <div class="apis"><code>tenant/upsert</code><code>provision/client</code><code>activation/user</code><code>user/client/claims/upsert</code><code>data/export</code><code>data/import/apply</code></div>
+          </div>
+        </div>
+        <div class="tenants">
+          <article class="card tenant">
+            <div class="plate"><img src="assets/img/tenant-nexus-grid.png" alt="Nexus Grid logo (example tenant)" width="476" height="182"></div>
+            <ul>
+              <li><span>issuer</span><code>/nexus_grid</code></li>
+              <li><span>signing key</span><span>its own, in JWKS</span></li>
+              <li><span>apps &amp; users</span><span>mapped per app</span></li>
+            </ul>
+          </article>
+          <article class="card tenant">
+            <div class="plate"><img src="assets/img/tenant-sentinel-forge.png" alt="Sentinel Forge logo (example tenant)" width="445" height="195"></div>
+            <ul>
+              <li><span>issuer</span><code>/sentinel_forge</code></li>
+              <li><span>signing key</span><span>its own, in JWKS</span></li>
+              <li><span>apps &amp; users</span><span>mapped per app</span></li>
+            </ul>
+          </article>
+          <article class="card tenant">
+            <div class="plate"><img src="assets/img/tenant-bluehaven.png" alt="Bluehaven Systems logo (example tenant)" width="268" height="283"></div>
+            <ul>
+              <li><span>issuer</span><code>/bluehaven</code></li>
+              <li><span>signing key</span><span>its own, in JWKS</span></li>
+              <li><span>apps &amp; users</span><span>mapped per app</span></li>
+            </ul>
+          </article>
+        </div>
+        <p class="fleet-note">Example tenants. Every tenant's endpoints sit under <code>{BaseUrl}/{tenant_id}/</code>; any standard OIDC library pointed there configures itself.</p>
+      </div>
+
+      <div class="caps">
+        <div class="card cap">
+          <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></div>
+          <h3>Provision</h3>
+          <p>App, redirect URIs, user and access in one call. A taken name is <code>409</code> and nothing is written.</p>
+        </div>
+        <div class="card cap">
+          <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18.4 6.6a9 9 0 1 1-12.8 0M12 2v10"/></svg></div>
+          <h3>Switch off, really</h3>
+          <p>Deactivating a user or an app revokes its sessions and refresh tokens at once, without deleting anything.</p>
+        </div>
+        <div class="card cap">
+          <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></div>
+          <h3>Ark claims per app</h3>
+          <p>What a user may do is granted per user and per app. Apps check <code>billing.admin</code>, not scopes.</p>
+        </div>
+        <div class="card cap">
+          <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <h3>Pipelines, not passwords</h3>
+          <p>CI calls the API with a <code>{tenant}_machine</code> token whose secret comes from a vault. No other client is admitted.</p>
+        </div>
+        <div class="card cap">
+          <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></div>
+          <h3>Encrypted backup</h3>
+          <p>Every table, keys included, as one file with a checksum, optionally sealed with AES-256-GCM.</p>
+        </div>
+        <div class="card cap">
+          <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h6"/></svg></div>
+          <h3>Import that shows its plan</h3>
+          <p><code>replace</code>, <code>merge_skip</code> or <code>merge_overwrite</code>, shown row by row before anything is written. Unsafe rows are excluded by named rules.</p>
+        </div>
+        <div class="card cap">
+          <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg></div>
+          <h3>Factory reset</h3>
+          <p>Empties every table and re-runs the first-run seed. It refuses if no administrator password is configured.</p>
+        </div>
+        <div class="card cap">
+          <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div>
+          <h3>Upgrades apply themselves</h3>
+          <p>Pending scripts run once and are recorded. Missing tables and columns are added from the model, on every provider.</p>
+        </div>
+      </div>
+
+      <div class="two instances">
+        <div>
+          <h3 style="font-size:1.25rem">Many instances, one shape.</h3>
+          <p class="lead">
+            Every instance runs the same self-applying bootstrap, so a rolling upgrade has no migration
+            step. Configuration comes from the environment or a key vault, so instances are identical.
+            Use PostgreSQL or MySQL once there is more than one writer. To promote, clone or recover, take
+            an encrypted export from one instance and an analysed import into the other. Every export,
+            import and reset is written to the audit log.
+          </p>
+        </div>
+        <div class="code">
+          <div class="code-head">governance from a pipeline<button class="copy" type="button">Copy</button></div>
+<pre>TOKEN=$(curl -s -X POST https://idp.example.com/ark_idp/oauth2/token \
+  -d grant_type=client_credentials -d client_id=ark_idp_machine \
+  --data-urlencode client_secret="$ARK_MACHINE_SECRET" \
+  -d scope=client.register | jq -r .access_token)
+
+<span class="c"># a leaver: sessions and refresh tokens go now</span>
+curl -s -X POST https://idp.example.com/api/oauth/v1/activation/user \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{ "user_name": "leaver@example.com", "is_active": false }'</pre>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- ===== How it works ===== -->
   <section id="how">
     <div class="wrap">
       <div class="section-head">
-        <div class="kicker">How it works</div>
+        <div class="kicker">How sign-in works</div>
         <h2>Two settings. Everything else is discovered.</h2>
         <p>
           An app is configured with the issuer and its client id, and nothing else. Endpoints, signing
@@ -388,7 +832,7 @@
       </div>
 
       <div class="flow">
-        <div class="flow-card">
+        <div class="card flow-card">
           <div class="tag">Your app</div>
           <h3>Configured with</h3>
           <ul>
@@ -398,7 +842,7 @@
           </ul>
         </div>
         <div class="arrow" aria-hidden="true">→</div>
-        <div class="flow-card accent">
+        <div class="card flow-card accent">
           <div class="tag">ARK identity provider</div>
           <h3>Discovers at runtime</h3>
           <ul>
@@ -409,7 +853,7 @@
           </ul>
         </div>
         <div class="arrow" aria-hidden="true">→</div>
-        <div class="flow-card">
+        <div class="card flow-card">
           <div class="tag">Back in your app</div>
           <h3>A verified user</h3>
           <ul>
@@ -432,7 +876,7 @@
       <div class="section-head">
         <div class="kicker">Quickstart</div>
         <h2>Sign an app in, in any of three languages.</h2>
-        <p>The three clients are ports of each other, so an integration in one translates almost line for line into the others.</p>
+        <p>The three clients are ports of each other and share one version number, so an integration in one translates almost line for line into the others.</p>
       </div>
 
       <div class="tabs" role="tablist" aria-label="Client language">
@@ -447,6 +891,7 @@
           <ul>
             <li>Ark claims arrive as role claims, so <code>[Authorize(Roles = …)]</code> just works.</li>
             <li>Read the access token per request with <code>GetArkAccessTokenAsync()</code>. Never cache it.</li>
+            <li>Shared PCs: <code>AccountSwitch:RequireArkClaims</code> plus <code>RequiredClaims</code>. Configuration only.</li>
             <li>Keep <code>Microsoft.IdentityModel.*</code> on one version. A mixed set only fails at runtime.</li>
           </ul>
         </div>
@@ -517,6 +962,7 @@ auth = add_ark_oidc_client(app, {
           <ul>
             <li>Omit <code>clientSecret</code> for a public client. PKCE is used either way.</li>
             <li>Sessions are sealed with AES-256-GCM, in the same format as the Python client.</li>
+            <li>Shared PCs: <code>accountSwitch: { requireArkClaims: true }</code>, just like the other two.</li>
             <li>Never add your own route at the callback path. It shadows the handler.</li>
           </ul>
         </div>
@@ -555,84 +1001,76 @@ app.get(<span class="s">'/billing'</span>, auth.requireClaims(<span class="s">'b
         <p>Every release ships all four together from one workflow, using Trusted Publishing on every registry. No tokens are involved.</p>
       </div>
       <div class="pkgs">
-        <article class="pkg">
+        <article class="card pkg">
           <div class="reg">NuGet <span class="ver" data-reg="nuget" data-id="ark.oauth.oidc">·</span></div>
           <h3>Ark.oAuth.Oidc</h3>
-          <p>The identity provider itself, which turns any ASP.NET Core app into the IdP, admin console included.</p>
+          <p>The identity provider: setup wizard, sign-in, consent, admin console, provisioning and data tools.</p>
           <div class="install">dotnet add package Ark.oAuth.Oidc</div>
           <div class="links"><a href="https://www.nuget.org/packages/Ark.oAuth.Oidc">nuget.org</a><a href="https://github.com/ir-dev/ark-oauth-oidc/tree/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc">Source</a></div>
         </article>
-        <article class="pkg">
+        <article class="card pkg">
           <div class="reg">NuGet <span class="ver" data-reg="nuget" data-id="ark.oauth.client">·</span></div>
           <h3>Ark.oAuth.Client</h3>
           <p>The ASP.NET Core client: OIDC handlers, token refresh, the account switch and claim projection.</p>
           <div class="install">dotnet add package Ark.oAuth.Client</div>
           <div class="links"><a href="https://www.nuget.org/packages/Ark.oAuth.Client">nuget.org</a><a href="https://github.com/ir-dev/ark-oauth-oidc/tree/main/Ark.oAuth.Oidc/Ark.oAuth.Client">README</a></div>
         </article>
-        <article class="pkg">
+        <article class="card pkg">
           <div class="reg">PyPI <span class="ver" data-reg="pypi" data-id="ark-oauth-client">·</span></div>
           <h3>ark-oauth-client</h3>
           <p>A Python client for Flask, with a core that doesn't depend on any framework.</p>
           <div class="install">pip install "ark-oauth-client[flask]"</div>
           <div class="links"><a href="https://pypi.org/project/ark-oauth-client/">pypi.org</a><a href="https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_py">README</a></div>
         </article>
-        <article class="pkg">
+        <article class="card pkg">
           <div class="reg">npm <span class="ver" data-reg="npm" data-id="ark-oauth-client">·</span></div>
           <h3>ark-oauth-client</h3>
-          <p>A Node client: Express/Connect middleware with sessions that interoperate with the Python client.</p>
+          <p>A Node client: Express/Connect middleware, bearer protection and sessions that interoperate with the Python client.</p>
           <div class="install">npm install ark-oauth-client</div>
           <div class="links"><a href="https://www.npmjs.com/package/ark-oauth-client">npmjs.com</a><a href="https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_nodejs">README</a></div>
         </article>
       </div>
-      <p class="same-version">
-        The .NET and Python packages ship an <code>AI-PROMPT.md</code> and recipes beside their READMEs. Paste one into your coding
-        agent and it will wire the integration up the way this project intends.
-      </p>
     </div>
   </section>
 
-  <!-- ===== Run the provider ===== -->
-  <section id="provider">
-    <div class="wrap two">
-      <div>
-        <div class="kicker">The provider</div>
-        <h2>Run your own issuer.</h2>
-        <p style="color:var(--muted);font-size:1.05rem;margin:14px 0 0">
-          Three extension methods turn an ASP.NET Core app into the identity provider. On first run it creates its
-          schema, generates an RSA signing key locally, seeds the scope catalogue and creates the administrator.
-        </p>
-        <div class="chips" aria-label="Supported databases">
-          <span class="chip on">SQLite (default)</span>
-          <span class="chip on">MySQL</span>
-          <span class="chip on">PostgreSQL</span>
-        </div>
-        <ol class="checklist">
-          <li><span class="n">1</span><span><strong>Multi-tenant protocol.</strong> Each tenant is its own issuer at <code>{BaseUrl}/{TenantId}</code>.</span></li>
-          <li><span class="n">2</span><span><strong>Admin console built in</strong> at <code>/{tenant}/admin</code>, with provisioning and export, import and reset.</span></li>
-          <li><span class="n">3</span><span><strong>Two-phase key rotation.</strong> The new key is published in JWKS before it signs anything.</span></li>
-          <li><span class="n">4</span><span><strong>Refresh-token rotation.</strong> Replaying a used token revokes its whole family.</span></li>
-        </ol>
+  <!-- ===== AI agents ===== -->
+  <section id="agents">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">AI first</div>
+        <h2>Written for the coding agent that will do the work.</h2>
+        <p>Point Claude Code, Copilot, Cursor or Codex at this repository and it finds rules, prompts and checks it can follow, so it has nothing to guess and no config to invent.</p>
       </div>
-      <div class="stack">
-        <div class="code">
-          <div class="code-head">try the sample · macOS / Linux<button class="copy" type="button">Copy</button></div>
-<pre>git clone https://github.com/ir-dev/ark-oauth-oidc
-cd ark-oauth-oidc
-./run.sh        <span class="c"># IdP on :7233, sample client on :7255</span></pre>
+      <div class="agents">
+        <div class="agent-list">
+          <div class="card agent-item"><div class="ico">txt</div><div><h3><a href="llms.txt">llms.txt</a></h3><p>A digest of the whole project at a fixed URL: packages, entry points, required settings, governance API and the rules that matter.</p></div></div>
+          <div class="card agent-item"><div class="ico">S15</div><div><h3><a href="https://github.com/ir-dev/ark-oauth-oidc#1-scenario-router">A scenario router</a></h3><p>Fifteen tasks, from adding sign-in to restoring a backup. Each one has a paste-ready prompt, exact code, a <em>Done when</em> check and a <em>Do not</em> list.</p></div></div>
+          <div class="card agent-item"><div class="ico">.md</div><div><h3>AI-PROMPT &amp; AI-RECIPES in the packages</h3><p>The .NET and Python packages ship rules, recipes, the API surface, troubleshooting and migration notes beside their READMEs and inside the package.</p></div></div>
+          <div class="card agent-item"><div class="ico">§4</div><div><h3><a href="https://github.com/ir-dev/ark-oauth-oidc#4-context-block-for-a-system-prompt">One system-prompt block</a></h3><p>The whole contract in about forty lines, for an agent that works with Ark every day.</p></div></div>
         </div>
         <div class="code">
-          <div class="code-head">Program.cs · your own host<button class="copy" type="button">Copy</button></div>
-<pre>builder.Services.AddArkOidcServer(builder.Environment);
-builder.Services.AddArkOidcClient(builder.Configuration); <span class="c">// the console is a client</span>
+          <div class="code-head">paste into your agent · S1<button class="copy" type="button">Copy</button></div>
+<pre>Add Ark sign-in to this ASP.NET Core app using the Ark.oAuth.Client NuGet package. Do not hand-roll OAuth. Authority is https://idp.example.com/my_idp and ClientId is my-app. Put both in the "ark_oauth_client" config section; the client secret, if any, goes in user-secrets, not appsettings. Call AddArkOidcClient(builder.Configuration), and make sure UseRouting() precedes UseAuthentication() and UseAuthorization(). Protect the dashboard with [Authorize], and admin pages with [Authorize(Roles = "billing.admin")]. Add a sign-out that signs out of BOTH ArkOidcClient.CookieScheme and ArkOidcClient.OidcScheme. Do not add any route at /signin-oidc. Afterwards, list the exact redirect URIs I must register on the IdP and remind me to map my user to the client.</pre>
+        </div>
+      </div>
+    </div>
+  </section>
 
-app.UseRouting();
-app.UseArkOidcCors();     <span class="c">// only for browser SPA clients</span>
-app.UseArkAuthData();     <span class="c">// database bootstrap</span>
-app.UseArkOidcClient();
-app.UseAuthentication();
-app.UseAuthorization();</pre>
-        </div>
+  <!-- ===== Secure by default ===== -->
+  <section class="secband" id="security">
+    <div class="wrap">
+      <div>
+        <div class="kicker">Secure by default</div>
+        <h2>The safe choice is the only choice.</h2>
+        <p>OAuth 2.1 removed the risky grants, and Ark never implemented them. The rest is enforced as well, not left as advice.</p>
       </div>
+      <ul>
+        <li><b>PKCE <code>S256</code> enforced</b> for public clients; <code>plain</code> is refused.</li>
+        <li><b>Codes and refresh tokens stored hashed.</b> Read access to the database yields nothing redeemable.</li>
+        <li><b>Replay is compromise.</b> A reused refresh token revokes its whole family.</li>
+        <li><b>Exact redirect matching</b>, and no open redirect before the URI is validated.</li>
+        <li><b>No account enumeration.</b> One message for every sign-in failure, constant-time client authentication, and lockout.</li>
+      </ul>
     </div>
   </section>
 
@@ -668,28 +1106,28 @@ app.UseAuthorization();</pre>
       <div class="section-head">
         <div class="kicker">Before you ship</div>
         <h2>Four things that look like a wrong password.</h2>
-        <p>Most failed sign-ins come down to one of these, in every language.</p>
+        <p>Most failed sign-ins come down to one of these, in every language. Provisioning avoids the first two.</p>
       </div>
       <div class="pitfalls">
-        <div class="pitfall">
+        <div class="card pitfall">
           <div class="symptom">Symptom: “invalid credentials”</div>
           <h3>Map the user to the client</h3>
           <p>ARK maps users to clients explicitly. Without a mapping, sign-in fails with an error that is indistinguishable from a wrong password.</p>
         </div>
-        <div class="pitfall">
+        <div class="card pitfall">
           <div class="symptom">Symptom: invalid redirect_uri</div>
           <h3>Register both callbacks, exactly</h3>
           <p>Redirect URIs are matched byte for byte. Register both <code>/signin-oidc</code> and <code>/signout-callback-oidc</code>.</p>
         </div>
-        <div class="pitfall">
+        <div class="card pitfall">
           <div class="symptom">Symptom: invalid_scope</div>
           <h3>Scopes are a whitelist</h3>
           <p>A scope that isn't registered on the client is rejected, not dropped. <code>offline_access</code> is what produces a refresh token.</p>
         </div>
-        <div class="pitfall">
+        <div class="card pitfall">
           <div class="symptom">Symptom: stuck on “no access”</div>
           <h3>Shared browsers need an account switch</h3>
-          <p>SSO signs the next person in as the previous one. Turn on <code>RequireArkClaims</code> to offer <code>prompt=login</code> instead of a dead end.</p>
+          <p>SSO signs the next person in as the previous one. All three clients ship the fix: turn on <code>RequireArkClaims</code> with <code>RequiredClaims</code>, and the app offers <code>prompt=login</code> instead of a dead end.</p>
         </div>
       </div>
     </div>
@@ -698,16 +1136,19 @@ app.UseAuthorization();</pre>
   <!-- ===== Try it ===== -->
   <section id="try">
     <div class="wrap">
-      <div class="section-head">
-        <div class="kicker">Try it</div>
-        <h2>Build a PKCE sign-in request for your issuer.</h2>
-        <p>
-          Enter your authority and client id to get the authorization URL and the matching token exchange. The PKCE
-          verifier, <code>state</code> and <code>nonce</code> are generated with Web Crypto in this tab.
-        </p>
+      <div class="try-head">
+        <div class="section-head">
+          <div class="kicker">Try it</div>
+          <h2>Build a PKCE sign-in request for your issuer.</h2>
+          <p>
+            Enter your authority and client id to get the authorization URL and the matching token exchange. The PKCE
+            verifier, <code>state</code> and <code>nonce</code> are generated with Web Crypto in this tab.
+          </p>
+        </div>
+        <img src="assets/img/ark-lock-animated.webp" alt="" width="240" height="240" loading="lazy">
       </div>
       <div class="builder">
-        <form class="form" id="pkceForm" autocomplete="off">
+        <form class="card form" id="pkceForm" autocomplete="off">
           <label>Authority <small>The issuer, {BaseUrl}/{TenantId}</small>
             <input id="fAuthority" value="https://localhost:7233/ark_idp" spellcheck="false" required>
           </label>
@@ -744,14 +1185,78 @@ app.UseAuthorization();</pre>
     </div>
   </section>
 
+  <!-- ===== Brand ===== -->
+  <section id="brand">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">The marks</div>
+        <h2>From a simple oAuth2 sample to ARK RAPID.</h2>
+        <p>Ark started as a small ASP.NET Core OAuth 2 implementation and grew into a standards-complete, multi-tenant identity provider. These are its marks, then and now.</p>
+      </div>
+      <div class="brand-hero-wrap">
+      <img class="brand-hero on-light" src="assets/img/ark-banner-light.png" width="1400" height="512" loading="lazy" alt="ARK RAPID oAuth2 (OIDC) IdP: secure identity, trusted access, faithful innovation">
+      <img class="brand-hero on-dark" src="assets/img/ark-banner-dark.png" width="1399" height="604" loading="lazy" alt="ARK RAPID oAuth2 (OIDC) IdP: secure identity, trusted access, faithful innovation">
+      </div>
+
+      <div class="gallery-title">ARK RAPID, today</div>
+      <div class="gallery">
+        <figure><div class="tile dark"><img src="assets/img/ark-emblem-navy.png" alt="ARK RAPID emblem on navy" loading="lazy" width="640" height="640"></div><figcaption>Emblem · navy</figcaption></figure>
+        <figure><div class="tile dark"><img src="assets/img/ark-emblem-navy-alt.png" alt="ARK RAPID emblem on navy, alternate" loading="lazy" width="640" height="640"></div><figcaption>Emblem · navy, alt</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/ark-emblem-sketch.png" alt="ARK RAPID emblem, line sketch" loading="lazy" width="520" height="602"></div><figcaption>Emblem · sketch</figcaption></figure>
+        <figure><div class="tile dark"><img src="assets/img/ark-shield-512.png" alt="ARK shield icon" loading="lazy" width="512" height="512"></div><figcaption>Shield · app icon</figcaption></figure>
+        <figure><div class="tile dark"><img src="assets/img/ark-lockup-on-dark.png" alt="ARK RAPID lockup for dark backgrounds" loading="lazy" width="720" height="273"></div><figcaption>Lockup · on dark</figcaption></figure>
+        <figure><div class="tile dark"><img src="assets/img/ark-lockup-on-dark-wide.png" alt="ARK RAPID wide lockup for dark backgrounds" loading="lazy" width="900" height="341"></div><figcaption>Lockup · wide, on dark</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/ark-ship-stacked.png" alt="ARK RAPID ship logo, stacked" loading="lazy" width="640" height="423"></div><figcaption>Ship · stacked</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/ark-ship-stacked-white.png" alt="ARK RAPID ship logo, stacked, white" loading="lazy" width="640" height="423"></div><figcaption>Ship · stacked, white</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/ark-ship-stacked-white-2.png" alt="ARK RAPID ship logo, stacked, white, variant" loading="lazy" width="640" height="423"></div><figcaption>Ship · stacked, white 2</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/ark-ship-stacked-clear.png" alt="ARK RAPID ship logo, stacked, transparent" loading="lazy" width="640" height="423"></div><figcaption>Ship · stacked, clear</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/ark-ship-wide-white.png" alt="ARK RAPID ship logo, wide, white" loading="lazy" width="900" height="260"></div><figcaption>Ship · wide, white</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/ark-ship-wide-white-2.png" alt="ARK RAPID ship logo, wide, white, variant" loading="lazy" width="900" height="260"></div><figcaption>Ship · wide, white 2</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/ark-ship-wide-clear-2.png" alt="ARK RAPID ship logo, wide, transparent, variant" loading="lazy" width="900" height="260"></div><figcaption>Ship · wide, clear 2</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/ark-ship-wide-clear.png" alt="ARK RAPID ship logo, wide, transparent" loading="lazy" width="900" height="260"></div><figcaption>Ship · wide, clear</figcaption></figure>
+      </div>
+
+      <div class="gallery-title">Where it started: ARK(oAuth), v1</div>
+      <div class="gallery">
+        <figure><div class="tile full"><img src="assets/img/legacy-aspnet-cover.png" alt="Cover: C#, ASP.NET Core, a simple oAuth2 implementation, by Immanuel" loading="lazy" width="960" height="389"></div><figcaption>The first cover</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/legacy-dev-card.png" alt="Immanuel (Developer) card" loading="lazy" width="534" height="333"></div><figcaption>Developer card</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/legacy-ark-badge.png" alt="ARK badge" loading="lazy" width="178" height="129"></div><figcaption>ARK badge</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/legacy-idp-wordmark.png" alt="IDP, Identity Provider wordmark" loading="lazy" width="600" height="67"></div><figcaption>IdP wordmark</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/legacy-ark-idp-shield.png" alt="ARK IdP shield, oAuth2 OIDC" loading="lazy" width="200" height="206"></div><figcaption>IdP shield</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/legacy-ark-oauth-wordmark.png" alt="ARK(oAuth) wordmark" loading="lazy" width="520" height="99"></div><figcaption>ARK(oAuth) wordmark</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/legacy-ark-oauth-wordmark-sm.png" alt="ARK(oAuth) wordmark, small" loading="lazy" width="192" height="46"></div><figcaption>Wordmark · small</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/legacy-arkoauth-clear.png" alt="ARK(oAuth) logo, transparent" loading="lazy" width="900" height="172"></div><figcaption>ARK(oAuth) · clear</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/legacy-arkoauth-clear-sm.png" alt="ARK(oAuth) logo, transparent, small" loading="lazy" width="500" height="96"></div><figcaption>ARK(oAuth) · clear, small</figcaption></figure>
+        <figure><div class="tile full"><img src="assets/img/legacy-arkoauth-blue.png" alt="ARK(oAuth) logo, blue" loading="lazy" width="800" height="600"></div><figcaption>ARK(oAuth) · blue</figcaption></figure>
+        <figure><div class="tile full"><img src="assets/img/legacy-arkoauth-blue-sm.png" alt="ARK(oAuth) logo, blue, small" loading="lazy" width="500" height="375"></div><figcaption>ARK(oAuth) · blue, small</figcaption></figure>
+        <figure><div class="tile full"><img src="assets/img/legacy-arkoauth-white.png" alt="ARK(oAuth) logo on white" loading="lazy" width="800" height="600"></div><figcaption>ARK(oAuth) · white</figcaption></figure>
+        <figure><div class="tile full"><img src="assets/img/legacy-arkoauth-white-sm.png" alt="ARK(oAuth) logo on white, small" loading="lazy" width="500" height="375"></div><figcaption>ARK(oAuth) · white, small</figcaption></figure>
+        <figure><div class="tile full"><img src="assets/img/legacy-arkoauth-black.png" alt="ARK(oAuth) logo on black" loading="lazy" width="800" height="600"></div><figcaption>ARK(oAuth) · black</figcaption></figure>
+        <figure><div class="tile full"><img src="assets/img/legacy-arkoauth-black-sm.png" alt="ARK(oAuth) logo on black, small" loading="lazy" width="500" height="375"></div><figcaption>ARK(oAuth) · black, small</figcaption></figure>
+      </div>
+
+      <div class="gallery-title">Example tenant marks, used on this page</div>
+      <div class="gallery">
+        <figure><div class="tile light"><img src="assets/img/tenant-nexus-grid.png" alt="Nexus Grid (example)" loading="lazy" width="476" height="182"></div><figcaption>Nexus Grid</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/tenant-sentinel-forge.png" alt="Sentinel Forge (example)" loading="lazy" width="445" height="195"></div><figcaption>Sentinel Forge</figcaption></figure>
+        <figure><div class="tile light"><img src="assets/img/tenant-bluehaven-white.png" alt="Bluehaven Systems (example)" loading="lazy" width="268" height="283"></div><figcaption>Bluehaven Systems</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <footer>
   <div class="wrap">
-    <span>ARK Identity Server · MIT License · © Immanuel R</span>
+    <a class="lockup" href="#top" aria-label="ARK RAPID, back to top">
+      <img class="on-light" src="assets/img/ark-ship-wide-clear.png" alt="ARK RAPID" width="900" height="260" loading="lazy">
+      <img class="on-dark" src="assets/img/ark-lockup-on-dark-wide.png" alt="ARK RAPID" width="900" height="341" loading="lazy">
+    </a>
+    <span>MIT License · © Immanuel R</span>
     <span class="spacer"></span>
     <a href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/README.md">Reference</a>
     <a href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/GETTINGSTARTED.md">Getting started</a>
+    <a href="llms.txt">llms.txt</a>
     <a href="https://github.com/ir-dev/ark-oauth-oidc/releases">Releases</a>
   </div>
 </footer>
@@ -804,6 +1309,40 @@ app.UseAuthorization();</pre>
     setTimeout(() => (b.textContent = 'Copy'), 1400);
   });
 
+  // ----- setup wizard illustration: the eight steps the real wizard walks through -----
+  const wiz = [
+    ['Organization & branding', [['Organization', 'Sentinel Forge'], ['Logo', 'sentinel-forge.png · live sign-in preview'], ['Terms / privacy', 'https://sentinelforge.example/legal']]],
+    ['Server address', [['Public URL', 'https://id.sentinelforge.example'], ['Operator tenant', 'sf_idp'], ['Issuer it will produce', 'https://id.sentinelforge.example/sf_idp']]],
+    ['Database', [['Provider', 'PostgreSQL'], ['Connection', 'Host=db;Database=ark_idp;Username=ark'], ['Test connection', '✓ reachable · empty, will be seeded']]],
+    ['Signing key', [['Key', 'RSA 3072 · RS256 · generated'], ['Private key', 'stored in the database only']]],
+    ['Administrator', [['Username', 'admin'], ['Password', '•••••••••••••••• (generated)']]],
+    ['Users & email', [['First password', 'activation link by email'], ['SMTP', 'smtp.sentinelforge.example:587 · Send test ✓']]],
+    ['Protocol & security', [['Device flow · PAR · back-channel logout', 'on'], ['Dynamic registration', 'off'], ['Lockout', '10 failures → 15 minutes'], ['Machine client secret', 'generated · shown once']]],
+    ['Review & install', [['Install', 'writes settings · creates & seeds the DB · reloads config'], ['Restart', 'none: this process is now the IdP']]]
+  ];
+  const stepsEl = document.getElementById('wizSteps');
+  stepsEl.innerHTML = wiz.map((s, i) => `<li><b>${i + 1}</b>${s[0].replace(/&/g, '&amp;')}</li>`).join('');
+  const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let at = 0, timer = null;
+  const show = i => {
+    at = (i + wiz.length) % wiz.length;
+    [...stepsEl.children].forEach((li, n) => { li.className = n < at ? 'done' : n === at ? 'on' : ''; });
+    document.getElementById('wizTitle').textContent = wiz[at][0];
+    document.getElementById('wizFields').innerHTML = wiz[at][1]
+      .map(([k, v]) => `<div class="field"><label>${esc(k)}</label><div>${esc(v)}</div></div>`).join('');
+    document.getElementById('wizBar').style.width = `${Math.round((at + 1) / wiz.length * 100)}%`;
+    document.getElementById('wizNext').textContent = at === wiz.length - 1 ? 'Install' : 'Next';
+  };
+  const stop = () => { clearInterval(timer); timer = null; };
+  document.getElementById('wizNext').addEventListener('click', () => { stop(); show(at + 1); });
+  document.getElementById('wizPrev').addEventListener('click', () => { stop(); show(at - 1); });
+  show(0);
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const box = document.querySelector('.window');
+    const start = () => { if (!timer) timer = setInterval(() => show(at + 1), 2600); };
+    new IntersectionObserver(es => es.forEach(e => (e.isIntersecting ? start() : stop()))).observe(box);
+  }
+
   // ----- live package versions (falls back to the dot if a registry is unreachable) -----
   const sources = {
     nuget: id => fetch(`https://api.nuget.org/v3-flatcontainer/${id}/index.json`).then(r => r.json()).then(j => j.versions.at(-1)),
@@ -817,7 +1356,6 @@ app.UseAuthorization();</pre>
   // ----- PKCE request builder -----
   const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   const random = n => b64url(crypto.getRandomValues(new Uint8Array(n)));
-  const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const issuer = () => document.getElementById('fAuthority').value.trim().replace(/\/+$/, '');
 
   document.getElementById('pkceForm').addEventListener('submit', async e => {

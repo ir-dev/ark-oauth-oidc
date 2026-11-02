@@ -6,7 +6,19 @@ Published to <https://ir-dev.github.io/ark-oauth-oidc/> by `.github/workflows/pa
 One-time setup: **Settings → Pages → Source = GitHub Actions**.
 
 Keep it in step with the root `README.md` when a fact on it changes (supported specs, endpoints, the
-quickstart snippets). Package versions are read live from NuGet, PyPI and npm, so a release needs no edit.
+quickstart snippets, the governance API). Package versions are read live from NuGet, PyPI and npm, so a
+release needs no edit.
+
+| File | What it is |
+|---|---|
+| `index.html` | The page: setup wizard, onboarding, governance, quickstart, AI agents, standards, PKCE builder, brand marks |
+| `llms.txt` | The machine-readable digest for coding agents ([llmstxt.org](https://llmstxt.org) format). Update it with the README's §4 context block |
+| `assets/img/` | Web-sized copies of the brand images in `Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/wwwroot/img`. The root `README.md` uses them too |
+| `assets/favicon.png`, `assets/apple-touch-icon.png` | Made from `assets/img/ark-shield-512.png` |
+
+The originals stay in `wwwroot/img`. When one changes, re-export the web copy here at the display size
+(the largest is 1600 px wide) rather than linking the original, which can be several megabytes.
+Tenant logos (`tenant-*.png`) are fictional examples.
 
 ## Can the identity provider itself run here, on SQLite?
 

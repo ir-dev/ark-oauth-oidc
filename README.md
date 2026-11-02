@@ -2,69 +2,132 @@
   README.md — ARK Identity Server (repository root)
   Audience: AI coding agents first, the humans who drive them second.
   Source of truth: the code. Where this file and the source disagree, the source wins — say so.
+  Machine-readable digest of this file: https://ir-dev.github.io/ark-oauth-oidc/llms.txt (site/llms.txt)
 -->
 
-# ARK Identity Server
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="site/assets/img/ark-banner-dark.png">
+    <img alt="ARK RAPID — OAuth2 / OIDC identity provider. Secure identity, trusted access." src="site/assets/img/ark-banner-light.png" width="720">
+  </picture>
+</p>
 
-[![Build & Release](https://img.shields.io/github/actions/workflow/status/ir-dev/ark-oauth-oidc/release.yml?label=build%20%26%20release&logo=githubactions&logoColor=white)](https://github.com/ir-dev/ark-oauth-oidc/actions/workflows/release.yml)
-[![GitHub release](https://img.shields.io/github/v/release/ir-dev/ark-oauth-oidc?label=release&logo=github)](https://github.com/ir-dev/ark-oauth-oidc/releases/latest)
-[![Pages](https://img.shields.io/github/actions/workflow/status/ir-dev/ark-oauth-oidc/pages.yml?label=pages&logo=github)](https://ir-dev.github.io/ark-oauth-oidc/)
-[![Ark.oAuth.Oidc on NuGet](https://img.shields.io/nuget/v/Ark.oAuth.Oidc?label=Ark.oAuth.Oidc&logo=nuget)](https://www.nuget.org/packages/Ark.oAuth.Oidc)
-[![Ark.oAuth.Client on NuGet](https://img.shields.io/nuget/v/Ark.oAuth.Client?label=Ark.oAuth.Client&logo=nuget)](https://www.nuget.org/packages/Ark.oAuth.Client)
-[![ark-oauth-client on PyPI](https://img.shields.io/pypi/v/ark-oauth-client?label=PyPI&logo=pypi&logoColor=white)](https://pypi.org/project/ark-oauth-client/)
-[![ark-oauth-client on npm](https://img.shields.io/npm/v/ark-oauth-client?label=npm&logo=npm)](https://www.npmjs.com/package/ark-oauth-client)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+<h1 align="center">ARK Identity Server</h1>
+
+<p align="center">
+  <b>Your own OAuth 2.1 / OpenID Connect identity provider in two lines of C#.<br>
+  Sign-in for any app with two settings. Every tenant governed from one console.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ir-dev/ark-oauth-oidc/actions/workflows/release.yml"><img alt="Build &amp; Release" src="https://img.shields.io/github/actions/workflow/status/ir-dev/ark-oauth-oidc/release.yml?label=build%20%26%20release&logo=githubactions&logoColor=white"></a>
+  <a href="https://github.com/ir-dev/ark-oauth-oidc/releases/latest"><img alt="GitHub release" src="https://img.shields.io/github/v/release/ir-dev/ark-oauth-oidc?label=release&logo=github"></a>
+  <a href="https://ir-dev.github.io/ark-oauth-oidc/"><img alt="Pages" src="https://img.shields.io/github/actions/workflow/status/ir-dev/ark-oauth-oidc/pages.yml?label=pages&logo=github"></a>
+  <a href="https://www.nuget.org/packages/Ark.oAuth.Oidc"><img alt="Ark.oAuth.Oidc on NuGet" src="https://img.shields.io/nuget/v/Ark.oAuth.Oidc?label=Ark.oAuth.Oidc&logo=nuget"></a>
+  <a href="https://www.nuget.org/packages/Ark.oAuth.Client"><img alt="Ark.oAuth.Client on NuGet" src="https://img.shields.io/nuget/v/Ark.oAuth.Client?label=Ark.oAuth.Client&logo=nuget"></a>
+  <a href="https://pypi.org/project/ark-oauth-client/"><img alt="ark-oauth-client on PyPI" src="https://img.shields.io/pypi/v/ark-oauth-client?label=PyPI&logo=pypi&logoColor=white"></a>
+  <a href="https://www.npmjs.com/package/ark-oauth-client"><img alt="ark-oauth-client on npm" src="https://img.shields.io/npm/v/ark-oauth-client?label=npm&logo=npm"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
+</p>
+
+<p align="center">
+  <a href="https://ir-dev.github.io/ark-oauth-oidc/"><b>Project site</b></a> ·
+  <a href="#-from-zero-to-signed-in-three-steps">Three-step start</a> ·
+  <a href="#-govern-every-tenant-and-every-instance">Govern</a> ·
+  <a href="#0-for-ai-agents-read-this-first">For AI agents</a> ·
+  <a href="https://ir-dev.github.io/ark-oauth-oidc/llms.txt">llms.txt</a> ·
+  <a href="GETTINGSTARTED.md">Getting started</a>
+</p>
 
 A self-contained **OAuth 2.1 / OpenID Connect identity provider** for ASP.NET Core, plus **client
-libraries for .NET, Python and Node**. Multi-tenant, runs on SQLite / MySQL / PostgreSQL, ships its own
-sign-in, consent and admin UI. Any standard OIDC library pointed at the issuer configures itself.
+libraries for .NET, Python and Node** that are ports of each other. Multi-tenant; runs on SQLite, MySQL
+or PostgreSQL; ships its own setup wizard, sign-in, consent and admin console. Any standard OIDC
+library pointed at the issuer configures itself. The Ark clients just remove the boilerplate.
 
-**🌐 Project site: <https://ir-dev.github.io/ark-oauth-oidc/>** has the quickstart in all three
-languages, live package versions, and a **Try it** panel that builds a real PKCE authorization request
-for any issuer, right in the browser.
+> **🤖 Coding agent?** This README is written for you. Read [§0](#0-for-ai-agents-read-this-first),
+> then only the [scenario](#1-scenario-router) that matches your task. Each scenario has a paste-ready
+> prompt, exact code, a **Done when** check and a **Do not** list. The whole contract also fits in one
+> system prompt: [§4](#4-context-block-for-a-system-prompt).
 
 ---
 
-## ⚡ Easiest options: start here
+## Why developers pick Ark
 
-These are the newest and shortest routes. Each row is the whole job, not just the first step.
-
-| I want to… | Easiest option | Details |
+| The job | The usual way | With Ark |
 |---|---|---|
-| **Run an identity provider** 🆕 | `builder.AddArkIdp()` + `app.UseArkIdp()`, with **no configuration**. A browser setup wizard does the rest. | [below](#1-an-identity-provider-with-zero-configuration-) · [S8](#s8--stand-up-the-identity-provider) |
-| **Try the whole thing from this clone** | `./run.sh` (macOS/Linux) or `run.bat` (Windows): a fresh clone to a working sign-in | [GETTINGSTARTED.md](GETTINGSTARTED.md) |
-| **Add sign-in to an app** | **Two settings**, `authority` + `client_id`, in .NET, Python or Node | [below](#2-sign-users-in-two-settings-three-languages) · [S1–S3](#s1--sign-users-in-to-an-aspnet-core-app) |
-| **Register an app and give a user access** | **One call**, `POST /api/oauth/v1/provision/client`, or the form at `/{tenant}/admin/provisioning` | [S9](#s9--onboard-an-application-client--user--access) |
-| **Stop shared PCs signing in the previous person** | **One flag**: `AccountSwitch:RequireArkClaims` (.NET) or `account_switch.require_ark_claims` (Python) | [S10](#s10--shared-browser-wrong-account) |
-| **See an authorization request without installing anything** | The **Try it** panel on the [project site](https://ir-dev.github.io/ark-oauth-oidc/#try) | — |
+| **Stand up an identity provider** | Choose a product, write its config, generate keys, seed a database, build or buy an admin UI | `builder.AddArkIdp()` + `app.UseArkIdp()`. A browser wizard collects the rest, and the same process becomes the IdP with **no restart** |
+| **Add sign-in to an app** | Wire endpoints, keys, PKCE, `state`, `nonce`, refresh and logout by hand, per framework | **Two settings**, `authority` + `client_id`, in .NET, Python or Node. Everything else is discovered |
+| **Register an app and give someone access** | Four admin steps in a fixed order. The forgotten fourth one reads as "wrong password" | **One call** or one form: client, redirect URIs, user and access mapping together |
+| **Rotate signing keys** | Redeploy every client with the new public key | **Nothing to redeploy.** Clients read JWKS; rotation is two-phase |
+| **Take access away now** | Delete the account, or wait days for tokens to expire | **One switch** per user or app. Sessions and refresh tokens are revoked at once |
+| **Upgrade the database** | Hand-written `ALTER TABLE` per provider | **Applied at start-up** on SQLite, MySQL and PostgreSQL, recorded in `ark_schema_history` |
+| **Back up, move or reset an instance** | Dump the database and hope the keys survive | **Encrypted export**, an import that shows its plan before it writes, and a factory reset that re-seeds |
+| **Let a pipeline provision apps** | Share an admin password with CI | A **machine client** bearer token, with the secret from a vault. It is the only token the management API accepts |
+| **Hand the work to an AI agent** | The agent guesses at OAuth and invents config keys | Each package ships `AI-PROMPT.md` and `AI-RECIPES.md`. This README routes the agent to the one scenario it needs |
 
-### 1. An identity provider with zero configuration 🆕
+**Secure by default, not by checklist:** PKCE `S256` is enforced and `plain` is refused. Codes and
+refresh tokens are stored hashed. Replaying a refresh token revokes its whole family. Redirect URIs
+are matched exactly. Sign-in failures can't be used to enumerate accounts. Implicit, hybrid and the
+password grant are absent, as OAuth 2.1 requires.
+
+---
+
+## ⚡ From zero to signed-in: three steps
+
+### Step 1 — Run the identity provider
 
 ```csharp
+// Program.cs: the whole identity provider
 using Ark.oAuth.Oidc;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddArkIdp();          // no ark_oauth_server settings, no connection string
 var app = builder.Build();
 app.UseHttpsRedirection();
-app.UseArkIdp();
+app.UseArkIdp();              // routing, CORS, wizard, bootstrap, auth, endpoints, in order
 app.Run();
 ```
 
-Run it and open the site. The wizard at `/ark-idp/setup` asks for the organization, logos, public URL,
-tenant, database, signing key, administrator, email and protocol options. The **same process** then
-becomes the IdP, with no restart. A host that already has `TenantId` and a connection string never sees
-the wizard.
+Run it and open the site. Every page leads to the **setup wizard** at `/ark-idp/setup`:
 
-> **Not on NuGet yet.** `AddArkIdp()` is on `main` and was added after v2.1.2. It ships in the next
-> release. Until then, run it from this repo:
-> `dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart`, then open <https://localhost:7300>.
-> The configured route, `AddArkOidcServer`, is released ([S8](#s8--stand-up-the-identity-provider)).
+| Wizard step | What it captures |
+|---|---|
+| Organization & branding | names, website / terms / privacy URLs, your logo and a default app logo, with a live sign-in preview |
+| Server address | public URL, operator tenant, base path. It shows the issuer and discovery URL it will produce |
+| Database | SQLite, PostgreSQL or MySQL, with **Test connection**. An existing Ark database is attached, not re-seeded |
+| Signing key | generate RSA 2048 / 3072 / 4096, or import a PEM |
+| Administrator | username, name, password (with a generator) |
+| Users & email | how new users get a first password; SMTP with **Send test** |
+| Protocol & security | device flow, PAR, dynamic registration, consent, back-channel logout, lockout, CORS, machine secret |
+| Review & install | one page, then **Install**. The same process is the IdP, with no restart |
 
-### 2. Sign users in: two settings, three languages
+From a remote machine the wizard asks for a **setup code** printed in the start-up log, so an
+unconfigured server is not a race to the first visitor. Secrets go only into the database, hashed
+where they can be, and never into the settings file. A host that already has `TenantId` and a
+connection string never sees the wizard: that is the pipeline route, [S8](#s8--stand-up-the-identity-provider).
 
-Only the **authority** (`{BaseUrl}/{TenantId}`) and the **client_id** are required. Endpoints and
-signing keys come from discovery, so nothing is redeployed when a key rotates.
+> **Release status.** `AddArkIdp()` / `UseArkIdp()`, the wizard and the appearance picker are on `main`.
+> They arrived after v2.1.2 and ship in the next release. Until then:
+> `dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart` and open <https://localhost:7300>.
+> The configured route, `AddArkOidcServer`, is released. To see a whole working setup from a fresh
+> clone, run `./run.sh` (macOS/Linux) or `run.bat` (Windows), as described in [GETTINGSTARTED.md](GETTINGSTARTED.md).
+
+### Step 2 — Onboard the app: one call
+
+```bash
+curl -X POST https://idp.example.com/api/oauth/v1/provision/client \
+  -H "Authorization: Bearer $ARK_OPERATOR_TOKEN" -H 'Content-Type: application/json' \
+  -d '{ "client_name": "Billing Portal", "user_name": "jane@example.com",
+        "redirect_uris": ["https://billing.example.com/signin-oidc"],
+        "post_logout_redirect_uris": ["https://billing.example.com/signout-callback-oidc"] }'
+```
+
+The call creates the client, registers both redirect URIs byte for byte, creates the user (or reuses
+an existing account) and **maps the user to the client**. That last step is the one people forget;
+without it, sign-in fails exactly like a wrong password. An operator who prefers a form can do the
+same at `/{tenant}/admin/provisioning`, and the page then shows the equivalent `curl`. Details: [S9](#s9--onboard-an-application-client--user--access).
+
+### Step 3 — Sign users in: two settings, three languages
 
 | Language | Install |
 |---|---|
@@ -73,14 +136,14 @@ signing keys come from discovery, so nothing is redeployed when a key rotates.
 | Node / Express | `npm install ark-oauth-client` |
 
 ```csharp
-// .NET: settings in the "ark_oauth_client" config section
+// .NET: "ark_oauth_client": { "Authority": "https://idp.example.com/my_idp", "ClientId": "billing_portal" }
 builder.Services.AddArkOidcClient(builder.Configuration);
 app.UseRouting(); app.UseAuthentication(); app.UseAuthorization();   // in this order
 ```
 
 ```python
 # Python
-auth = add_ark_oidc_client(app, {"authority": "https://idp.example.com/my_idp", "client_id": "my-app"})
+auth = add_ark_oidc_client(app, {"authority": "https://idp.example.com/my_idp", "client_id": "billing_portal"})
 
 @app.get("/billing")
 @auth.require_claims("billing.admin")      # Ark claims, not scopes
@@ -94,10 +157,67 @@ app.use(auth);
 app.get('/billing', auth.requireClaims('billing.admin'), handler);
 ```
 
-Code alone is not enough. On the IdP, **register both redirect URIs** byte for byte
-(`/signin-oidc`, `/signout-callback-oidc`) and **map the user to the client**. Without the mapping,
-sign-in fails with an error that looks exactly like a wrong password. The one-call provisioning in
-[S9](#s9--onboard-an-application-client--user--access) does both.
+**Done when:** an anonymous visit to a protected page lands on the IdP's sign-in. Signing in returns
+the user to that page with their Ark claims, and sign-out followed by sign-in shows the login form,
+not a silent sign-in. Endpoints and signing keys came from discovery, so a key rotation needs no
+redeploy. Full scenarios: [S1 .NET](#s1--sign-users-in-to-an-aspnet-core-app) ·
+[S2 Python](#s2--sign-users-in-to-a-python-app) · [S3 Node](#s3--sign-users-in-to-a-node-app).
+
+---
+
+## 🔐 Govern every tenant and every instance
+
+Ark is **multi-tenant at the protocol layer**: each tenant is its own issuer at `{BaseUrl}/{TenantId}`,
+with its own RSA signing key, discovery document, JWKS and branding. **Administration is
+single-operator**: the operator tenant you chose in the wizard administers every tenant, from one console
+and one API.
+
+```mermaid
+flowchart LR
+  OP["Operator tenant<br/>admin console · management API<br/>(console session or machine token)"]
+  OP --> T1["Tenant A<br/>issuer · keys · logo"]
+  OP --> T2["Tenant B<br/>issuer · keys · logo"]
+  OP --> T3["Tenant C<br/>issuer · keys · logo"]
+  T1 --> A1["Apps + users<br/>user ↔ client access map"]
+  T2 --> A2["Apps + users"]
+  T3 --> A3["Apps + users"]
+```
+
+| You need to… | In the console | Over the API (`/api/oauth/v1/…`) | What it guarantees |
+|---|---|---|---|
+| Add a tenant | Tenants grid | `tenant/upsert` | Its own issuer and signing key |
+| Onboard an app with its first user | Provisioning page | `provision/client` | All four steps or nothing. A taken name is `409 client_exists` with nothing written |
+| Give an existing app another user | Provisioning page | `provision/user` | An existing account is never modified, only mapped |
+| Switch a user or an app off | Activation panel | `activation/user`, `activation/client` | Sessions and refresh tokens are revoked at once; the sign-in page says which was switched off, but only after the password verifies |
+| Change who may do what in an app | Users → access mapping | `user/client/claims/upsert` | Apps authorize on these `ark_claims`, not on scopes |
+| Let a pipeline do all of the above | Clients → `{TenantId}_machine` → Regenerate secret | `client_credentials` token with `client.register` | Only the operator's machine client is admitted; others get `401`/`403` JSON, never a sign-in page |
+| Back up an instance | Data page | `data/export` | Every table, keys included, as one file, optionally AES-256-GCM encrypted, with a checksum |
+| Restore or move to another instance | Data page | `data/import/analyze` → `data/import/apply` | You choose `replace`, `merge_skip` or `merge_overwrite` from a row-by-row plan. Unsafe rows are excluded by named rules; the rest loads in one transaction |
+| Start over | Data page | `data/reset` | Re-runs the first-run seed, and refuses if no administrator password is configured |
+| Upgrade | — | automatic at start-up | Pending scripts run once and are recorded; missing tables and columns are added from the entity model on every provider |
+| Prove what happened | — | audit rows | Every export, import and reset is audited, whatever the trace setting |
+
+**Running more than one instance** follows from the same design. Every instance runs the same
+self-applying bootstrap, so a rolling upgrade needs no migration step. Configuration comes from the
+environment or a key vault (`ark_oauth_server__…`), so instances are identical. Move from SQLite to
+`postgres` or `mysql` once there is more than one writer. To promote, clone or recover, use an
+encrypted export from one instance and an analysed import into the other.
+
+```bash
+# A pipeline governs Ark without a human in the loop. The secret comes from your vault, never a file.
+TOKEN=$(curl -s -X POST https://idp.example.com/my_idp/oauth2/token \
+  -d grant_type=client_credentials -d client_id=my_idp_machine \
+  --data-urlencode client_secret="$ARK_MACHINE_SECRET" -d scope=client.register | jq -r .access_token)
+
+curl -s -H "Authorization: Bearer $TOKEN" https://idp.example.com/api/oauth/v1/client/list
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  https://idp.example.com/api/oauth/v1/activation/user -d '{ "user_name": "leaver@example.com", "is_active": false }'
+```
+
+Every IdP page (sign-in, consent, console and wizard) carries an **Appearance** picker with 11 themes
+including high contrast, plus text size from 80 to 160%. Sign-in pages show the host's logo and the
+client's own logo, so users can see who is asking for the password. Full governance scenario:
+[S10](#s10--govern-tenants-access-and-instances).
 
 ---
 
@@ -109,15 +229,17 @@ as facts to cite, not prose to read.
 
 | You are… | Do this |
 |---|---|
-| **A human** with an agent (Claude Code, Copilot, Cursor…) | Find your task in the [scenario router](#1-scenario-router), copy its **Prompt** block into your agent, fill the `<placeholders>`. |
-| **An AI agent** | Read [§0](#0-for-ai-agents-read-this-first) in full, then only the one scenario that matches the task. |
+| **A human** with an agent (Claude Code, Copilot, Cursor, Codex…) | Find your task in the [scenario router](#1-scenario-router), copy its **Prompt** block into your agent, fill the `<placeholders>`. |
+| **An AI agent** | Read [§0](#0-for-ai-agents-read-this-first) in full, then only the one scenario that matches the task. For a compact digest, fetch [`llms.txt`](https://ir-dev.github.io/ark-oauth-oidc/llms.txt). |
 | **A human, new, no agent** | Start with [GETTINGSTARTED.md](GETTINGSTARTED.md): `./run.sh` (macOS/Linux) or `run.bat` (Windows) takes a fresh clone to a working sign-in. |
 
 ---
 
 ## Contents
 
-- [⚡ Easiest options: start here](#-easiest-options-start-here)
+- [Why developers pick Ark](#why-developers-pick-ark)
+- [⚡ From zero to signed-in: three steps](#-from-zero-to-signed-in-three-steps)
+- [🔐 Govern every tenant and every instance](#-govern-every-tenant-and-every-instance)
 - [0. For AI agents: read this first](#0-for-ai-agents-read-this-first)
 - [1. Scenario router](#1-scenario-router)
 - [2. Scenarios](#2-scenarios)
@@ -130,11 +252,12 @@ as facts to cite, not prose to read.
   - [S7 Device / CLI sign-in](#s7--device-or-cli-sign-in-device-grant)
   - [S8 Stand up the identity provider](#s8--stand-up-the-identity-provider)
   - [S9 Onboard an application](#s9--onboard-an-application-client--user--access)
-  - [S10 Shared browser, wrong account](#s10--shared-browser-wrong-account)
-  - [S11 Diagnose a failing sign-in](#s11--diagnose-a-failing-sign-in)
-  - [S12 Migrate from v1](#s12--migrate-from-the-v1-client-or-endpoints)
-  - [S13 Go to production](#s13--go-to-production)
-  - [S14 Change this repository](#s14--change-this-repository)
+  - [S10 Govern tenants, access and instances](#s10--govern-tenants-access-and-instances)
+  - [S11 Shared browser, wrong account](#s11--shared-browser-wrong-account)
+  - [S12 Diagnose a failing sign-in](#s12--diagnose-a-failing-sign-in)
+  - [S13 Migrate from v1](#s13--migrate-from-the-v1-client-or-endpoints)
+  - [S14 Go to production](#s14--go-to-production)
+  - [S15 Change this repository](#s15--change-this-repository)
 - [3. Reference](#3-reference)
 - [4. Context block for a system prompt](#4-context-block-for-a-system-prompt)
 
@@ -174,7 +297,7 @@ as facts to cite, not prose to read.
 | Sign-in fails with what reads exactly like **a wrong password** | The user is not mapped to the client. Ark maps users to clients explicitly. | Add the access mapping ([S9](#s9--onboard-an-application-client--user--access)). |
 | `invalid_request` / redirect URI error | Redirect URIs are matched **byte for byte** — scheme, host, port, path, trailing slash. | Register **both** `/signin-oidc` and `/signout-callback-oidc` exactly as the app sends them. |
 | `invalid_scope` | Scopes on a client record are a **whitelist**; an unregistered scope is rejected, not dropped. | Register the scope, or stop requesting it. `offline_access` is what earns a refresh token. |
-| On a shared machine the next person is **signed in as the previous one**, then stuck on "no access" | SSO answered silently; the sign-in link returns to the same IdP session. | Turn on the account switch ([S10](#s10--shared-browser-wrong-account)). Off by default. |
+| On a shared machine the next person is **signed in as the previous one**, then stuck on "no access" | SSO answered silently; the sign-in link returns to the same IdP session. | Turn on the account switch ([S11](#s11--shared-browser-wrong-account)). Off by default. |
 
 ### Repository map and where each agent should read next
 
@@ -185,17 +308,30 @@ as facts to cite, not prose to read.
 | [`ark_oauth_client_py`](ark_oauth_client_py) | Python client (Flask + framework-agnostic) | PyPI `ark-oauth-client` | same five, plus `examples/` |
 | [`ark_oauth_client_nodejs`](ark_oauth_client_nodejs) | Node client (Express / Connect) | npm `ark-oauth-client` | `README.md`, `examples/`, `types/` |
 | [`Ark.oAuth.Oidc/Ark.Client.Web`](Ark.oAuth.Oidc/Ark.Client.Web) | Reference client app — **the shape to copy** | not published | `README.md` |
-| [`Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host`](Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host) | Runnable IdP host | not published | — |
+| [`Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart`](Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart) | Zero-config IdP host: `AddArkIdp()` + `UseArkIdp()`, wizard on first run | not published | — |
+| [`Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host`](Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host) | IdP host configured through appsettings | not published | — |
+| [`site/`](site) | The project site (GitHub Pages) and [`llms.txt`](site/llms.txt) | Pages | `README.md` |
 
 Reading order inside a package: **`AI-PROMPT.md`** (rules, capability map, decision guide) →
 **`AI-RECIPES.md`** (task-shaped code) → **`API-GUIDE.md`** (full surface) → **`TROUBLESHOOTING.md`**
 (symptom → cause) → **`MIGRATION.md`** (versions). The source under each package is authoritative over
 all of them.
 
-The three client packages are **ports of each other**: an integration written in one translates
-almost line for line into another. The .NET and Python packages carry the same version number and
-are feature-matched. The Node port trails them — it has no built-in account switch yet (see
-[S10](#s10--shared-browser-wrong-account)).
+The three client packages are **ports of each other** and carry **one version number**: an
+integration written in one translates almost line for line into another. All three ship the account
+switch ([S11](#s11--shared-browser-wrong-account)), the setup probe, bearer protection and the
+machine-to-machine helpers. Their names differ only by language convention (`RequireArkClaims` /
+`require_ark_claims` / `requireArkClaims`).
+
+### How to work in this repo as an agent
+
+| Signal | Where |
+|---|---|
+| The whole contract in one paste | [§4 Context block](#4-context-block-for-a-system-prompt) |
+| A fetchable digest, for tools that read `llms.txt` | <https://ir-dev.github.io/ark-oauth-oidc/llms.txt> ([source](site/llms.txt)) |
+| Repo rules for editing this code (Claude Code reads it automatically) | [`CLAUDE.md`](CLAUDE.md) |
+| A paste-ready prompt, steps, **Done when** and **Do not** for each task | [§2 Scenarios](#2-scenarios) |
+| Ground truth when docs and code disagree | the source; say which one you followed |
 
 ---
 
@@ -212,11 +348,12 @@ are feature-matched. The Node port trails them — it has no built-in account sw
 | "A CLI, TV or headless device needs a user to sign in" | [S7](#s7--device-or-cli-sign-in-device-grant) | device grant |
 | "Stand up / host / configure the identity server" | [S8](#s8--stand-up-the-identity-provider) | `Ark.oAuth.Oidc` |
 | "Register a new app", "give a user access", "create a client" | [S9](#s9--onboard-an-application-client--user--access) | provisioning API / admin console |
-| "Users get each other's accounts on a shared PC", "stuck on no-access" | [S10](#s10--shared-browser-wrong-account) | account switch |
-| "Login says wrong password but it isn't", "invalid_client", "redirect loop" | [S11](#s11--diagnose-a-failing-sign-in) | setup probe + troubleshooting |
-| "This app pastes an `rsaPublic` key", "uses `/oauth/{t}/v1/…`" | [S12](#s12--migrate-from-the-v1-client-or-endpoints) | migration |
-| "Make it production ready", "harden", "rotate keys" | [S13](#s13--go-to-production) | IdP + clients |
-| "Fix a bug in / add a feature to one of the libraries in this repo" | [S14](#s14--change-this-repository) | this repo |
+| "Add a tenant", "switch a user off", "back up / restore / move / reset the IdP", "let CI manage it", "upgrade" | [S10](#s10--govern-tenants-access-and-instances) | management, activation and data tools APIs |
+| "Users get each other's accounts on a shared PC", "stuck on no-access" | [S11](#s11--shared-browser-wrong-account) | account switch |
+| "Login says wrong password but it isn't", "invalid_client", "redirect loop" | [S12](#s12--diagnose-a-failing-sign-in) | setup probe + troubleshooting |
+| "This app pastes an `rsaPublic` key", "uses `/oauth/{t}/v1/…`" | [S13](#s13--migrate-from-the-v1-client-or-endpoints) | migration |
+| "Make it production ready", "harden", "rotate keys" | [S14](#s14--go-to-production) | IdP + clients |
+| "Fix a bug in / add a feature to one of the libraries in this repo" | [S15](#s15--change-this-repository) | this repo |
 
 ---
 
@@ -710,54 +847,135 @@ database; register only one redirect URI.
 
 ---
 
-### S10 — Shared browser, wrong account
+### S10 — Govern tenants, access and instances
+
+**Use when:** the task is operating the IdP rather than integrating with it: add a tenant, switch an
+account or an application off, change what a user may do in an app, back up, restore, move or reset an
+instance, let a pipeline do any of that, or upgrade.
+
+**Prompt**
+
+```text
+Operate the Ark IdP at <https://idp.example.com> (operator tenant <my_idp>) through its management API
+under /api/oauth/v1/ — never by editing database rows. Authenticate as the operator: the console
+session, or a client_credentials token for <my_idp>_machine with scope client.register, whose secret
+comes from <env var / vault> and is never written to a file or echoed. Task: <add tenant X | deactivate
+user Y | grant claim Z on client C to user U | export a backup | import file F into this instance |
+factory reset>. For an import, call data/import/analyze first, show me the plan for each mode
+(replace, merge_skip, merge_overwrite) and the excluded rows, and apply only the mode I choose, passing
+the plan_hash back. For a reset or a replace import, stop and ask me before applying. Report each
+response's code and what changed.
+```
+
+**Agent: read first** — the governance sections of
+[`Ark.oAuth.Oidc/README.md`](Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md#deactivating-a-user-or-a-client)
+and the management, provisioning and data-tools tables in
+[`API-GUIDE.md`](Ark.oAuth.Oidc/Ark.oAuth.Oidc/API-GUIDE.md#management-api-managecontroller-operator-policy-base-apioauth).
+
+**Who may call it.** The operator's console session (the `AdminUser:Username` account, or an `admin`
+claim on its console mapping), or a bearer token issued by the operator tenant to `{TenantId}_machine`
+with `client.register`. Everything else gets `401`/`403` JSON. A token with `client.register` held by
+any other client is refused. The machine client is seeded **without a secret**: give it one with
+**Regenerate secret** in the console, or `ark_oauth_server:Management:MachineClientSecret` (≥ 16 chars)
+from a vault, which is re-applied on every start and survives a database rebuild.
+
+**Steps**
+
+| Task | Call (`POST` unless marked) | Body / notes |
+|---|---|---|
+| List tenants / clients / users | `GET v1/tenant/list`, `v1/client/list`, `v1/user/list` | |
+| Add or edit a tenant | `v1/tenant/upsert` | its own issuer `{BaseUrl}/{tenant_id}` and signing key |
+| Onboard app + first user | `v1/provision/client` | [S9](#s9--onboard-an-application-client--user--access) |
+| Another user for an existing app | `v1/provision/user` | `{ client_id, user_name, claims? }`; an existing account is only mapped |
+| Grant / revoke an Ark claim | `v1/user/client/claims/upsert`, `…/delete` | the claims the app's `require_claims` checks |
+| Switch a user off / on | `v1/activation/user` | `{ user_name, is_active, reason? }`; revokes sessions + refresh tokens |
+| Switch an app off / on | `v1/activation/client` | `{ tenant_id, client_id, is_active }`; revokes its refresh tokens; refused at `/authorize` |
+| Rotate a client secret | `v1/client/secret/reset` | shown once; refused for the machine client while `MachineClientSecret` is set |
+| Back up | `v1/data/export` | `{ passphrase? }` → AES-256-GCM file + checksum. It contains private keys: store it like the database |
+| Restore / move | `v1/data/import/analyze` → `v1/data/import/apply` | `{ file, passphrase? }`; analyse writes nothing; apply adds `mode` + `plan_hash` (and, for `replace`, `confirm` = the operator tenant id typed out) |
+| Factory reset | `v1/data/reset` | `{ confirm: "<operator tenant id>" }`; empties every table and re-seeds; refuses if no admin password is configured |
+| Summary before any data task | `GET v1/data/summary` | row counts, operator tenant, what is allowed |
+
+Data tools can be switched off per capability under `ark_oauth_server:Admin:DataTools`
+(`Enabled`, `AllowReset`, `AllowImport`, `AllowReplace`, `MaxImportMegabytes`). Upgrades need no call:
+`UseArkAuthData()` / `UseArkIdp()` applies pending scripts once, records them in `ark_schema_history`,
+then adds any table or column the entity model has and the database lacks, on every provider.
+
+**Done when:** the API answered `error: false` (or the documented code) for each step, and the result is
+visible. A deactivated user's next sign-in is refused, with the reason given only after a correct
+password. An analysed import's plan matched what apply reported. A reset left a server the configured
+administrator can sign in to.
+
+**Do not:** edit database rows directly; give a pipeline the administrator's password instead of the
+machine client; put `MachineClientSecret` or an export passphrase in a tracked file; apply a
+`replace` import or a reset without the human's explicit go-ahead; expect deactivation to kill access
+tokens already issued (they live until `exp`, an hour by default).
+
+---
+
+### S11 — Shared browser, wrong account
 
 **Use when:** on a shared machine, SSO signs the next person in as the previous one, and the app's "no
 access" page offers no way out because its sign-in link returns to the same IdP session.
+
+**Both halves exist.** As of v2.1.2 the IdP itself no longer answers an authorize request from an SSO
+session whose user is not mapped to that client: it sets the session aside and draws the sign-in
+form with "You are signed in as X, who does not have access to <app>". The client half below is still
+owed, because it is what turns an empty-handed sign-in into a page with a way out.
 
 **Prompt**
 
 ```text
 Enable the Ark account-switch fix in this app. It moves the entitlement check to the sign-in callback,
-so no session is written for an account with no ark_claims for this client, and serves a built-in page
-at /ark/no-access that names the signed-in account and offers "Sign in as a different user"
-(prompt=login). .NET: set ark_oauth_client:AccountSwitch:RequireArkClaims = true (and AppDisplayName);
-it self-registers, no Program.cs change. Python: in the configure callback set
-options.config.account_switch.require_ark_claims = True. Do not build a custom "wrong account" page
-from scratch and do not echo an arbitrary returnUrl.
+so no session is written for an account without the required ark_claims for this client, and serves a
+built-in page at /ark/no-access that names the signed-in account and offers "Sign in as a different
+user" (prompt=login). .NET: set ark_oauth_client:AccountSwitch:RequireArkClaims = true, plus
+RequiredClaims and AppDisplayName; it self-registers, no Program.cs change. Python: in the configure
+callback set options.config.account_switch.require_ark_claims = True and required_claims. Node: pass
+accountSwitch: { requireArkClaims: true, requiredClaims: [...] } to arkExpress. Do not build a custom
+"wrong account" page from scratch and do not echo an arbitrary returnUrl.
 ```
 
 **Steps**
 
 ```jsonc
 // .NET
-"ark_oauth_client": { "AccountSwitch": { "RequireArkClaims": true, "AppDisplayName": "Billing Portal" } }
+"ark_oauth_client": { "AccountSwitch": {
+  "RequireArkClaims": true, "RequiredClaims": ["billing.user", "billing.admin"], "AppDisplayName": "Billing Portal" } }
 ```
 
 ```python
 # Python
 def configure(options):
     options.config.account_switch.require_ark_claims = True
+    options.config.account_switch.required_claims = ["billing.user", "billing.admin"]
     options.config.account_switch.app_display_name = "Billing Portal"
 auth = add_ark_oidc_client(app, config, configure)
 ```
 
 ```js
-// Node — no built-in account switch yet. Offer it from your own no-access route:
-app.get('/switch-user', (req, res) => req.ark.login({ prompt: 'login', returnTo: '/' }));
+// Node
+const auth = arkExpress({ authority, clientId, redirectUri, secret,
+  accountSwitch: { requireArkClaims: true, requiredClaims: ['billing.user', 'billing.admin'], appDisplayName: 'Billing Portal' } });
 ```
 
-Kiosk variant: `EndProviderSessionOnSwitch` / `end_provider_session_on_switch = True` ends the previous
-user's IdP session as well. Custom entitlement rules: client recipe 7.
+**Set `RequiredClaims`.** The server issues the user's whole mapping as `ark_claims`, identity names such
+as `sub` and `email` included, so `RequireArkClaims` alone admits anyone who has *a* mapping to the
+client. Naming the app's own claims makes the check mean "may use this app".
 
-**Done when:** an account with no Ark claims for this client never gets a session cookie, lands on the
+Kiosk variant: `EndProviderSessionOnSwitch` / `end_provider_session_on_switch` / `endProviderSessionOnSwitch`
+ends the previous user's IdP session as well. Custom entitlement rules: the `OnEvaluateAccess` /
+`onEvaluateAccess` event (client recipe 7).
+
+**Done when:** an account without the required claims never gets a session cookie, lands on the
 no-access page, and "Sign in as a different user" shows the IdP login form.
 
-**Do not:** leave the user on a 403 that links back to `/login` (it loops through the same session).
+**Do not:** leave the user on a 403 that links back to `/login` (it loops through the same session); make
+the switch an automatic redirect rather than a button (an unmapped next user would loop).
 
 ---
 
-### S11 — Diagnose a failing sign-in
+### S12 — Diagnose a failing sign-in
 
 **Use when:** sign-in fails, loops, or reports an error that does not match reality.
 
@@ -792,7 +1010,7 @@ Deeper: each package's `TROUBLESHOOTING.md`, and [GETTINGSTARTED.md §9](GETTING
 
 ---
 
-### S12 — Migrate from the v1 client or endpoints
+### S13 — Migrate from the v1 client or endpoints
 
 **Use when:** an app pastes an `rsaPublic` key into config, uses `authServerUrl` + `tenantId`, has a
 custom callback route, or calls `/oauth/{tenant}/v1/…`.
@@ -827,7 +1045,7 @@ refresh and sign-out work with `UseLegacyFlow` off.
 
 ---
 
-### S13 — Go to production
+### S14 — Go to production
 
 **Prompt**
 
@@ -846,7 +1064,7 @@ Do not change anything without telling me what and why.
 
 ---
 
-### S14 — Change this repository
+### S15 — Change this repository
 
 **Use when:** the task is to fix or extend one of the libraries *in this repo*, not to use them.
 
@@ -921,9 +1139,10 @@ credentials grant (all removed in OAuth 2.1); `plain` PKCE; front-channel logout
 | Dynamic registration | `/oauth2/register` |
 | Client setup page | `/oauth2/integrate/{client_id}` |
 
-Outside the issuer: admin console `/{tenant_id}/admin` (`/admin` redirects to the configured tenant),
-provisioning UI `/{tenant_id}/admin/provisioning`, data tools `/{tenant_id}/admin/data`, management
-and provisioning API `/api/oauth/v1/…` (operator only).
+Outside the issuer: setup wizard `/ark-idp/setup` (only while unconfigured; 404 afterwards), admin
+console `/{tenant_id}/admin` (`/admin` redirects to the configured tenant), provisioning UI
+`/{tenant_id}/admin/provisioning`, data tools `/{tenant_id}/admin/data`, management, provisioning,
+activation and data API `/api/oauth/v1/…` (operator only).
 
 ### Flows
 
@@ -1049,7 +1268,8 @@ credentials. The host enables it with `app.UseArkOidcCors()` between `UseRouting
 | `SignedOutCallbackPath` | — | `postLogoutRedirectUri` | `/signout-callback-oidc` |
 | `RoleClaimType` | `role_claim_type` | — | `role` |
 | `RequireHttpsMetadata` | `require_https_metadata` | `requireHttps` | `true` |
-| `AccountSwitch:RequireArkClaims` | `account_switch.require_ark_claims` | not available | `false` |
+| `AccountSwitch:RequireArkClaims` | `account_switch.require_ark_claims` | `accountSwitch.requireArkClaims` | `false` |
+| `AccountSwitch:RequiredClaims` | `account_switch.required_claims` | `accountSwitch.requiredClaims` | any |
 | `UseLegacyFlow` | `use_legacy_flow` (accepted, not implemented) | — | `false` |
 
 Each package's `API-GUIDE.md` (Node: `README.md`) has the full list.
@@ -1081,6 +1301,14 @@ needs no layout, `_ViewStart` or `wwwroot` entry from the host; Tabulator is its
 dependency, pinned. A host overrides it by placing its own `Views/Admin/Manage.cshtml`. The console's
 session is the host's auth cookie, and only the host can drop it — hence `Admin:SignOutUrl`. The v1
 console at `/oauth/{tenant}/v1/server/{client_id}/manage` is still served and no longer developed.
+
+Two operator-only pages sit beside it: **Provisioning** (`/{tenant_id}/admin/provisioning`, one-call
+onboarding plus the activation switches, each showing the equivalent `curl`) and **Data**
+(`/{tenant_id}/admin/data`, export, analysed import and factory reset). Every IdP page, including
+sign-in, consent, console and wizard, carries an **Appearance** picker: 11 themes including two
+high-contrast ones and a custom accent, and text size from 80 to 160%. The choice is kept per browser
+and the picker is CSP-safe. Sign-in pages show the host logo and the client's own logo
+(`client_logo`, set in the console, at provisioning or as `logo_uri`).
 
 ### Registering clients
 
@@ -1153,14 +1381,25 @@ PROVIDER SIDE (code alone never works):
 - Map the user to the client — without it sign-in fails exactly like a wrong password.
 - One call does all of it: POST /api/oauth/v1/provision/client.
 
+PROVIDER HOST — the whole of it (next release; on main now):
+  builder.AddArkIdp(); app.UseArkIdp();  -> unconfigured, it serves the setup wizard at /ark-idp/setup
+  Configured route (released): AddArkOidcServer + AddArkOidcClient, UseRouting -> UseArkOidcCors ->
+  UseArkAuthData -> UseArkOidcClient -> UseAuthentication -> UseAuthorization.
+
+GOVERNANCE (operator only; console session or {TenantId}_machine token with client.register):
+- /api/oauth/v1/: tenant/upsert, provision/client, provision/user, activation/user|client (revokes),
+  user/client/claims/upsert, client/secret/reset, data/export, data/import/analyze -> apply, data/reset.
+- Never edit DB rows. Ask the human before a reset or a replace import. Schema upgrades self-apply.
+
 RULES:
 - Never hand-roll OAuth; never invent APIs/keys/routes; read the package AI-PROMPT.md or source.
 - Never recreate the v1 shape (pasted rsaPublic, custom callback route, no state/nonce).
 - Authorize on ark_claims, not scopes. Read the access token per request; never cache it.
 - Never add a route at the callback path. Sign out of the local session AND the provider.
 - Refresh tokens rotate; persist each new one; replay revokes the family.
-- Shared browsers: enable AccountSwitch:RequireArkClaims (.NET) / account_switch.require_ark_claims
-  (Python); Node has none built in — offer req.ark.login({ prompt: 'login' }).
+- Shared browsers: enable AccountSwitch:RequireArkClaims + RequiredClaims (.NET) /
+  account_switch.require_ark_claims + required_claims (Python) / accountSwitch.requireArkClaims +
+  requiredClaims (Node). Without RequiredClaims, identity claims alone satisfy the check.
 - .NET: keep Microsoft.IdentityModel.* on one version. Python: ArkClientCredentials is client_secret_post only.
 - No implicit, hybrid, ROPC, plain PKCE, or SQL Server.
 - The repo is public: no secrets in any tracked file. Do not commit or publish unless asked.
@@ -1176,3 +1415,8 @@ against a running Ark.oAuth.Oidc.Host.
 ## License
 
 MIT.
+
+<p align="center">
+  <a href="https://ir-dev.github.io/ark-oauth-oidc/"><img alt="ARK RAPID shield" src="site/assets/img/ark-shield-64.png" width="40"></a><br>
+  <sub>ARK RAPID · Secure identity · Trusted access</sub>
+</p>

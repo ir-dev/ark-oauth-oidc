@@ -1,0 +1,63 @@
+# ARK Identity Server
+
+> Self-hosted OAuth 2.1 / OpenID Connect identity provider for ASP.NET Core (NuGet Ark.oAuth.Oidc), with client libraries for .NET (NuGet Ark.oAuth.Client), Python (PyPI ark-oauth-client) and Node (npm ark-oauth-client). The clients are ports of each other and share one version number. Multi-tenant at the protocol layer; administered by one operator tenant. Runs on SQLite, MySQL or PostgreSQL. MIT. Repository: https://github.com/ir-dev/ark-oauth-oidc
+
+Source of truth is the code. Where a document and the source disagree, follow the source and say so.
+
+## Integrate a client: the whole of it
+
+Only two settings are required: `authority` (the issuer, `{BaseUrl}/{TenantId}`, tenant segment included) and `client_id`. Endpoints, signing keys and capabilities come from `{authority}/.well-known/openid-configuration`. Never hard-code endpoints or paste a public key.
+
+- .NET: `builder.Services.AddArkOidcClient(builder.Configuration);` (section `ark_oauth_client`), then `app.UseRouting(); app.UseAuthentication(); app.UseAuthorization();` in that order. Root namespace `Ark.oAuth`.
+- Python: `auth = add_ark_oidc_client(app, {"authority": A, "client_id": C})`; protect with `@auth.require_claims("x")`; user via `current_ark.user`.
+- Node: `const auth = arkExpress({ authority, clientId, redirectUri, secret }); app.use(auth); app.get('/x', auth.requireClaims('x'), h)`.
+- APIs (bearer): .NET `AddArkOidcApi`, Python `add_ark_oidc_api`, Node `arkBearer`.
+
+## Run the identity provider
+
+- Zero-config (on main, ships in the next release after v2.1.2): `builder.AddArkIdp();` then `app.UseArkIdp();`. Unconfigured, every page goes to the setup wizard at `/ark-idp/setup` (organization and logos, public URL and tenant, database with test, RSA key generate/import, administrator, users and SMTP, protocol options, review and install). The same process becomes the IdP with no restart. Remote access needs the setup code from the start-up log. Sample: `dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart`.
+- Configured (released): `AddArkOidcServer(builder.Environment)` + `AddArkOidcClient(builder.Configuration)`; pipeline `UseRouting -> UseArkOidcCors -> UseArkAuthData -> UseArkOidcClient -> UseAuthentication -> UseAuthorization`. Section `ark_oauth_server` (TenantId, BaseUrl, Provider sqlite|mysql|postgres) + `ConnectionStrings:ArkAuthConnection`. `AdminUser:Password` from user-secrets or env, never appsettings.
+
+## Onboard an application
+
+`POST /api/oauth/v1/provision/client` with `{ client_name, user_name, redirect_uris, post_logout_redirect_uris, claims?, client_logo? }` creates the client, registers redirect URIs, creates or reuses the user and writes the user-client access mapping. `409 client_exists` means nothing was written. `POST /api/oauth/v1/provision/user` maps another user to an existing client. UI: `/{tenant}/admin/provisioning`.
+
+## Govern tenants and instances (operator only)
+
+Caller: the operator's console session, or a `client_credentials` token issued to `{TenantId}_machine` with scope `client.register` (secret from a vault: `ark_oauth_server:Management:MachineClientSecret`). Base `/api/oauth/v1/`:
+
+- `tenant/list`, `tenant/upsert` (each tenant: own issuer, signing key, JWKS, branding)
+- `client/list|upsert|delete`, `client/secret/reset`; `user/list|upsert`; `user/client/claims/upsert|delete` (Ark claims per user per client)
+- `activation/user`, `activation/client` (`is_active:false` revokes sessions and refresh tokens at once)
+- `data/summary`, `data/export` (optional AES-256-GCM passphrase), `data/import/analyze` then `data/import/apply` (`mode` replace|merge_skip|merge_overwrite + `plan_hash`; replace needs `confirm` = operator tenant id), `data/reset` (`confirm` = operator tenant id)
+- Schema upgrades apply themselves at start-up on every provider. Never edit database rows. Ask the human before a reset or a replace import.
+
+## Rules that cost the most time
+
+- Map the user to the client, or sign-in fails exactly like a wrong password.
+- Register both redirect URIs byte for byte: `/signin-oidc` and `/signout-callback-oidc`.
+- Scopes on a client are a whitelist; an unregistered scope is rejected. `offline_access` yields a refresh token.
+- Authorize on `ark_claims`, not scopes. Read the access token per request; never cache it.
+- Never add a route at the callback path. Sign out of the local session and the provider.
+- Shared browsers: enable the account switch with required claims: .NET `AccountSwitch:RequireArkClaims` + `RequiredClaims`; Python `account_switch.require_ark_claims` + `required_claims`; Node `accountSwitch.requireArkClaims` + `requiredClaims`.
+- Never hand-roll OAuth; never recreate the v1 shape (pasted `rsaPublic`, custom callback route, no state/nonce).
+- .NET: keep `Microsoft.IdentityModel.*` on one version. No implicit, hybrid, ROPC, plain PKCE or SQL Server.
+- The repository is public: never write a secret into a tracked file. Do not commit or publish unless asked.
+
+## Docs
+
+- [README, scenario router for agents](https://github.com/ir-dev/ark-oauth-oidc/blob/main/README.md): 15 scenarios, each with a prompt, steps, "Done when" and "Do not"
+- [System-prompt context block](https://github.com/ir-dev/ark-oauth-oidc/blob/main/README.md#4-context-block-for-a-system-prompt)
+- [Server package README](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md)
+- [Server AI-PROMPT](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/AI-PROMPT.md), [AI-RECIPES](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/AI-RECIPES.md), [API-GUIDE](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/API-GUIDE.md)
+- [.NET client AI-PROMPT](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Client/AI-PROMPT.md)
+- [Python client AI-PROMPT](https://github.com/ir-dev/ark-oauth-oidc/blob/main/ark_oauth_client_py/AI-PROMPT.md)
+- [Node client README](https://github.com/ir-dev/ark-oauth-oidc/blob/main/ark_oauth_client_nodejs/README.md)
+- [Reference client app](https://github.com/ir-dev/ark-oauth-oidc/tree/main/Ark.oAuth.Oidc/Ark.Client.Web)
+- [Getting started](https://github.com/ir-dev/ark-oauth-oidc/blob/main/GETTINGSTARTED.md)
+
+## Optional
+
+- [Troubleshooting (server)](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/TROUBLESHOOTING.md)
+- [Migration (server)](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/MIGRATION.md)
+- [Project site](https://ir-dev.github.io/ark-oauth-oidc/)
