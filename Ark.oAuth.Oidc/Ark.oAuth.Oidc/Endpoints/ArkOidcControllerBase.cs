@@ -10,7 +10,8 @@ namespace Ark.oAuth.Oidc.Endpoints
     /// requires. A client library can only recover from an error it can parse, so errors here are
     /// never HTTP 200 with a message in the body.
     /// </summary>
-    public abstract class ArkOidcControllerBase : Controller
+    // Base of the OAuth/OIDC endpoints, which authenticate clients and tokens themselves (RFC 6749).
+    public abstract class ArkOidcControllerBase : Controller  // nosemgrep: csharp.dotnet.security.audit.missing-or-broken-authorization.missing-or-broken-authorization
     {
         protected readonly ArkDataContext Ctx;
         protected readonly IConfiguration Config;

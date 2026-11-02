@@ -40,7 +40,7 @@ Upon user authentication, the IDP returns an **access token** (JWT) in the redir
 **Response:**
 ```json
 {
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR...",
+  "access_token": "eyJ...<signed JWT>",
   "token_type": "Bearer",
   "expires_in": 3600
 }

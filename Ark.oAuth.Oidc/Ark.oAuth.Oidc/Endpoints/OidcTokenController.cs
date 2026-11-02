@@ -148,6 +148,11 @@ namespace Ark.oAuth.Oidc.Endpoints
                 scopes = wanted;
             }
 
+            // auth_time is when the user authenticated, not when this refresh token was minted:
+            // under rotation created_at moves forward on every refresh, and an ID token claiming
+            // a fresh sign-in would satisfy a client's max_age check for a session days old.
+            var authTime = entry.created_at;
+
             // the session must still be alive, so ending a session really does end access
             if (!string.IsNullOrEmpty(entry.session_id))
             {
@@ -157,6 +162,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                     await _grants.RevokeFamilyAsync(entry.family_id);
                     throw OAuthException.InvalidGrant("the session behind this refresh token has ended.");
                 }
+                authTime = session.auth_time;
             }
 
             // ...and so must the account. Deactivating a user revokes their refresh tokens, so
@@ -180,7 +186,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 Subject = entry.subject,
                 Scopes = scopes,
                 SessionId = entry.session_id,
-                AuthTime = entry.created_at
+                AuthTime = authTime
             };
 
             var (accessToken, expiresAt, _) = await _tokens.IssueAccessTokenAsync(ctx);
@@ -241,6 +247,9 @@ namespace Ark.oAuth.Oidc.Endpoints
             var entry = await _grants.PollDeviceCodeAsync(deviceCode, client);
             var scopes = (entry.scope ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
 
+            // The approving session's sign-in time; left unset it defaulted to now.
+            var session = await _grants.GetSessionAsync(entry.session_id);
+
             var ctx = new TokenRequestContext
             {
                 Tenant = tenant,
@@ -249,7 +258,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                 Audience = tenant.audience,
                 Subject = entry.subject!,
                 Scopes = scopes,
-                SessionId = entry.session_id
+                SessionId = entry.session_id,
+                AuthTime = session?.auth_time ?? entry.created_at
             };
 
             var (accessToken, expiresAt, _) = await _tokens.IssueAccessTokenAsync(ctx);

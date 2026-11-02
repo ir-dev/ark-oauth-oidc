@@ -20,6 +20,7 @@ namespace Ark.oAuth.Oidc
         public virtual DbSet<ArkRefreshToken> refresh_tokens { get; set; }
         public virtual DbSet<ArkDeviceCode> device_codes { get; set; }
         public virtual DbSet<ArkParRequest> par_requests { get; set; }
+        public virtual DbSet<ArkUsedAssertion> used_assertions { get; set; }
         public virtual DbSet<ArkConsent> consents { get; set; }
         public virtual DbSet<ArkSession> sessions { get; set; }
         public virtual DbSet<ArkSessionClient> session_clients { get; set; }

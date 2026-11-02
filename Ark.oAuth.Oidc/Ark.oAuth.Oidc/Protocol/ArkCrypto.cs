@@ -106,15 +106,21 @@ namespace Ark.oAuth.Oidc.Protocol
 
         private const int SecretSaltBytes = 16;
         private const int SecretHashBytes = 32;
-        private const int SecretIterations = 210_000; // OWASP 2023 guidance for PBKDF2-SHA256
+        public const int SecretIterations = 210_000; // OWASP 2023 guidance for PBKDF2-SHA256
 
         /// <summary>Hashes a client secret with PBKDF2-SHA256. Format: {iterations}.{salt}.{hash}</summary>
-        public static string HashSecret(string secret)
+        public static string HashSecret(string secret) => HashSecret(secret, SecretIterations);
+
+        /// <summary>
+        /// The same format at a chosen work factor. The count is stored in the hash, so raising it
+        /// later leaves every existing hash verifiable.
+        /// </summary>
+        public static string HashSecret(string secret, int iterations)
         {
             var salt = RandomNumberGenerator.GetBytes(SecretSaltBytes);
             var hash = Rfc2898DeriveBytes.Pbkdf2(
-                Encoding.UTF8.GetBytes(secret), salt, SecretIterations, HashAlgorithmName.SHA256, SecretHashBytes);
-            return $"{SecretIterations}.{Convert.ToBase64String(salt)}.{Convert.ToBase64String(hash)}";
+                Encoding.UTF8.GetBytes(secret), salt, iterations, HashAlgorithmName.SHA256, SecretHashBytes);
+            return $"{iterations}.{Convert.ToBase64String(salt)}.{Convert.ToBase64String(hash)}";
         }
 
         /// <summary>Verifies a client secret against a stored PBKDF2 hash, in constant time.</summary>

@@ -19,7 +19,8 @@ namespace Ark.oAuth.Oidc.Controllers
     /// New integrations should use the standard endpoints under /{tenant_id}/oauth2/ and
     /// discover them from /{tenant_id}/.well-known/openid-configuration.
     /// </summary>
-    [Route("oauth")]
+    // v1 protocol surface: sign-in and token routes are anonymous by definition; the operator routes carry [Authorize] + ArkOperator.
+    [Route("oauth")]  // nosemgrep: csharp.dotnet.security.audit.missing-or-broken-authorization.missing-or-broken-authorization
     public class ServerController : Controller
     {
         TokenServer _ts;
@@ -66,6 +67,7 @@ namespace Ark.oAuth.Oidc.Controllers
             return View();
         }
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [Route("{tenant_id}/v1/password/reset/{uid}")]
         public async Task<dynamic> PasswordReset([FromRoute] string tenant_id, [FromRoute] string uid,
             [FromForm] string action_type, [FromForm] string pw1, [FromForm] string pw2)
@@ -126,7 +128,10 @@ namespace Ark.oAuth.Oidc.Controllers
             }
             return View();
         }
+        // Antiforgery, as on the standard sign-in page: without it any site could post its own
+        // credentials here and sign the visitor into the attacker's account at the client.
         [HttpPost]
+        [ValidateAntiForgeryToken]
         [Route("{tenant_id}/v1/connect/authorize")]
         public async Task<IActionResult> Index([FromRoute] string tenant_id,
             [FromForm] string Username,
@@ -211,8 +216,11 @@ namespace Ark.oAuth.Oidc.Controllers
                 // The verifier is now actually checked against the stored challenge. Format
                 // validation is relaxed because the original client library generated a short,
                 // non-conforming verifier; the match itself is enforced either way.
+                // This endpoint authenticates no client, so PKCE is required outright: a code
+                // issued without a challenge is a confidential client's, from the standard
+                // endpoint, and redeeming it here would skip that client's secret.
                 var entry = await _grants.ConsumeAuthCodeAsync(code, cc, redirect_uri, code_verifier,
-                    enforceVerifierFormat: false);
+                    enforceVerifierFormat: false, requirePkce: true);
 
                 var ep = V1Endpoints(ser, tt.tenant_id);
                 var scopes = (entry.scope ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();

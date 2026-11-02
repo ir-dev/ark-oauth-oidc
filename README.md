@@ -637,7 +637,7 @@ caching instead of my own. Remember a public client cannot use this grant.
 
 ```bash
 curl -X POST https://idp.example.com/my_idp/oauth2/token \
-  -u 'my-service:<secret>' -d 'grant_type=client_credentials' -d 'scope=reports.read'
+  -u "my-service:$CLIENT_SECRET" -d 'grant_type=client_credentials' -d 'scope=reports.read'
 ```
 
 **Done when:** a token is obtained, cached until shortly before expiry, and accepted by the API from S5.
@@ -1179,7 +1179,7 @@ cannot use it. See [S6](#s6--machine-to-machine-client-credentials).
 
 ```bash
 curl -X POST https://idp.example.com/my_idp/oauth2/device_authorization \
-  -u 'my-device:<secret>' -d 'scope=openid profile'
+  -u "my-device:$CLIENT_SECRET" -d 'scope=openid profile'
 ```
 
 ```json

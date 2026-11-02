@@ -66,6 +66,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 };
 
                 ApplyMetadata(client, metadata, ep);
+                EnforceNotReservedClientId(client);
                 await EnforceKnownScopesAsync(client);
                 await EnforceUniqueClientNameAsync(client);
                 await EnforceUniqueClientIdAsync(client);
@@ -352,6 +353,30 @@ namespace Ark.oAuth.Oidc.Endpoints
         /// a requested one can, and the answer is the same 409 a duplicate client_name gets, so
         /// a caller retrying with a suffix treats both conflicts one way.
         /// </summary>
+        /// <summary>
+        /// The ids whose identity alone carries authority: the management API admits a token by
+        /// its client_id (<see cref="ArkManagementAuth.RefusalAsync"/>), and the console client is
+        /// the operator's sign-in. Uniqueness protects them only while they exist, so a deployment
+        /// that deleted its machine client would otherwise hand the name — and the API — to the
+        /// first registration that asked for it.
+        /// </summary>
+        private void EnforceNotReservedClientId(ArkClient client)
+        {
+            var ser = ServerConfig;
+            var operatorTenant = (ser.TenantId ?? "").Trim();
+            var reserved = new List<string>
+            {
+                ArkManagementAuth.MachineClientId(client.tenant_id),
+                $"{client.tenant_id}_client"
+            };
+            if (string.Equals(client.tenant_id, operatorTenant, StringComparison.OrdinalIgnoreCase))
+                reserved.AddRange(ser.Management?.OperatorDeviceClients ?? new List<string>());
+
+            if (reserved.Any(r => string.Equals(r?.Trim(), client.client_id, StringComparison.OrdinalIgnoreCase)))
+                throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                    $"client_id '{client.client_id}' is reserved on this server. Choose a different client_id.");
+        }
+
         private async Task EnforceUniqueClientIdAsync(ArkClient client)
         {
             if (await _da.GetClient(client.tenant_id, client.client_id) != null)

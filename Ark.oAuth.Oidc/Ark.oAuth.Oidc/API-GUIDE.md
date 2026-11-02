@@ -132,9 +132,9 @@ Built by `Protocol.ArkOidcEndpoints`. All advertised in discovery.
 | Authorization | `/oauth2/authorize` |
 | Token | `/oauth2/token` |
 | UserInfo | `/oauth2/userinfo` |
-| Introspection | `/oauth2/introspect` (RFC 7662) |
+| Introspection | `/oauth2/introspect` (RFC 7662) — a client's own tokens; others' only for clients in `Oidc:IntrospectionClients` |
 | Revocation | `/oauth2/revoke` (RFC 7009) |
-| End session | `/oauth2/logout` (RP-initiated; browser-wide) |
+| End session | `/oauth2/logout` (RP-initiated; browser-wide) — without a valid `id_token_hint` the user is asked to confirm |
 | Device authorization | `/oauth2/device_authorization` (RFC 8628) · verification `/oauth2/device` |
 | Pushed authorization request | `/oauth2/par` (RFC 9126) |
 | Dynamic registration | `/oauth2/register` (RFC 7591/7592; only if enabled) |

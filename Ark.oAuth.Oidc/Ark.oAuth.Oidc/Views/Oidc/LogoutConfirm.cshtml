@@ -1,0 +1,25 @@
+@model Ark.oAuth.Oidc.Endpoints.LogoutConfirmPageModel
+@{
+    Layout = "~/Views/Oidc/_ArkLayout.cshtml";
+    ViewBag.Brand = Model.Brand;
+    ViewBag.PageTitle = $"Sign out · {Model.Brand.HostName}";
+}
+
+@* Shown when a sign-out request did not prove where it came from (no valid id_token_hint), so a
+   link on some other page cannot end the session without the person choosing to. *@
+<h1>Sign out?</h1>
+<p class="ark-sub">You will be signed out of @Model.Brand.HostName and the applications you opened with it.</p>
+
+<form method="post" action="@Model.ActionUrl">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="ark_action" value="logout" />
+    @foreach (var field in Model.Fields)
+    {
+        <input type="hidden" name="@field.Key" value="@field.Value" />
+    }
+    <button class="ark-btn ark-btn-primary" type="submit" style="margin-top:6px;">Sign out</button>
+</form>
+
+<p class="ark-meta">
+    If you did not ask to sign out, close this page — you will stay signed in.
+</p>

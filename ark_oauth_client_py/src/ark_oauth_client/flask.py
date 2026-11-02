@@ -40,6 +40,7 @@ host does not have to register anything.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from functools import wraps
@@ -74,6 +75,10 @@ from .session import (
     unsign_session_id,
 )
 from .tokens import TokenSet
+
+# Silent unless the application configures logging; the best-effort calls below report here
+# instead of disappearing.
+_log = logging.getLogger(__name__)
 
 __all__ = [
     "ArkFlask",
@@ -466,10 +471,13 @@ class ArkFlask:
                 params, transaction, redirect_uri=self._redirect_uri()
             )
         except Exception as error:
-            assert session is not None
-            session["txs"].pop(state, None)
+            # `stored` came out of this session, so it is never None here. The check is for the
+            # type checker and, unlike an assert, it survives `python -O`.
+            if session is not None:
+                session["txs"].pop(state, None)
             response = self._fail(error)
-            self._save_session(response, session_id, session)
+            if session is not None:
+                self._save_session(response, session_id, session)
             return response
 
         ark_claims = tokens.ark_claims()
@@ -503,9 +511,9 @@ class ArkFlask:
         if self.fetch_user_info and tokens.access_token and tokens.has_scope("openid"):
             try:
                 user.update(self.client.user_info(tokens.access_token))
-            except Exception:
+            except Exception as error:
                 # UserInfo is supplementary; the ID token already carries what the scopes unlocked.
-                pass
+                _log.debug("userinfo lookup failed; continuing with the ID token's claims: %s", error)
 
         fresh = {
             "created_at": int(time.time()),
@@ -531,10 +539,12 @@ class ArkFlask:
                 # Ending the local session leaves the refresh token live at the provider until it
                 # expires; revoking takes down its whole family, which is what "sign out" is
                 # expected to mean.
-                self.client.revoke(tokens.refresh_token, token_type_hint="refresh_token")
-            except Exception:
-                # Best effort: a provider that is down must not prevent a local sign-out.
-                pass
+                # token_type_hint names the kind of token (RFC 7009), it is not a credential.
+                self.client.revoke(tokens.refresh_token, token_type_hint="refresh_token")  # nosec B106
+            except Exception as error:
+                # Best effort: a provider that is down must not prevent a local sign-out. Logged,
+                # because the refresh token then stays live at the provider until it expires.
+                _log.warning("refresh token revocation at sign-out failed: %s", error)
 
         target = local_or_default(return_to, self.config.signed_out_redirect_uri) or self.default_return_to
         try:
@@ -543,9 +553,9 @@ class ArkFlask:
                 post_logout_redirect_uri=self.client.config.post_logout_redirect_uri
                 or self._absolute(local_or_default(return_to, self.default_return_to)),
             )
-        except Exception:
+        except Exception as error:
             # A tenant with no end_session_endpoint still gets a clean local sign-out.
-            pass
+            _log.debug("no provider sign-out URL; signing out locally only: %s", error)
 
         response = redirect(target)
         self._drop_session(response, session_id)
@@ -877,7 +887,8 @@ class ArkFlask:
             proto = (request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip()
             host = (request.headers.get("X-Forwarded-Host") or "").split(",")[0].strip()
             if proto and host:
-                return f"{proto}://{host}{request.script_root}"
+                # An origin used to build redirect URLs, never a response body.
+                return f"{proto}://{host}{request.script_root}"  # nosemgrep: python.flask.security.audit.directly-returned-format-string.directly-returned-format-string
         return f"{request.scheme}://{request.host}{request.script_root}"
 
     def _absolute(self, path: str) -> str:

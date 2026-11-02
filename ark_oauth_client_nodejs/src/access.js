@@ -206,7 +206,7 @@ function deniedKey(secret) {
 
 export function protectState(secret, payload) {
   const nonce = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', deniedKey(secret), nonce);
+  const cipher = createCipheriv('aes-256-gcm', deniedKey(secret), nonce, { authTagLength: 16 });
   cipher.setAAD(PURPOSE);
   const body = Buffer.from(JSON.stringify({ ...payload, _iat: Math.floor(Date.now() / 1000) }), 'utf8');
   return base64UrlEncode(Buffer.concat([nonce, cipher.update(body), cipher.final(), cipher.getAuthTag()]));
@@ -218,7 +218,7 @@ export function unprotectState(secret, value, maxAgeSeconds = DENIED_MAX_AGE_SEC
   try {
     const raw = base64UrlDecode(String(value));
     if (raw.length < 12 + 16) return null;
-    const decipher = createDecipheriv('aes-256-gcm', deniedKey(secret), raw.subarray(0, 12));
+    const decipher = createDecipheriv('aes-256-gcm', deniedKey(secret), raw.subarray(0, 12), { authTagLength: 16 });
     decipher.setAAD(PURPOSE);
     decipher.setAuthTag(raw.subarray(raw.length - 16));
     payload = JSON.parse(Buffer.concat([decipher.update(raw.subarray(12, raw.length - 16)), decipher.final()]).toString('utf8'));

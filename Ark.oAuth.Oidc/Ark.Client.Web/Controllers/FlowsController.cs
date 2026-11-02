@@ -23,7 +23,8 @@ namespace Ark.Client.Web.Controllers
     ///  * <b>dynamic registration</b> — creating a client at runtime rather than by hand, and the
     ///    one-shot credentials that come back with it.
     /// </summary>
-    [Route("flows")]
+    // Sample app: each flow page authorises per action; the public ones are deliberate.
+    [Route("flows")]  // nosemgrep: csharp.dotnet.security.audit.missing-or-broken-authorization.missing-or-broken-authorization
     public class FlowsController : Controller
     {
         private readonly ArkAuthConfig _config;

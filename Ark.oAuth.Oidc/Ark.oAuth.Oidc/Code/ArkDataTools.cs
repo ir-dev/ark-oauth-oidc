@@ -267,6 +267,7 @@ namespace Ark.oAuth.Oidc
             ("auth_codes", "transient"),
             ("device_codes", "transient"),
             ("par_requests", "transient"),
+            ("used_assertions", "transient"),
             ("pkce_code_flow", "transient"),
             ("auth_status", "history"),
             ("audit_trace", "history"),

@@ -70,8 +70,10 @@ namespace Ark.oAuth.Oidc
         }
 
         /// <summary>Every table and column, as one JSON file. Optionally encrypted.</summary>
-        [HttpPost]
+        // CSRF: JSON-only ([Consumes]) and no CORS grant, so a cross-site page cannot send it; operator-only.
+        [HttpPost]  // nosemgrep: csharp.dotnet.security.mvc-missing-antiforgery.mvc-missing-antiforgery
         [Route("v1/data/export")]
+        [Consumes("application/json")]
         public IActionResult Export([FromBody] ArkExportRequest? request)
         {
             if (Refuse() is { } refused) return refused;
@@ -87,8 +89,10 @@ namespace Ark.oAuth.Oidc
         }
 
         /// <summary>What each import mode would do with the file, without writing anything.</summary>
-        [HttpPost]
+        // CSRF: JSON-only ([Consumes]) and no CORS grant, so a cross-site page cannot send it; operator-only.
+        [HttpPost]  // nosemgrep: csharp.dotnet.security.mvc-missing-antiforgery.mvc-missing-antiforgery
         [Route("v1/data/import/analyze")]
+        [Consumes("application/json")]
         [RequestSizeLimit(ArkDataTools.MaxImportBytesCeiling)]
         public IActionResult Analyze([FromBody] ArkImportRequest request)
         {
@@ -109,8 +113,10 @@ namespace Ark.oAuth.Oidc
         }
 
         /// <summary>Runs one mode of an analysed import, in one transaction.</summary>
-        [HttpPost]
+        // CSRF: JSON-only ([Consumes]) and no CORS grant, so a cross-site page cannot send it; operator-only.
+        [HttpPost]  // nosemgrep: csharp.dotnet.security.mvc-missing-antiforgery.mvc-missing-antiforgery
         [Route("v1/data/import/apply")]
+        [Consumes("application/json")]
         [RequestSizeLimit(ArkDataTools.MaxImportBytesCeiling)]
         public IActionResult Apply([FromBody] ArkImportRequest request)
         {
@@ -133,6 +139,7 @@ namespace Ark.oAuth.Oidc
         /// <summary>Empties every table and seeds the server as if it had just been installed.</summary>
         [HttpPost]
         [Route("v1/data/reset")]
+        [Consumes("application/json")]
         public async Task<IActionResult> Reset([FromBody] ArkResetRequest request)
         {
             if (Refuse() is { } refused) return refused;

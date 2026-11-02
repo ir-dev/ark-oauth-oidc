@@ -310,7 +310,7 @@
                     <div data-keypane="import" hidden>
                         <label class="field">
                             <span>RSA private key (PEM)</span>
-                            <textarea name="import_key" rows="6" spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----&#10;…&#10;-----END PRIVATE KEY-----"></textarea>
+                            <textarea name="import_key" rows="6" spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----&#10;…&#10;-----END PRIVATE KEY-----"></textarea><!-- gitleaks:allow: a placeholder, not a key -->
                             <small>PKCS#8 or PKCS#1, unencrypted, at least 2048 bits. The public key is derived from it.</small>
                         </label>
                         <button type="button" class="btn" id="importKey">Use this key</button>

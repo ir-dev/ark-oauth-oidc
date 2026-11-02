@@ -139,6 +139,22 @@ namespace Ark.oAuth
         public bool consumed { get; set; }
     }
 
+    /// <summary>
+    /// A private_key_jwt client assertion already accepted, kept until it expires so its jti
+    /// cannot be presented again. In the database rather than in memory: a per-process cache let
+    /// a captured assertion be replayed against any other instance behind the load balancer.
+    /// </summary>
+    [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    public class ArkUsedAssertion
+    {
+        /// <summary>SHA-256 of <c>{client_id}:{jti}</c> — fixed length whatever the client sends.</summary>
+        [Key]
+        public string id { get; set; } = default!;
+        public string client_id { get; set; } = default!;
+        public DateTime expires_at { get; set; }
+        public DateTime created_at { get; set; } = DateTime.UtcNow;
+    }
+
     /// <summary>A remembered user consent, so a returning user is not re-prompted for scopes already granted.</summary>
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     [Index(nameof(tenant_id), nameof(client_id), nameof(subject), IsUnique = true)]

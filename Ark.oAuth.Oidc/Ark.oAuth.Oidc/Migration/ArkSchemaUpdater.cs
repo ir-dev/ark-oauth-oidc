@@ -253,7 +253,8 @@ namespace Ark.oAuth.Oidc
         {
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             using var command = connection.CreateCommand();
-            command.CommandText = $"SELECT name FROM {HistoryTable}";
+            // SQL text is a constant or an embedded migration script; every value is a bound parameter.
+            command.CommandText = $"SELECT name FROM {HistoryTable}";  // nosemgrep: csharp.lang.security.sqli.csharp-sqli.csharp-sqli
             using var reader = command.ExecuteReader();
             while (reader.Read()) names.Add(reader.GetString(0));
             return names;
@@ -263,7 +264,8 @@ namespace Ark.oAuth.Oidc
         {
             using var command = connection.CreateCommand();
             command.CommandText =
-                $"INSERT INTO {HistoryTable} (name, applied_at, state) VALUES (@name, @at, @state)";
+                // SQL text is a constant or an embedded migration script; every value is a bound parameter.
+                $"INSERT INTO {HistoryTable} (name, applied_at, state) VALUES (@name, @at, @state)";  // nosemgrep: csharp.lang.security.sqli.csharp-sqli.csharp-sqli
             command.Parameters.Add(Parameter(command, "@name", name));
             command.Parameters.Add(Parameter(command, "@at", DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss")));
             command.Parameters.Add(Parameter(command, "@state", state));
@@ -325,7 +327,8 @@ namespace Ark.oAuth.Oidc
             else
             {
                 command.CommandText =
-                    "SELECT COUNT(*) FROM information_schema.tables WHERE lower(table_name) = lower(@t)" +
+                    // SQL text is a constant or an embedded migration script; every value is a bound parameter.
+                    "SELECT COUNT(*) FROM information_schema.tables WHERE lower(table_name) = lower(@t)" +  // nosemgrep: csharp.lang.security.sqli.csharp-sqli.csharp-sqli
                     SchemaScope(folder);
             }
             command.Parameters.Add(Parameter(command, "@t", table));
@@ -335,7 +338,8 @@ namespace Ark.oAuth.Oidc
         private static HashSet<string> LiveColumns(DbConnection connection, string folder, string table)
         {
             using var command = connection.CreateCommand();
-            command.CommandText = folder == "Sqlite"
+            // SQL text is a constant or an embedded migration script; every value is a bound parameter.
+            command.CommandText = folder == "Sqlite"  // nosemgrep: csharp.lang.security.sqli.csharp-sqli.csharp-sqli
                 ? "SELECT name FROM pragma_table_info(@t)"
                 : "SELECT column_name FROM information_schema.columns WHERE lower(table_name) = lower(@t)" +
                   SchemaScope(folder);
@@ -372,7 +376,8 @@ namespace Ark.oAuth.Oidc
             else
             {
                 command.CommandText =
-                    "SELECT COUNT(*) FROM information_schema.columns " +
+                    // SQL text is a constant or an embedded migration script; every value is a bound parameter.
+                    "SELECT COUNT(*) FROM information_schema.columns " +  // nosemgrep: csharp.lang.security.sqli.csharp-sqli.csharp-sqli
                     "WHERE lower(table_name) = lower(@t) AND lower(column_name) = lower(@c)" +
                     SchemaScope(folder);
             }
@@ -408,7 +413,8 @@ namespace Ark.oAuth.Oidc
         private static void Execute(DbConnection connection, string sql, DbTransaction? transaction = null)
         {
             using var command = connection.CreateCommand();
-            command.CommandText = sql;
+            // SQL text is a constant or an embedded migration script; every value is a bound parameter.
+            command.CommandText = sql;  // nosemgrep: csharp.lang.security.sqli.csharp-sqli.csharp-sqli
             // Microsoft.Data.Sqlite refuses a command that is not enlisted in the open transaction.
             command.Transaction = transaction;
             command.ExecuteNonQuery();

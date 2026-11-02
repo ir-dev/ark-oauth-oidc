@@ -160,14 +160,33 @@ namespace Ark.oAuth.Oidc.Protocol
             if (!result.IsValid)
                 throw OAuthException.InvalidClient($"client_assertion is invalid: {result.Exception?.Message}");
 
-            // replay protection: a jti may be presented only once within its lifetime
+            // replay protection: a jti may be presented only once within its lifetime, on any
+            // instance. The primary key does the check, so two instances racing with one
+            // assertion cannot both insert it.
             var jti = parsed.Id;
             if (string.IsNullOrEmpty(jti))
                 throw OAuthException.InvalidClient("client_assertion is missing 'jti'.");
-            var cacheKey = $"ark:pkjwt:{clientId}:{jti}";
-            if (_cache.TryGetValue(cacheKey, out _))
+            var used = new ArkUsedAssertion
+            {
+                id = ArkCrypto.Sha256Base64Url($"{clientId}:{jti}"),
+                client_id = clientId,
+                // kept past exp by the skew the validation allowed, or the tail end would replay
+                expires_at = (parsed.ValidTo == default
+                    ? DateTime.UtcNow.AddMinutes(5)
+                    : DateTime.SpecifyKind(parsed.ValidTo, DateTimeKind.Utc)).AddMinutes(1)
+            };
+            if (await _ctx.used_assertions.AsNoTracking().AnyAsync(u => u.id == used.id))
                 throw OAuthException.InvalidClient("client_assertion has already been used.");
-            _cache.Set(cacheKey, true, parsed.ValidTo == default ? DateTimeOffset.UtcNow.AddMinutes(5) : new DateTimeOffset(parsed.ValidTo));
+            _ctx.used_assertions.Add(used);
+            try
+            {
+                await _ctx.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                _ctx.Entry(used).State = EntityState.Detached;
+                throw OAuthException.InvalidClient("client_assertion has already been used.");
+            }
 
             return new ClientAuthResult { Client = client, Method = "private_key_jwt" };
         }
@@ -260,9 +279,14 @@ namespace Ark.oAuth.Oidc.Protocol
             if (!Uri.TryCreate(registered, UriKind.Absolute, out var a)) return false;
             if (!Uri.TryCreate(candidate, UriKind.Absolute, out var b)) return false;
             if (!IsLoopbackHost(a.Host) || !IsLoopbackHost(b.Host)) return false;
+            // The port is the only part RFC 8252 §7.3 lets vary. Comparing the path alone also
+            // let the query, the user-info and a fragment be anything the request liked.
             return string.Equals(a.Scheme, b.Scheme, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(a.Host, b.Host, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(a.AbsolutePath, b.AbsolutePath, StringComparison.Ordinal);
+                && string.Equals(a.AbsolutePath, b.AbsolutePath, StringComparison.Ordinal)
+                && string.Equals(a.Query, b.Query, StringComparison.Ordinal)
+                && string.Equals(a.UserInfo, b.UserInfo, StringComparison.Ordinal)
+                && string.Equals(a.Fragment, b.Fragment, StringComparison.Ordinal);
         }
 
         private static bool IsLoopbackHost(string host) =>

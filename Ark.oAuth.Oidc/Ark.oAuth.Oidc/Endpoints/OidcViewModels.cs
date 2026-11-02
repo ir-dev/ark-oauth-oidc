@@ -77,6 +77,15 @@ namespace Ark.oAuth.Oidc.Endpoints
         public int ClientsFailed { get; set; }
     }
 
+    /// <summary>The "sign out?" page, for a logout request that carried no valid id_token_hint.</summary>
+    public class LogoutConfirmPageModel
+    {
+        public OidcBrandModel Brand { get; set; } = new();
+        public string ActionUrl { get; set; } = default!;
+        /// <summary>The request's own parameters, posted back with the confirmation.</summary>
+        public Dictionary<string, string> Fields { get; set; } = new();
+    }
+
     /// <summary>The device grant's user-code entry and confirmation page.</summary>
     public class DevicePageModel
     {

@@ -31,6 +31,7 @@
 }
 
 <form method="post" name="Login_Form" autocomplete="on">
+    @Html.AntiForgeryToken()
     <div class="ark-field">
         <label for="ark-username">Username</label>
         <input id="ark-username" class="ark-input" type="text" name="Username"

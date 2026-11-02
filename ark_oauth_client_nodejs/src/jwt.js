@@ -91,7 +91,7 @@ export function verifySignature(decoded, jwk, { algorithms } = {}) {
 
   const keyOptions = { key };
   if (spec.pss) {
-    keyOptions.padding = constants.RSA_PKCS1_PSS_PADDING;
+    keyOptions.padding = constants.RSA_PKCS1_PSS_PADDING; // gitleaks:allow: an RSA padding constant, not a key
     keyOptions.saltLength = constants.RSA_PSS_SALTLEN_DIGEST;
   }
   if (spec.kty === 'EC') {
@@ -284,7 +284,7 @@ export function signJwt(payload, { key, alg = 'RS256', kid, typ = 'JWT', header:
 
   const keyOptions = { key: privateKey };
   if (spec.pss) {
-    keyOptions.padding = constants.RSA_PKCS1_PSS_PADDING;
+    keyOptions.padding = constants.RSA_PKCS1_PSS_PADDING; // gitleaks:allow: an RSA padding constant, not a key
     keyOptions.saltLength = constants.RSA_PSS_SALTLEN_DIGEST;
   }
   if (spec.kty === 'EC') keyOptions.dsaEncoding = 'ieee-p1363';

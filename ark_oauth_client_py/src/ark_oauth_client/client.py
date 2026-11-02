@@ -379,7 +379,8 @@ class ArkOAuthClient:
         asks for a fresh token on every outbound call turns one request into two and rate-limits
         itself against its own identity provider.
         """
-        if self._config.token_endpoint_auth_method == "none" and not client_secret:
+        # "none" is the token_endpoint_auth_method name, not a password.
+        if self._config.token_endpoint_auth_method == "none" and not client_secret:  # nosec B105
             raise ArkConfigError(
                 "the client_credentials grant requires client authentication; a public client "
                 "cannot use it. Register a confidential client (client_secret_basic or "
@@ -882,7 +883,8 @@ class ArkOAuthClient:
         secret = client_secret or config.client_secret
         method = (
             "client_secret_basic"
-            if client_secret and config.token_endpoint_auth_method == "none"
+            # "none" is the token_endpoint_auth_method name, not a password.
+            if client_secret and config.token_endpoint_auth_method == "none"  # nosec B105
             else config.token_endpoint_auth_method
         )
 

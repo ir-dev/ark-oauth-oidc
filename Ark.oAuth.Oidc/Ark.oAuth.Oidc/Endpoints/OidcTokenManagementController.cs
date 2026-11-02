@@ -59,11 +59,22 @@ namespace Ark.oAuth.Oidc.Endpoints
                 // §2.2: an unknown or expired token is not an error — it is simply not active.
                 var inactive = new Dictionary<string, object> { ["active"] = false };
 
+                // §4: which tokens this caller may ask about. Its own, always; anyone else's only
+                // when it is configured as a resource server. Answered as inactive rather than
+                // refused, so the response does not confirm that the token exists.
+                var caller = auth.Client.client_id;
+                var mayInspectOthers = (Options.IntrospectionClients ?? new List<string>())
+                    .Any(c => string.Equals(c?.Trim(), caller, StringComparison.OrdinalIgnoreCase));
+                bool MayInspect(string? issuedTo) =>
+                    mayInspectOthers || string.Equals(issuedTo, caller, StringComparison.OrdinalIgnoreCase);
+
                 if (hint != "refresh_token")
                 {
                     var result = await _tokens.ValidateAsync(token, tenant, ep.Issuer);
-                    if (result.IsValid)
+                    if (result.IsValid && !await IsSupersededServiceTokenAsync(result.ClaimsIdentity, token))
                     {
+                        if (!MayInspect(result.ClaimsIdentity?.FindFirst("client_id")?.Value))
+                            return Ok(inactive);
                         var id = result.ClaimsIdentity;
                         var body = new Dictionary<string, object> { ["active"] = true };
                         void Copy(string claim, string? outName = null)
@@ -87,7 +98,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 {
                     var refresh = await _grants.FindRefreshTokenAsync(token);
                     if (refresh != null && !refresh.revoked && refresh.consumed_at == null
-                        && refresh.expires_at > DateTime.UtcNow)
+                        && refresh.expires_at > DateTime.UtcNow && MayInspect(refresh.client_id))
                     {
                         return Ok(new Dictionary<string, object>
                         {
@@ -105,6 +116,20 @@ namespace Ark.oAuth.Oidc.Endpoints
 
                 return Ok(inactive);
             }, _da, "introspect");
+        }
+
+        /// <summary>
+        /// A legacy service-account token (the <c>service_role</c> JWT, valid for a year) is live
+        /// only while it is the one the account holds: regenerating it in the console replaces the
+        /// stored digest, and that is what retires the old token here. A row still holding a token
+        /// in the clear, from before digests, is matched as it stands.
+        /// </summary>
+        private async Task<bool> IsSupersededServiceTokenAsync(System.Security.Claims.ClaimsIdentity? identity, string token)
+        {
+            if (identity?.FindFirst("service_role") == null) return false;
+            var digest = ArkUtil.ServiceTokenDigest(token);
+            return !await Ctx.users.AsNoTracking()
+                .AnyAsync(u => u.type == "service" && (u.hash_pw == digest || u.hash_pw == token));
         }
 
         // -----------------------------------------------------------------
@@ -179,15 +204,21 @@ namespace Ark.oAuth.Oidc.Endpoints
             var state = Param("state");
             var clientId = Param("client_id");
 
-            // Identify the client from the hint when one was not named explicitly.
-            if (string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(idTokenHint))
+            // The hint counts only once its signature checks out. Read unverified, it named the
+            // client but proved nothing — and a hint that proves nothing cannot stand in for the
+            // user's confirmation below.
+            var hintValid = false;
+            if (!string.IsNullOrEmpty(idTokenHint))
             {
-                try
+                var hint = await _tokens.ValidateIdTokenHintAsync(idTokenHint!, tenant, Endpoints(tenant.tenant_id).Issuer,
+                    TimeSpan.FromMinutes(Math.Max(1, opt.SessionLifetimeMinutes)));
+                if (hint.IsValid)
                 {
-                    var parsed = new JsonWebTokenHandler().ReadJsonWebToken(idTokenHint);
-                    clientId = parsed.Audiences.FirstOrDefault();
+                    hintValid = true;
+                    // Identify the client from the hint when one was not named explicitly.
+                    if (string.IsNullOrEmpty(clientId))
+                        clientId = (hint.SecurityToken as JsonWebToken)?.Audiences.FirstOrDefault();
                 }
-                catch { /* an unreadable hint simply yields no client */ }
             }
 
             // --- decide what is being signed out ---
@@ -202,6 +233,7 @@ namespace Ark.oAuth.Oidc.Endpoints
 
             var targets = new List<string>();
             if (!string.IsNullOrEmpty(sessionId)) targets.Add(sessionId!);
+            var live = await _grants.GetSessionAsync(sessionId) != null;
 
             if (opt.SignOutAllBrowserSessions && !string.IsNullOrEmpty(browserId))
             {
@@ -209,7 +241,42 @@ namespace Ark.oAuth.Oidc.Endpoints
                 // one per deployment, not one per tenant, so crossing that boundary is a choice.
                 var scope = opt.SignOutAcrossTenants ? null : tenant.tenant_id;
                 foreach (var session in await _grants.GetBrowserSessionsAsync(browserId, scope))
+                {
                     targets.Add(session.session_id);
+                    live = true;
+                }
+            }
+
+            // RP-Initiated Logout 1.0 §2: without a valid id_token_hint the request could have come
+            // from any page — an <img> pointed here signed the visitor out of every application,
+            // and on a shared browser out of every account. Such a request is asked to confirm,
+            // with a form only this origin can submit. Nothing live to end means nothing to ask.
+            if (!hintValid && live)
+            {
+                var confirmed = HttpMethods.IsPost(Request.Method) && Request.HasFormContentType
+                    && Request.Form["ark_action"] == "logout"
+                    && await HttpContext.RequestServices
+                        .GetRequiredService<Microsoft.AspNetCore.Antiforgery.IAntiforgery>()
+                        .IsRequestValidAsync(HttpContext);
+                if (!confirmed)
+                {
+                    var fields = new Dictionary<string, string>();
+                    if (!string.IsNullOrEmpty(postLogoutRedirectUri)) fields["post_logout_redirect_uri"] = postLogoutRedirectUri!;
+                    if (!string.IsNullOrEmpty(state)) fields["state"] = state!;
+                    if (!string.IsNullOrEmpty(clientId)) fields["client_id"] = clientId!;
+                    return View("~/Views/Oidc/LogoutConfirm.cshtml", new LogoutConfirmPageModel
+                    {
+                        Brand = new OidcBrandModel
+                        {
+                            HostLogo = ServerConfig.EmailConfig?.host_logo,
+                            HostName = ServerConfig.EmailConfig?.host_company_display ?? "Identity Provider",
+                            PrivacyUrl = ServerConfig.EmailConfig?.privacy_policy_url,
+                            TermsUrl = ServerConfig.EmailConfig?.terms_url
+                        },
+                        ActionUrl = $"{Request.PathBase}{Request.Path}",
+                        Fields = fields
+                    });
+                }
             }
 
             // Revoked first, and before any redirect is validated, so the sign-out has already

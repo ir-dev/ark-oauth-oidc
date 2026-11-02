@@ -193,6 +193,35 @@ namespace Ark.oAuth.Oidc.Protocol
             });
         }
 
+        /// <summary>
+        /// Validates an <c>id_token_hint</c> (RP-Initiated Logout 1.0 §2): an ID token signed by a
+        /// key this server publishes, under its issuer. The spec has the provider accept an expired
+        /// ID token as a hint — signing out an hour after signing in is the normal case — so expiry
+        /// is extended by <paramref name="maxAge"/>, the longest a session it could name lives;
+        /// an older hint proves nothing about any session still open. The audience is not checked,
+        /// since naming the client is what the hint is read for. <c>typ</c> must be an ID token's,
+        /// so an access or logout token cannot stand in for one.
+        /// </summary>
+        public async Task<TokenValidationResult> ValidateIdTokenHintAsync(string token, ArkTenant tenant, string standardIssuer, TimeSpan maxAge)
+        {
+            var keys = await _keys.GetPublishedKeysAsync(tenant.tenant_id);
+            var issuers = new[] { standardIssuer, tenant.issuer }
+                .Where(i => !string.IsNullOrEmpty(i)).Distinct().ToArray();
+            return await new JsonWebTokenHandler().ValidateTokenAsync(token, new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuers = issuers,
+                ValidateAudience = false,
+                ValidateLifetime = true,
+                RequireExpirationTime = true,
+                LifetimeValidator = (_, expires, _, _) =>
+                    expires != null && expires.Value.ToUniversalTime().Add(maxAge) > DateTime.UtcNow,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKeys = _keys.GetValidationKeys(keys),
+                ValidTypes = new[] { "JWT" }
+            });
+        }
+
         internal static long ToUnix(DateTime utc) => new DateTimeOffset(DateTime.SpecifyKind(utc, DateTimeKind.Utc)).ToUnixTimeSeconds();
     }
 }

@@ -6,7 +6,8 @@ using Org.BouncyCastle.Ocsp;
 
 namespace Ark.oAuth.Client
 {
-    [Route("oauth")]
+    // OIDC callback/sign-out routes: reached before a session exists, by design.
+    [Route("oauth")]  // nosemgrep: csharp.dotnet.security.audit.missing-or-broken-authorization.missing-or-broken-authorization
     public class ClientController : Controller
     {
         IConfiguration _config;

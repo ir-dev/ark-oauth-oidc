@@ -478,12 +478,26 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<bool> UpdatePassword(string uq_refid, string pw)
         {
+            if (string.IsNullOrEmpty(uq_refid)) throw new ApplicationException("invalid reference id, pls contact support.");
             var uu = await _ctx.users.FirstOrDefaultAsync(t => t.ref_uid == uq_refid);
             if (uu == null) throw new ApplicationException("invalid reference id, pls contact support.");
             else if (uu.reset_mode.HasValue && uu.reset_mode.Value)
             {
+                // `at` is stamped when the link is issued (account creation, or UserResetPw).
+                // Unreadable counts as expired: failing closed costs one re-sent email.
+                var hours = _util.ServerConfig.PasswordLinkLifetimeHours;
+                if (hours > 0)
+                {
+                    var issued = DateTime.TryParse(uu.at, System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                        out var at) ? at : DateTime.MinValue;
+                    if (DateTime.UtcNow - issued > TimeSpan.FromHours(hours))
+                        throw new ApplicationException("this link has expired - ask your administrator to send a new one.");
+                }
                 _ctx.ChangeTracker.Clear();
                 uu.reset_mode = false;
+                // Spent: the link that set this password must not be the key to the next reset.
+                uu.ref_uid = Guid.NewGuid().ToString();
                 uu.hash_pw = _util.HashPasswordPBKDF2(pw);
                 uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Update(uu);
@@ -491,6 +505,17 @@ namespace Ark.oAuth.Oidc
             }
             else throw new ApplicationException("reset request expired, pls contact support.");
             return true;
+        }
+        /// <summary>Stores a service account's token digest (<see cref="ArkUtil.ServiceTokenDigest"/>).</summary>
+        public async Task SetServiceToken(string email, string digest)
+        {
+            // a value, not an expression: EF cannot translate the ToString into SQL
+            var at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+            var updated = await _ctx.users.Where(t => t.email == email && t.type == "service")
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(t => t.hash_pw, digest)
+                    .SetProperty(t => t.at, at));
+            if (updated == 0) throw new ApplicationException($"'{email}' is not a service account.");
         }
         public async Task<ArkUser> SetUserPassword(string email, string pw)
         {
@@ -533,12 +558,17 @@ namespace Ark.oAuth.Oidc
         {
             var login_id = (un ?? "").ToLower().Trim();
             var usr = _ctx.users.FirstOrDefault(t => (t.email ?? "").ToLower() == login_id);
-            if (usr == null) throw new ApplicationException("invalid creds");
             var clnt = _ctx.clients.FirstOrDefault(t => (t.client_id ?? "").ToLower() == (client ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
+            var usr_cl_cl = usr == null || clnt == null ? null
+                : _ctx.user_client_claims.FirstOrDefault(t => (t.email ?? "").ToLower() == login_id && (t.client_id ?? "").ToLower() == (clnt.id ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
+            // One hash on every path. Returning before it for an unknown account or a missing
+            // mapping answered in a fraction of the time a wrong password took, which named the
+            // accounts that exist even though the message is the same.
+            var verified = _util.VerifyPasswordPBKDF2(pw, usr_cl_cl != null ? usr!.hash_pw ?? "" : ArkUtil.DummyPasswordHash.Value);
+            if (usr == null) throw new ApplicationException("invalid creds");
             if (clnt == null) throw new ApplicationException("invalid creds client");
-            var usr_cl_cl = _ctx.user_client_claims.FirstOrDefault(t => (t.email ?? "").ToLower() == login_id && (t.client_id ?? "").ToLower() == (clnt.id ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
             if (usr_cl_cl == null) throw new ApplicationException("invalid creds client.");
-            if (!_util.VerifyPasswordPBKDF2(pw, usr.hash_pw))
+            if (!verified)
             {
                 await UpdateStatus(login_id, retry: "increment");
                 throw new ApplicationException("invalid creds.");
@@ -546,6 +576,21 @@ namespace Ark.oAuth.Oidc
             else
             {
                 await UpdateStatus(login_id, retry: "reset");
+            }
+            if (ArkUtil.IsLegacyPasswordHash(usr.hash_pw))
+            {
+                // The password is in hand only now, so this is the one place the original
+                // 100,000-iteration hash can be rewritten. Best effort: it never fails a sign-in.
+                try
+                {
+                    var upgraded = _util.HashPasswordPBKDF2(pw);
+                    await _ctx.users.Where(t => t.email == usr.email)
+                        .ExecuteUpdateAsync(s => s.SetProperty(t => t.hash_pw, upgraded));
+                }
+                catch (Exception ex)
+                {
+                    LogError(ex, "password_rehash", "signin", $"user: {login_id}");
+                }
             }
             if (!clnt.is_active)
                 throw new ArkAccountInactiveException(ArkActivationLevel.Client,

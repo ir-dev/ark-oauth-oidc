@@ -1,0 +1,36 @@
+# gitleaks findings in past commits, each verified on 2026-11-02 and recorded here rather than
+# rewritten out of the public history. Fingerprints only - no secret values. A new finding is
+# never covered by this file: add an entry only after verifying it, and rotate anything live.
+
+# Documentation placeholders and an RSA padding constant (since reworded in the working tree).
+060cc55d6f3e4b7287ed2e0832a960cd9cb41fed:Ark.oAuth.Oidc/Ark.oAuth.Oidc/Views/Oidc/Integrate.cshtml:curl-auth-user:154
+060cc55d6f3e4b7287ed2e0832a960cd9cb41fed:README.md:curl-auth-user:313
+060cc55d6f3e4b7287ed2e0832a960cd9cb41fed:README.md:curl-auth-user:324
+060cc55d6f3e4b7287ed2e0832a960cd9cb41fed:README.md:curl-auth-user:348
+36020fb5d75ac074bf0a7c346ae3168622399cf2:Ark.oAuth.Oidc/Ark.oAuth.Oidc/wwwroot/setup/wizard.html:private-key:292
+3cc5c9932710ed8ac2e85370411b3d328fa47785:README.md:curl-auth-user:408
+3cc5c9932710ed8ac2e85370411b3d328fa47785:README.md:curl-auth-user:841
+4497fdc0e516272a5561aa1153d02a2194737cd9:custom-pkce-flow.md:generic-api-key:43
+9e0a58b8bdc25253cfa9c6659fe9bb197b9d9e96:ark_oauth_client_nodejs/src/jwt.js:generic-api-key:275
+9e0a58b8bdc25253cfa9c6659fe9bb197b9d9e96:ark_oauth_client_nodejs/src/jwt.js:generic-api-key:90
+c6b20f9dacad9827404c3d6f3cf5677334c20af2:ark_oauth_client_py/pip_deploy.txt:generic-api-key:266
+c6b20f9dacad9827404c3d6f3cf5677334c20af2:ark_oauth_client_py/pip_deploy.txt:generic-api-key:270
+
+# Session transcripts committed by mistake in Aug 2026 (the folder is now git-ignored). Every
+# token in them was issued by a https://localhost dev IdP, decoded and checked.
+21547d7f62860702c350299507e23a229b53aa76:.cc-history/2026-08-17_213656_ide_selectionThe-user-selected-the-lin_580da946.md:curl-auth-user:4169
+21547d7f62860702c350299507e23a229b53aa76:.cc-history/2026-08-17_213656_ide_selectionThe-user-selected-the-lin_580da946.md:generic-api-key:3186
+316e04d3dc4196ec2c254a840e9b1fe231690c67:.cc-history/2026-08-17_134927_ide_opened_fileThe-user-opened-the-fil_99d946eb.md:generic-api-key:4109
+316e04d3dc4196ec2c254a840e9b1fe231690c67:.cc-history/2026-08-17_134927_ide_opened_fileThe-user-opened-the-fil_99d946eb.md:generic-api-key:5042
+4135d896329642479a034927b0b98bdfe54bd67f:.cc-history/2026-08-16_223519_ide_opened_fileThe-user-opened-the-fil_ecf5d174.md:generic-api-key:4204
+98dcad9edf10c9a6ecbf3ffabf75058f30a98f65:.cc-history/2026-08-19_113555_ide_selectionThe-user-selected-the-lin_53ee48e6.md:generic-api-key:4163
+9e0a58b8bdc25253cfa9c6659fe9bb197b9d9e96:.cc-history/2026-08-19_043929_ide_opened_fileThe-user-opened-the-fil_a6420af3.md:generic-api-key:1623
+b50a04c88a0fed4a1859d24ada28f9f2f1dee06d:.cc-history/2026-08-17_101143_ide_opened_fileThe-user-opened-the-fil_5a4c1a0c.md:generic-api-key:4230
+b50a04c88a0fed4a1859d24ada28f9f2f1dee06d:.cc-history/2026-08-17_101143_ide_opened_fileThe-user-opened-the-fil_5a4c1a0c.md:generic-api-key:4529
+b50a04c88a0fed4a1859d24ada28f9f2f1dee06d:.cc-history/2026-08-17_101143_ide_opened_fileThe-user-opened-the-fil_5a4c1a0c.md:generic-api-key:4532
+d26f60634614701400703d0f9713b5c90ced75ec:.cc-history/2026-08-19_123406_ide_opened_fileThe-user-opened-the-fil_9577aecc.md:curl-auth-user:2002
+d26f60634614701400703d0f9713b5c90ced75ec:.cc-history/2026-08-19_123406_ide_opened_fileThe-user-opened-the-fil_9577aecc.md:jwt:4858
+
+# The ark_idp_machine secret in Ark.Client.Web/appsettings.json (2026-08-17 to 2026-11-01), for a
+# localhost dev IdP. Checked against every local IdP database on 2026-11-02: accepted by none.
+316e04d3dc4196ec2c254a840e9b1fe231690c67:Ark.oAuth.Oidc/Ark.Client.Web/appsettings.json:generic-api-key:68

@@ -12,7 +12,8 @@ namespace Ark.Client.Web.Controllers
     /// PKCE verifier to store, no <c>state</c> to remember and no code to exchange — issuing a
     /// challenge is enough.
     /// </summary>
-    public class AccountController : Controller
+    // Sign-in/sign-out routes: anonymous by design; protected actions carry [Authorize].
+    public class AccountController : Controller  // nosemgrep: csharp.dotnet.security.audit.missing-or-broken-authorization.missing-or-broken-authorization
     {
         /// <summary>
         /// Starts an interactive sign-in.

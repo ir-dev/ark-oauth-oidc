@@ -7,7 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Ark.Client.Web.Controllers
 {
-    public class HomeController : Controller
+    // Public landing page of the sample app.
+    public class HomeController : Controller  // nosemgrep: csharp.dotnet.security.audit.missing-or-broken-authorization.missing-or-broken-authorization
     {
         private readonly ArkAuthConfig _config;
         private readonly ArkSetupProbe _setup;

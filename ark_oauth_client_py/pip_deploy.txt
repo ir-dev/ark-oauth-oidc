@@ -278,11 +278,11 @@ PATHS
   of ~/.zsh_history. Verify your shell honours it before relying on it.
 
      For uv:
-         export UV_PUBLISH_TOKEN='pypi-AgEIcHlwaS5vcmc...'
+         export UV_PUBLISH_TOKEN='pypi-<paste-token-here>'
 
      For twine:
          export TWINE_USERNAME=__token__
-         export TWINE_PASSWORD='pypi-AgEIcHlwaS5vcmc...'
+         export TWINE_PASSWORD='pypi-<paste-token-here>'
 
      TWINE_USERNAME is the literal string __token__ -- not your account name.
      uv's --token flag handles that for you.

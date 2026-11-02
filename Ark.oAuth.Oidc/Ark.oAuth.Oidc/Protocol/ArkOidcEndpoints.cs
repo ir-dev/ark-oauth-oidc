@@ -13,6 +13,14 @@ namespace Ark.oAuth.Oidc.Protocol
         public bool EnableDynamicRegistration { get; set; } = false;
         /// <summary>Require an initial access token on /register when dynamic registration is on.</summary>
         public bool RequireRegistrationAccessToken { get; set; } = true;
+
+        /// <summary>
+        /// Clients that may introspect tokens issued to other clients — a resource server asking
+        /// about its callers' tokens. Every client may introspect its own. Anyone else's token
+        /// answers <c>active: false</c> (RFC 7662 §4), so holding some client's credentials is
+        /// not a way to learn who every other application's users are.
+        /// </summary>
+        public List<string> IntrospectionClients { get; set; } = new();
         public bool EnableDeviceFlow { get; set; } = true;
         public bool EnablePushedAuthorizationRequests { get; set; } = true;
         /// <summary>Refuse plain /authorize requests that did not arrive via PAR.</summary>

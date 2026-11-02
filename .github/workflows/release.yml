@@ -65,7 +65,7 @@ jobs:
       pypi_live: ${{ steps.live.outputs.pypi }}
       npm_live: ${{ steps.live.outputs.npm }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: The version to release
         id: version
@@ -163,14 +163,14 @@ jobs:
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The version decided by prepare, into every manifest on this runner. A no-op when the
       # manifests already say it.
       - name: Stamp the version
         run: scripts/version.sh set "$VERSION"
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 9.0.x
 
@@ -202,7 +202,7 @@ jobs:
           done
           [ "$(ls | wc -l)" = 4 ] || { echo "::error::expected exactly 4 files"; exit 1; }
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nuget
           path: out/nuget/
@@ -217,7 +217,7 @@ jobs:
       run:
         working-directory: ark_oauth_client_py
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # As in build-dotnet. Before setup-uv, so `set` skips refreshing the gitignored uv.lock.
       - name: Stamp the version
@@ -225,7 +225,7 @@ jobs:
         run: scripts/version.sh set "$VERSION"
 
       # uv.lock is gitignored, so the cache keys on pyproject.toml.
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           cache-dependency-glob: ark_oauth_client_py/pyproject.toml
 
@@ -254,7 +254,7 @@ jobs:
           uv run --no-project --with "$wheel" -- python -c \
             "import ark_oauth_client as a, sys; sys.exit(0 if a.__version__ == '$VERSION' else 'wheel says ' + a.__version__)"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: python
           path: ark_oauth_client_py/dist/
@@ -269,9 +269,9 @@ jobs:
       run:
         working-directory: ark_oauth_client_nodejs
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
 
@@ -291,7 +291,7 @@ jobs:
           ls -l "$GITHUB_WORKSPACE/out/npm"
           [ -f "$GITHUB_WORKSPACE/out/npm/ark-oauth-client-$VERSION.tgz" ]
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm
           path: out/npm/
@@ -305,12 +305,12 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: nuget
           path: nuget
 
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 9.0.x
 
@@ -320,7 +320,7 @@ jobs:
         run: '[ -n "$NUGET_USER" ] || { echo "::error::Set the NUGET_USER repository variable (see the setup notes at the top of release.yml)"; exit 1; }'
 
       # Trusted Publishing: swaps this run's OIDC token for an API key that lives about an hour.
-      - uses: NuGet/login@v1
+      - uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         id: login
         with:
           user: ${{ vars.NUGET_USER }}
@@ -343,12 +343,12 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: python
           path: dist
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: false
 
@@ -363,12 +363,12 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: npm
           path: npm
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -414,9 +414,9 @@ jobs:
       PYPI_LIVE: ${{ needs.prepare.outputs.pypi_live }}
       NPM_LIVE: ${{ needs.prepare.outputs.npm_live }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: built
 
@@ -433,7 +433,7 @@ jobs:
           fi
           ls -l assets
 
-      - uses: actions/attest-build-provenance@v4
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         if: ${{ hashFiles('assets/*') != '' }}
         with:
           subject-path: assets/*

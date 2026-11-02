@@ -10,7 +10,8 @@ using System.Reflection;
 
 namespace Ark.oAuth.Oidc.Host.Controllers
 {
-    public class HomeController : Controller
+    // Public landing page of the host.
+    public class HomeController : Controller  // nosemgrep: csharp.dotnet.security.audit.missing-or-broken-authorization.missing-or-broken-authorization
     {
         private readonly IConfiguration _config;
 

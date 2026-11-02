@@ -60,6 +60,13 @@
         ///     what the existing console and provisioning API already do.
         /// </summary>
         public string UserPasswordMode { get; set; }
+        /// <summary>
+        /// Hours an activation or password-reset link stays usable after it is sent; 0 means it
+        /// never expires. The link is a bearer credential for the account sitting in a mailbox,
+        /// so an unread one should not keep working indefinitely. An expired link is re-sent
+        /// from the console's reset action.
+        /// </summary>
+        public int PasswordLinkLifetimeHours { get; set; } = 72;
         public bool EnableLogTrace { get; set; }
         public string BaseUrl { get; set; }
         public string CcList { get; set; }

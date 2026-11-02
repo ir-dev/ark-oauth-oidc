@@ -59,8 +59,14 @@ namespace Ark.oAuth.Oidc.Protocol
         /// checked, only the RFC 7636 §4.1 length/charset rule is skipped so those deployments
         /// keep working while they upgrade.
         /// </param>
+        /// <param name="requirePkce">
+        /// Set by the /v1 compatibility endpoint, which authenticates no client. There the
+        /// verifier is the only proof the caller is the one that started the flow, so a code
+        /// issued without a challenge — a confidential client's code from the standard endpoint
+        /// — must not be redeemable there without the client secret it would otherwise need.
+        /// </param>
         public async Task<ArkAuthCode> ConsumeAuthCodeAsync(string code, ArkClient client, string? redirectUri,
-            string? codeVerifier, bool enforceVerifierFormat = true)
+            string? codeVerifier, bool enforceVerifierFormat = true, bool requirePkce = false)
         {
             var hash = Hash(code);
             var entry = await _ctx.auth_codes.FirstOrDefaultAsync(c => c.code_hash == hash)
@@ -88,11 +94,23 @@ namespace Ark.oAuth.Oidc.Protocol
                     throw OAuthException.InvalidGrant("redirect_uri does not match the authorization request.");
             }
 
+            if (requirePkce && string.IsNullOrEmpty(entry.code_challenge))
+                throw OAuthException.InvalidGrant("this endpoint only redeems codes issued with a PKCE code_challenge.");
             VerifyPkce(entry, client, codeVerifier, enforceVerifierFormat);
 
+            // Spent with a conditional UPDATE rather than read-then-write: two requests racing
+            // with the same code both read consumed = false, and a tracked Update would let both
+            // through. Only one of them can flip the row.
+            var claimed = await _ctx.auth_codes
+                .Where(c => c.code_hash == hash && !c.consumed)
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.consumed, true));
+            if (claimed == 0)
+            {
+                await RevokeTokensForSessionAsync(entry.session_id);
+                await _ctx.SaveChangesAsync();
+                throw OAuthException.InvalidGrant("authorization code has already been used.");
+            }
             entry.consumed = true;
-            _ctx.auth_codes.Update(entry);
-            await _ctx.SaveChangesAsync();
             return entry;
         }
 
@@ -158,6 +176,17 @@ namespace Ark.oAuth.Oidc.Protocol
                 expires_at = DateTime.UtcNow.AddSeconds(client.refresh_token_lifetime_seconds)
             });
             await _ctx.SaveChangesAsync();
+
+            // A rotation's successor checks its family after it is written. A replay of the
+            // predecessor revokes the family, and if that landed before this row existed the
+            // revocation missed it — leaving whoever won the race with a live token from a family
+            // declared stolen. Any revoked member means the family is dead (revocation is always
+            // family- or session-wide), so the new token goes with it.
+            if (familyId != null && await _ctx.refresh_tokens.AsNoTracking().AnyAsync(t => t.family_id == familyId && t.revoked))
+            {
+                await RevokeFamilyAsync(familyId);
+                throw OAuthException.InvalidGrant("refresh token has already been used; the token family has been revoked.");
+            }
             return token;
         }
 
@@ -189,9 +218,19 @@ namespace Ark.oAuth.Oidc.Protocol
 
             if (client.refresh_token_rotation)
             {
-                entry.consumed_at = DateTime.UtcNow;
-                _ctx.refresh_tokens.Update(entry);
-                await _ctx.SaveChangesAsync();
+                // Conditional, for the same reason as the code above: two concurrent refreshes
+                // with one token would otherwise both rotate it, leaving two live successors and
+                // no replay for the family check to see.
+                var now = DateTime.UtcNow;
+                var claimed = await _ctx.refresh_tokens
+                    .Where(t => t.token_hash == hash && t.consumed_at == null && !t.revoked)
+                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.consumed_at, now));
+                entry.consumed_at = now;
+                if (claimed == 0)
+                {
+                    await RevokeFamilyAsync(entry.family_id);
+                    throw OAuthException.InvalidGrant("refresh token has already been used; the token family has been revoked.");
+                }
             }
             return entry;
         }
@@ -616,6 +655,9 @@ namespace Ark.oAuth.Oidc.Protocol
 
             var pars = await _ctx.par_requests.Where(p => p.expires_at <= now).ToListAsync();
             _ctx.par_requests.RemoveRange(pars); removed += pars.Count;
+
+            var assertions = await _ctx.used_assertions.Where(a => a.expires_at <= now).ToListAsync();
+            _ctx.used_assertions.RemoveRange(assertions); removed += assertions.Count;
 
             var sessions = await _ctx.sessions.Where(s => s.expires_at <= now).ToListAsync();
             _ctx.sessions.RemoveRange(sessions); removed += sessions.Count;

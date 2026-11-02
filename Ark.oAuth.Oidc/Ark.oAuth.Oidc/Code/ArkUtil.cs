@@ -1,4 +1,5 @@
 ﻿using Ark.oAuth.Oidc;
+using Ark.oAuth.Oidc.Protocol;
 using System.Security.Cryptography;
 
 namespace Ark.oAuth
@@ -104,50 +105,57 @@ namespace Ark.oAuth
                 return false;
             }
         }
-        public string HashPasswordPBKDF2(string password, int iterations = 100000)
-        {
-            // Generate a random salt
-            byte[] salt = RandomNumberGenerator.GetBytes(16);
-            //new RNGCryptoServiceProvider().GetBytes(salt = new byte[16]);
+        /// <summary>
+        /// Hashes a password in <see cref="ArkCrypto.HashSecret(string, int)"/>'s format —
+        /// <c>{iterations}.{salt}.{hash}</c>, a 32-byte PBKDF2-SHA256 at no less than
+        /// <see cref="ArkCrypto.SecretIterations"/>. The original format (base64 of a
+        /// 16-byte salt and a 20-byte hash, 100,000 iterations implied) is still verified, and is
+        /// rewritten in this one at the next successful sign-in.
+        /// </summary>
+        public string HashPasswordPBKDF2(string password, int iterations = 100000) =>
+            ArkCrypto.HashSecret(password, Math.Max(iterations, ArkCrypto.SecretIterations));
 
-            // Create the hash
-            var pbkdf2 = new Rfc2898DeriveBytes(password, salt, iterations, HashAlgorithmName.SHA256);
-            byte[] hash = pbkdf2.GetBytes(20); // 20-byte hash
+        /// <summary>
+        /// How a service account's bearer token is stored in <c>hash_pw</c>: a digest, so the
+        /// column no longer holds a year-long credential in the clear. The prefix keeps it from
+        /// ever verifying as a password.
+        /// </summary>
+        public static string ServiceTokenDigest(string token) => "sha256:" + ArkCrypto.Sha256Base64Url(token);
 
-            // Combine salt and hash
-            byte[] hashBytes = new byte[36];
-            Array.Copy(salt, 0, hashBytes, 0, 16);
-            Array.Copy(hash, 0, hashBytes, 16, 20);
+        /// <summary>True for a hash in the original format, which sign-in upgrades.</summary>
+        public static bool IsLegacyPasswordHash(string? savedPasswordHash) =>
+            !string.IsNullOrEmpty(savedPasswordHash) && !savedPasswordHash.Contains('.');
 
-            // Convert to base64
-            string savedPasswordHash = Convert.ToBase64String(hashBytes);
-
-            return savedPasswordHash;
-        }
         public bool IsTraceEnabled { get { return _ser.EnableLogTrace; } }
+
+        /// <summary>
+        /// Verifies a password in constant time. False — never an exception — for an empty or
+        /// malformed hash, which includes a service account's bearer token in the same column.
+        /// </summary>
         public bool VerifyPasswordPBKDF2(string password, string savedPasswordHash, int iterations = 100000)
         {
-            // Extract bytes from saved hash
-            byte[] hashBytes = Convert.FromBase64String(savedPasswordHash);
-
-            // Get salt
-            byte[] salt = new byte[16];
-            Array.Copy(hashBytes, 0, salt, 0, 16);
-
-            // Compute hash of the provided password
-            var pbkdf2 = new Rfc2898DeriveBytes(password, salt, iterations, HashAlgorithmName.SHA256);
-            byte[] hash = pbkdf2.GetBytes(20);
-
-            // Compare hashes
-            for (int i = 0; i < 20; i++)
+            if (string.IsNullOrEmpty(password) || string.IsNullOrEmpty(savedPasswordHash)) return false;
+            if (!IsLegacyPasswordHash(savedPasswordHash))
+                return ArkCrypto.VerifySecret(password, savedPasswordHash);
+            try
             {
-                if (hashBytes[i + 16] != hash[i])
-                {
-                    return false;
-                }
+                byte[] hashBytes = Convert.FromBase64String(savedPasswordHash);
+                if (hashBytes.Length != 36) return false;
+                var hash = Rfc2898DeriveBytes.Pbkdf2(password, hashBytes.AsSpan(0, 16), iterations, HashAlgorithmName.SHA256, 20);
+                // The loop this replaces returned at the first differing byte.
+                return CryptographicOperations.FixedTimeEquals(hash, hashBytes.AsSpan(16, 20));
             }
-
-            return true;
+            catch (FormatException)
+            {
+                return false;
+            }
         }
+
+        /// <summary>
+        /// Verified when there is no account, or no mapping, to check against, so those failures
+        /// take as long as a wrong password and the response time does not reveal which it was.
+        /// </summary>
+        internal static readonly Lazy<string> DummyPasswordHash =
+            new(() => ArkCrypto.HashSecret(ArkCrypto.RandomToken(16)));
     }
 }

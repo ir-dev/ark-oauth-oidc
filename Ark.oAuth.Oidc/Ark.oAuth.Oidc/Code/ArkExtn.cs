@@ -373,7 +373,9 @@ namespace Ark.oAuth.Oidc
                 //client_id = $"{ser.TenantId}_client",
                 email = $"service_account_{ser.TenantId}",
                 emailed = false,
-                hash_pw = (await ts.BuildAsymmetric_AccessToken(tt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role") }, 525600)).Item1, // secret
+                // the token's digest, not the token: it is shown to nobody here, and regenerating
+                // from the console is what hands one out
+                hash_pw = ArkUtil.ServiceTokenDigest((await ts.BuildAsymmetric_AccessToken(tt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role"), new System.Security.Claims.Claim("jti", Protocol.ArkCrypto.RandomToken(16)) }, 525600)).Item1),
                 reset_mode = false,
                 type = "service",
                 name = "Service Account (Default)"

@@ -273,8 +273,12 @@ namespace Ark.oAuth.Oidc.Endpoints
                         if (granted.Count == 0)
                             throw new OAuthException(OAuthErrorCodes.AccessDenied, "the user denied the request.");
 
-                        await _grants.SaveConsentAsync(tenant.tenant_id, client.client_id, session.subject, granted);
+                        // Only what was asked for is recorded: the form is the browser's to edit,
+                        // and a scope added there would otherwise be stored as consented to.
                         scopes = scopes.Where(s => granted.Contains(s, StringComparer.OrdinalIgnoreCase)).ToList();
+                        if (scopes.Count == 0)
+                            throw new OAuthException(OAuthErrorCodes.AccessDenied, "the user denied the request.");
+                        await _grants.SaveConsentAsync(tenant.tenant_id, client.client_id, session.subject, scopes);
                     }
                     else if (action == "deny")
                     {

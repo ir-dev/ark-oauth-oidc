@@ -594,16 +594,26 @@ namespace Ark.oAuth.Oidc
         {
             try
             {
-                ArkUser user = await da.GetUser(us_cl.email);
-                ArkTenant tnt = await da.GetTenant(us_cl.tenant_id);
-                user.hash_pw = (await ts.BuildAsymmetric_AccessToken(tnt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role") }, 525600)).Item1;
-                var dd = await da.UserResetPw(user);
+                ArkUser user = await da.GetUser(us_cl.email)
+                    ?? throw new ApplicationException($"unknown user '{us_cl.email}'.");
+                // Only a service account has a token. Without this a user's password hash was
+                // overwritten with one, and the account could no longer sign in.
+                if (!string.Equals(user.type, "service", StringComparison.OrdinalIgnoreCase))
+                    throw new ApplicationException($"'{user.email}' is not a service account.");
+                ArkTenant tnt = await da.GetTenant(us_cl.tenant_id)
+                    ?? throw new ApplicationException($"unknown tenant '{us_cl.tenant_id}'.");
+                var token = (await ts.BuildAsymmetric_AccessToken(tnt, new System.Security.Claims.Claim[] { new System.Security.Claims.Claim("service_role", "service_role"), new System.Security.Claims.Claim("jti", Protocol.ArkCrypto.RandomToken(16)) }, 525600)).Item1;
+                // Written directly. UserResetPw, used here before, emailed a password-reset link,
+                // and refused outright for the seeded service_account_{tenant}, which has no
+                // mailbox. Only the digest is kept, and introspection answers for the token only
+                // while it matches, so regenerating retires the previous token.
+                await da.SetServiceToken(user.email, ArkUtil.ServiceTokenDigest(token));
                 // hash_pw is no longer serialised with the user, so the new token is handed back
                 // explicitly — once, to the caller that asked for it.
                 return new
                 {
                     msg = "service account token reset completed.",
-                    data = new { user.email, user.name, user.type, token = user.hash_pw }
+                    data = new { user.email, user.name, user.type, token }
                 };
             }
             catch (Exception ex)

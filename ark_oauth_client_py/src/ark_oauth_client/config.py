@@ -83,7 +83,8 @@ class ArkConfig:
 
     @property
     def is_confidential(self) -> bool:
-        return self.token_endpoint_auth_method != "none"
+        # "none" is the token_endpoint_auth_method name, not a password.
+        return self.token_endpoint_auth_method != "none"  # nosec B105
 
     @property
     def discovery_url(self) -> str:
