@@ -361,6 +361,10 @@ details.advanced summary { cursor: pointer; color: var(--ark-accent); font-size:
 .preview-title { font-size: calc(18px * var(--ark-text-scale, 1)); font-weight: 700; margin-bottom: 4px; }
 .preview-input { width: 100%; height: 34px; border-radius: 8px; border: 1px solid var(--ark-border-strong); }
 .preview-button { width: 100%; text-align: center; padding: 7px; border-radius: 8px; background: var(--ark-accent); color: var(--ark-accent-fg); font-weight: 600; font-size: calc(14px * var(--ark-text-scale, 1)); }
+/* Mirrors .ark-foot in Views/Oidc/_ArkLayout.cshtml; .ark-powered itself comes from ark-theme.css. */
+.preview-foot { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 14px; color: var(--ark-fg-muted); font-size: calc(12px * var(--ark-text-scale, 1)); }
+.preview-foot-links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 14px; }
+.preview-appearance { display: inline-flex; align-items: center; gap: 5px; }
 
 .meter { height: 5px; border-radius: 3px; background: var(--ark-border); overflow: hidden; }
 .meter i { display: block; height: 100%; width: 0; background: var(--ark-danger); transition: width .2s, background .2s; }

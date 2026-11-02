@@ -6,11 +6,104 @@
 
 # ARK Identity Server
 
+[![Build & Release](https://img.shields.io/github/actions/workflow/status/ir-dev/ark-oauth-oidc/release.yml?label=build%20%26%20release&logo=githubactions&logoColor=white)](https://github.com/ir-dev/ark-oauth-oidc/actions/workflows/release.yml)
+[![GitHub release](https://img.shields.io/github/v/release/ir-dev/ark-oauth-oidc?label=release&logo=github)](https://github.com/ir-dev/ark-oauth-oidc/releases/latest)
+[![Pages](https://img.shields.io/github/actions/workflow/status/ir-dev/ark-oauth-oidc/pages.yml?label=pages&logo=github)](https://ir-dev.github.io/ark-oauth-oidc/)
+[![Ark.oAuth.Oidc on NuGet](https://img.shields.io/nuget/v/Ark.oAuth.Oidc?label=Ark.oAuth.Oidc&logo=nuget)](https://www.nuget.org/packages/Ark.oAuth.Oidc)
+[![Ark.oAuth.Client on NuGet](https://img.shields.io/nuget/v/Ark.oAuth.Client?label=Ark.oAuth.Client&logo=nuget)](https://www.nuget.org/packages/Ark.oAuth.Client)
+[![ark-oauth-client on PyPI](https://img.shields.io/pypi/v/ark-oauth-client?label=PyPI&logo=pypi&logoColor=white)](https://pypi.org/project/ark-oauth-client/)
+[![ark-oauth-client on npm](https://img.shields.io/npm/v/ark-oauth-client?label=npm&logo=npm)](https://www.npmjs.com/package/ark-oauth-client)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 A self-contained **OAuth 2.1 / OpenID Connect identity provider** for ASP.NET Core, plus **client
 libraries for .NET, Python and Node**. Multi-tenant, runs on SQLite / MySQL / PostgreSQL, ships its own
 sign-in, consent and admin UI. Any standard OIDC library pointed at the issuer configures itself.
 
-**This README is written for AI coding agents.** It is organised by *scenario*: find the task you were
+**🌐 Project site: <https://ir-dev.github.io/ark-oauth-oidc/>** has the quickstart in all three
+languages, live package versions, and a **Try it** panel that builds a real PKCE authorization request
+for any issuer, right in the browser.
+
+---
+
+## ⚡ Easiest options: start here
+
+These are the newest and shortest routes. Each row is the whole job, not just the first step.
+
+| I want to… | Easiest option | Details |
+|---|---|---|
+| **Run an identity provider** 🆕 | `builder.AddArkIdp()` + `app.UseArkIdp()`, with **no configuration**. A browser setup wizard does the rest. | [below](#1-an-identity-provider-with-zero-configuration-) · [S8](#s8--stand-up-the-identity-provider) |
+| **Try the whole thing from this clone** | `./run.sh` (macOS/Linux) or `run.bat` (Windows): a fresh clone to a working sign-in | [GETTINGSTARTED.md](GETTINGSTARTED.md) |
+| **Add sign-in to an app** | **Two settings**, `authority` + `client_id`, in .NET, Python or Node | [below](#2-sign-users-in-two-settings-three-languages) · [S1–S3](#s1--sign-users-in-to-an-aspnet-core-app) |
+| **Register an app and give a user access** | **One call**, `POST /api/oauth/v1/provision/client`, or the form at `/{tenant}/admin/provisioning` | [S9](#s9--onboard-an-application-client--user--access) |
+| **Stop shared PCs signing in the previous person** | **One flag**: `AccountSwitch:RequireArkClaims` (.NET) or `account_switch.require_ark_claims` (Python) | [S10](#s10--shared-browser-wrong-account) |
+| **See an authorization request without installing anything** | The **Try it** panel on the [project site](https://ir-dev.github.io/ark-oauth-oidc/#try) | — |
+
+### 1. An identity provider with zero configuration 🆕
+
+```csharp
+using Ark.oAuth.Oidc;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.AddArkIdp();          // no ark_oauth_server settings, no connection string
+var app = builder.Build();
+app.UseHttpsRedirection();
+app.UseArkIdp();
+app.Run();
+```
+
+Run it and open the site. The wizard at `/ark-idp/setup` asks for the organization, logos, public URL,
+tenant, database, signing key, administrator, email and protocol options. The **same process** then
+becomes the IdP, with no restart. A host that already has `TenantId` and a connection string never sees
+the wizard.
+
+> **Not on NuGet yet.** `AddArkIdp()` is on `main` and was added after v2.1.2. It ships in the next
+> release. Until then, run it from this repo:
+> `dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart`, then open <https://localhost:7300>.
+> The configured route, `AddArkOidcServer`, is released ([S8](#s8--stand-up-the-identity-provider)).
+
+### 2. Sign users in: two settings, three languages
+
+Only the **authority** (`{BaseUrl}/{TenantId}`) and the **client_id** are required. Endpoints and
+signing keys come from discovery, so nothing is redeployed when a key rotates.
+
+| Language | Install |
+|---|---|
+| .NET / ASP.NET Core | `dotnet add package Ark.oAuth.Client` |
+| Python / Flask | `pip install "ark-oauth-client[flask]"` |
+| Node / Express | `npm install ark-oauth-client` |
+
+```csharp
+// .NET: settings in the "ark_oauth_client" config section
+builder.Services.AddArkOidcClient(builder.Configuration);
+app.UseRouting(); app.UseAuthentication(); app.UseAuthorization();   // in this order
+```
+
+```python
+# Python
+auth = add_ark_oidc_client(app, {"authority": "https://idp.example.com/my_idp", "client_id": "my-app"})
+
+@app.get("/billing")
+@auth.require_claims("billing.admin")      # Ark claims, not scopes
+def billing(): return current_ark.user["name"]
+```
+
+```js
+// Node
+const auth = arkExpress({ authority, clientId, redirectUri, secret: process.env.ARK_SESSION_SECRET });
+app.use(auth);
+app.get('/billing', auth.requireClaims('billing.admin'), handler);
+```
+
+Code alone is not enough. On the IdP, **register both redirect URIs** byte for byte
+(`/signin-oidc`, `/signout-callback-oidc`) and **map the user to the client**. Without the mapping,
+sign-in fails with an error that looks exactly like a wrong password. The one-call provisioning in
+[S9](#s9--onboard-an-application-client--user--access) does both.
+
+---
+
+## How this README is organised
+
+**The rest of this README is written for AI coding agents.** It is organised by *scenario*: find the task you were
 given, copy its prompt, follow its steps, check its "done when". The protocol reference sits at the end
 as facts to cite, not prose to read.
 
@@ -24,6 +117,7 @@ as facts to cite, not prose to read.
 
 ## Contents
 
+- [⚡ Easiest options: start here](#-easiest-options-start-here)
 - [0. For AI agents: read this first](#0-for-ai-agents-read-this-first)
 - [1. Scenario router](#1-scenario-router)
 - [2. Scenarios](#2-scenarios)

@@ -347,10 +347,13 @@
             lockup.appendChild(img);
         });
         $('#previewName').textContent = displayName();
+        // The live footer draws each link only when its URL is configured, so the preview does too.
+        $('#previewPrivacy').hidden = !val('privacy_url');
+        $('#previewTerms').hidden = !val('terms_url');
     }
 
     const displayName = () => val('display_name') || `${val('company_name') || 'Your organization'} Identity`;
-    ['company_name', 'display_name'].forEach(n => field(n).addEventListener('input', renderPreview));
+    ['company_name', 'display_name', 'privacy_url', 'terms_url'].forEach(n => field(n).addEventListener('input', renderPreview));
 
     // ------------------------------------------------------------------ server
 
