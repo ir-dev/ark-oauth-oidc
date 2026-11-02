@@ -32,6 +32,7 @@
 
 <p align="center">
   <a href="https://ir-dev.github.io/ark-oauth-oidc/"><b>Project site</b></a> ·
+  <a href="AGENT-HELPER.md"><b>🚀 Agent prompts</b></a> ·
   <a href="#-from-zero-to-signed-in-three-steps">Three-step start</a> ·
   <a href="#-govern-every-tenant-and-every-instance">Govern</a> ·
   <a href="#0-for-ai-agents-read-this-first">For AI agents</a> ·
@@ -44,10 +45,35 @@ libraries for .NET, Python and Node** that are ports of each other. Multi-tenant
 or PostgreSQL; ships its own setup wizard, sign-in, consent and admin console. Any standard OIDC
 library pointed at the issuer configures itself. The Ark clients just remove the boilerplate.
 
+> **🚀 Driving a coding agent?** The four main prompts are in [**AGENT-HELPER.md**](AGENT-HELPER.md):
+> host an IdP in a new MVC app, upgrade an IdP, connect a .NET/Python/Node client, or use the
+> clients against Entra/Auth0/Okta/Keycloak. [Overview below ↓](#-major-prompts-for-your-coding-agent)
+>
 > **🤖 Coding agent?** This README is written for you. Read [§0](#0-for-ai-agents-read-this-first),
 > then only the [scenario](#1-scenario-router) that matches your task. Each scenario has a paste-ready
 > prompt, exact code, a **Done when** check and a **Do not** list. The whole contract also fits in one
 > system prompt: [§4](#4-context-block-for-a-system-prompt).
+
+---
+
+## 🚀 Major prompts for your coding agent
+
+> [!IMPORTANT]
+> **Start here if you use Claude Code, Copilot, Cursor, Codex or any other coding agent.**
+> [**AGENT-HELPER.md**](AGENT-HELPER.md) holds four complete prompts covering the jobs people
+> actually do with Ark. Copy one block into your agent, fill in the `<<PLACEHOLDERS>>` and send it.
+> Each prompt carries its own rules, exact code, config, a registration checklist and a **Verify**
+> step, so the agent finishes with proof rather than a claim. Checked against **2.1.4**.
+
+| # | When you want to… | Prompt |
+|---|---|---|
+| **1** | **Create an ASP.NET Core MVC project that *is* the identity provider.** Adds `Ark.oAuth.Oidc`, sets it up through the setup wizard or appsettings + user-secrets, and keeps your own home page | [**Prompt 1 →**](AGENT-HELPER.md#prompt-1--new-aspnet-core-mvc-project-hosting-the-ark-idp) |
+| **2** | **Upgrade an existing Ark IdP to the latest version.** Finds the installed version. Below 2.1.4 it runs a cleanup for each version range skipped (v1 → 2.1.4). On 2.1.4 it compares the host against before/after reference blocks | [**Prompt 2 →**](AGENT-HELPER.md#prompt-2--upgrade-an-existing-ark-idp-host-to-214) |
+| **3** | **Connect an app to an IdP that is already running: .NET, Python or Node.** Takes the discovery URL, generates the local config (appsettings / `.env` / user-secrets), and lists every registration step on the IdP | [**Prompt 3 →**](AGENT-HELPER.md#prompt-3--connect-an-app-to-an-existing-ark-idp-net--python--node) |
+| **4** | **Use the Ark client libraries against any other OIDC provider:** Entra ID, Auth0, Okta, Keycloak, Google, Cognito. Lists the supported flows and what changes outside Ark | [**Prompt 4 →**](AGENT-HELPER.md#prompt-4--use-the-ark-client-libraries-against-an-external-idp) |
+
+For a narrower task (an SPA, an API, machine-to-machine, the device grant, diagnosing a sign-in),
+use the per-task prompts in the [scenario router](#1-scenario-router) below.
 
 ---
 
@@ -229,7 +255,7 @@ as facts to cite, not prose to read.
 
 | You are… | Do this |
 |---|---|
-| **A human** with an agent (Claude Code, Copilot, Cursor, Codex…) | Find your task in the [scenario router](#1-scenario-router), copy its **Prompt** block into your agent, fill the `<placeholders>`. |
+| **A human** with an agent (Claude Code, Copilot, Cursor, Codex…) | Start with the four main prompts in [**AGENT-HELPER.md**](AGENT-HELPER.md). For a narrower task, find it in the [scenario router](#1-scenario-router), copy its **Prompt** block into your agent and fill in the `<placeholders>`. |
 | **An AI agent** | Read [§0](#0-for-ai-agents-read-this-first) in full, then only the one scenario that matches the task. For a compact digest, fetch [`llms.txt`](https://ir-dev.github.io/ark-oauth-oidc/llms.txt). |
 | **A human, new, no agent** | Start with [GETTINGSTARTED.md](GETTINGSTARTED.md): `./run.sh` (macOS/Linux) or `run.bat` (Windows) takes a fresh clone to a working sign-in. |
 
@@ -237,6 +263,7 @@ as facts to cite, not prose to read.
 
 ## Contents
 
+- [🚀 Major prompts for your coding agent](#-major-prompts-for-your-coding-agent) → [AGENT-HELPER.md](AGENT-HELPER.md)
 - [Why developers pick Ark](#why-developers-pick-ark)
 - [⚡ From zero to signed-in: three steps](#-from-zero-to-signed-in-three-steps)
 - [🔐 Govern every tenant and every instance](#-govern-every-tenant-and-every-instance)
