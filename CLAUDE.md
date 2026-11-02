@@ -77,6 +77,8 @@ These apply in every language and are the source of most "it just says the passw
 * **A new IdP needs no configuration.** `builder.AddArkIdp()` + `app.UseArkIdp()`; unconfigured, it
   serves the setup wizard at `/ark-idp/setup` and writes `ark-idp-data/settings.json` (a config
   source below user secrets / env). A host with `TenantId` + a connection string never sees it.
+  In a container, point `Setup:DataPath` at persistent storage before the first start (App Service:
+  under `/home`), and read the setup code from the container log: nothing there is loopback.
   Wizard code: `Code/ArkSetup.cs`, `Code/ArkIdpHosting.cs`, `wwwroot/setup/`.
 * **.NET only:** keep the `Microsoft.IdentityModel.*` package graph on one version. A mixed graph
   fails only at runtime, on the first challenge, with a message that names none of this.

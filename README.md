@@ -128,7 +128,11 @@ Run it and open the site. Every page leads to the **setup wizard** at `/ark-idp/
 | Review & install | one page, then **Install**. The same process is the IdP, with no restart |
 
 From a remote machine the wizard asks for a **setup code** printed in the start-up log, so an
-unconfigured server is not a race to the first visitor. Secrets go only into the database, hashed
+unconfigured server is not a race to the first visitor. In a container (Docker, Azure App Service)
+every request counts as remote: read the code from the container log, and point
+`ark_oauth_server:Setup:DataPath` at persistent storage before the first start, or the next restart
+brings the wizard back
+([details](Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md#the-setup-wizard)). Secrets go only into the database, hashed
 where they can be, and never into the settings file. A host that already has `TenantId` and a
 connection string never sees the wizard: that is the pipeline route, [S8](#s8--stand-up-the-identity-provider).
 

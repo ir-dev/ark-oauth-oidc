@@ -61,6 +61,19 @@ When using Ark.oAuth.Oidc:
    are deliberately unsupported. Do not try to re-enable them.
 10. Point the admin console's Sign out at your OWN route (ark_oauth_server:Admin:SignOutUrl) that
     drops the host cookie AND the OIDC scheme.
+11. Wizard in a container or behind any proxy (Docker, Azure App Service, Kubernetes, nginx):
+    - The setup code is ALWAYS required there (no request is unproxied loopback). It is in the
+      container log (docker logs / az webapp log tail / Portal Log stream), written once per start,
+      and in {DataPath}/setup-code.txt until setup is finished.
+    - BEFORE the first start, set ark_oauth_server__Setup__DataPath to persistent storage. The
+      default (ark-idp-data under the content root) is the container's own filesystem: the next
+      restart loses settings.json and the wizard comes back. App Service: DataPath under /home, plus
+      WEBSITES_ENABLE_APP_SERVICE_STORAGE=true.
+    - App Service ends TLS in front of the container: set ASPNETCORE_FORWARDEDHEADERS_ENABLED=true,
+      or the public URL pre-fills as http:// and the console callback fails redirect_uri matching.
+    - One instance until setup is finished; each instance holds its own code.
+    - A pipeline-deployed slot should skip the wizard: TenantId, BaseUrl, connection string and
+      AdminUser:Password as app settings. Recipe 14 in AI-RECIPES.md has the commands.
 ```
 
 ## 3. Capability map
@@ -135,6 +148,7 @@ Migration API
 
 ```text
 Standing up a new IdP?                     -> builder.AddArkIdp(); app.UseArkIdp(); run it; finish the wizard at /ark-idp/setup
+Wizard in a container / App Service?       -> persistent Setup:DataPath FIRST; setup code from the container log (AI-RECIPES Recipe 14)
 Standing up an IdP from a pipeline?        -> AddArkOidcServer(env) + AddArkOidcClient(cfg); set TenantId+BaseUrl+AdminUser:Password
 Onboarding a new application?              -> POST /api/oauth/v1/provision/client (one call, includes the access mapping)
 Turning an app or account off temporarily? -> POST /api/oauth/v1/activation/client | /activation/user (is_active=false; revokes tokens)
@@ -177,6 +191,11 @@ DO NOT:
 - Skip a MySQL/PostgreSQL schema script. The entities will carry columns the tables lack and the
   management API answers a bare 500. Only SQLite self-applies.
 - Run app requests before UseArkAuthData() has bootstrapped the database.
+- Run the setup wizard in a container with the default Setup:DataPath. The container's filesystem is
+  replaced on every restart; settings.json goes with it and the wizard comes back. Point DataPath at
+  a volume (App Service: under /home) first.
+- Tell someone to "open the wizard from localhost" on a hosted server. Behind a proxy nothing is
+  loopback; the code comes from the container log or {DataPath}/setup-code.txt.
 ```
 
 ## 6. Version & compatibility
@@ -241,6 +260,9 @@ IMPORTANT CONSTRAINTS:
 - Sign-out is browser-wide by default (ark_idp_bid cookie). Back-channel logout notifies only clients
   that registered a backchannel_logout_uri.
 - Deactivating revokes already-issued refresh tokens/sessions; issued access tokens live until expiry.
+- Setup wizard in a container / behind a proxy: the setup code is always required (container log, or
+  {DataPath}/setup-code.txt); Setup:DataPath must be persistent storage or settings.json is lost on
+  restart; App Service also needs ASPNETCORE_FORWARDEDHEADERS_ENABLED=true and one instance.
 
 ERROR HANDLING:
 Standard OAuth error bodies. Management/list endpoints return { error, msg }. Provisioning: 200

@@ -26,6 +26,7 @@ dotnet add package Ark.oAuth.Oidc
 # Zero-config alternative, preferred for a new IdP with a person at the keyboard:
 #   Program.cs = builder.AddArkIdp(); var app = builder.Build(); app.UseArkIdp(); app.Run();
 #   dotnet run, open the app, finish the wizard at /ark-idp/setup. Skip everything below.
+#   In a container (Docker, Azure App Service), do Recipe 14 before the first start.
 # The configured route, for pipelines:
 dotnet add package Ark.oAuth.Client
 dotnet user-secrets set "ark_oauth_server:AdminUser:Password" "<strong-password>"
@@ -349,3 +350,56 @@ public async Task SignOutAll()
 6. Regenerate the `{tenant}_machine` client secret (it ships without one), or set
    `Management:MachineClientSecret` from a key vault — never from a tracked settings file.
 7. List exact SPA origins in `Oidc:CorsOrigins`; leave it empty if there are none.
+
+---
+
+## Recipe 14 — Run the setup wizard in a container (Docker, Azure App Service)
+
+> **PROMPT:** "The zero-config IdP runs as a container on Azure App Service. Make the wizard's
+> settings survive restarts, and tell me where to find the setup code."
+
+The wizard asks for a setup code from every address except unproxied loopback, so in a container it
+**always** asks. And its directory (`Setup:DataPath`) is the server's configuration, so it must
+outlive the container.
+
+**1. Before the first start:** persistent storage, `DataPath` inside it, and the forwarded scheme.
+```bash
+az webapp config appsettings set -g <rg> -n <app> --slot <slot> --settings \
+  WEBSITES_ENABLE_APP_SERVICE_STORAGE=true \
+  ark_oauth_server__Setup__DataPath=/home/data/ark-idp \
+  ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+```
+
+**2. The setup code**, written to the log once per start:
+```bash
+az webapp log config -g <rg> -n <app> --slot <slot> --docker-container-logging filesystem
+az webapp log tail   -g <rg> -n <app> --slot <slot>
+# warn: Ark.oAuth.Oidc.Setup[0]
+#       Ark IdP is not configured yet. ... From any other machine, enter the setup code N9VL-VTVB-2T5N.
+```
+If it has scrolled past, `az webapp restart -g <rg> -n <app> --slot <slot>` prints it again (the
+same code, since `DataPath` now persists), or read it in **Advanced Tools** (Kudu) → **Bash** →
+`cat /home/data/ark-idp/setup-code.txt`. Portal → the slot → **Log stream** shows the same log.
+
+**3. Run the wizard** at the slot's `https://` address + `/ark-idp/setup`, with the slot at one
+instance. Enter the `https://` address users will use as the public URL.
+
+- **Why `/home`:** it is the only path App Service keeps. Everything else in the container is
+  replaced on every restart and redeploy; with the default `DataPath` (`/app/ark-idp-data`)
+  `settings.json` is lost and the wizard comes back. The .NET 8+ images' non-root user may not be
+  able to write `/app` at all (`cannot_write`).
+- **Why the forwarded-headers switch:** TLS ends at App Service's front end. Without it the app sees
+  `http`, pre-fills an `http://` public URL, and the console sends an `http://` callback that fails
+  `redirect_uri` matching.
+- **Why one instance:** each instance holds its own code; a request on another instance is refused.
+- **Mistake:** looking for `setup-code.txt` in Kudu with the default `DataPath`. Kudu sees only
+  `/home`; `az webapp ssh` reaches the container only if the image runs sshd on port 2222.
+- **Mistake:** SQLite under `/home` for production. It is a network share, where SQLite's locking is
+  not reliable; use PostgreSQL or MySQL (`Provider`, Recipe 11).
+- **Pipeline instead:** set `ark_oauth_server__TenantId`, `ark_oauth_server__BaseUrl`,
+  `ConnectionStrings__ArkAuthConnection` and `ark_oauth_server__AdminUser__Password` as slot app
+  settings (Key Vault references for secrets). The server is then configured, the wizard never runs,
+  and neither the code nor `DataPath` matters. The forwarded-headers setting still applies.
+- **Plain Docker:** the same rules. Mount a volume the container's user can write, set
+  `ark_oauth_server__Setup__DataPath` to it, and read the code with
+  `docker logs <container> 2>&1 | grep "setup code"`.

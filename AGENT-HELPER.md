@@ -134,7 +134,11 @@ STEPS
       ark-idp-data/settings.json (mode 0600, git-ignores itself), seeds the database and reloads
       configuration. The same process becomes the IdP with no restart. From localhost no code is
       needed; from another machine it asks for the setup code printed in the startup log.
-      For containers: set ark_oauth_server__Setup__DataPath to a mounted volume.
+      For containers: set ark_oauth_server__Setup__DataPath to a mounted volume BEFORE the first
+      start, or a restart loses settings.json and the wizard comes back (App Service: under /home,
+      with WEBSITES_ENABLE_APP_SERVICE_STORAGE=true and ASPNETCORE_FORWARDEDHEADERS_ENABLED=true).
+      In a container every request needs the setup code: docker logs / az webapp log tail, or
+      {DataPath}/setup-code.txt. Recipe 14 in Ark.oAuth.Oidc/AI-RECIPES.md has the commands.
       Optional switches (ark_oauth_server:Setup): Enabled (true), RequireToken (false), DataPath.
 
    B) configured mode: write appsettings.json with NO secrets in it:

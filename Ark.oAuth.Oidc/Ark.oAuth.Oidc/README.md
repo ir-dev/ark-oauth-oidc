@@ -529,9 +529,56 @@ treats as the operator.
 | `DataPath` | `ark-idp-data` | in a container, a mounted volume, e.g. `ark_oauth_server__Setup__DataPath=/home/data/ark-idp`. The .NET 8+ images run as a non-root user that cannot write to `/app` |
 
 **Containers.** The wizard's directory is the server's configuration, so it has to outlive the
-container: mount a volume and point `DataPath` at it, or configure through the environment and
-never run the wizard at all. Reach the wizard from your machine through the published port with the
-setup code from `docker logs`.
+container: mount a volume and point `DataPath` at it **before** running the wizard, or configure
+through the environment and never run the wizard at all. A container's own filesystem is replaced
+on every restart and redeploy, `settings.json` with it, and the wizard comes back.
+
+In a container no request is unproxied loopback — Docker's published port, a reverse proxy and a
+cloud front end all arrive from another address — so the wizard **always** asks for the setup code.
+Read it from the container's log (`docker logs <container> 2>&1 | grep "setup code"`), or from
+`{DataPath}/setup-code.txt` until setup is finished. The log line is written once, at start-up, and
+a restart prints it again. With `DataPath` on persistent storage the code survives a restart;
+otherwise every start makes a new one, so use the latest.
+
+**Azure App Service (custom container).** The same rules, in App Service's terms:
+
+1. Before the first start, give the slot persistent storage and point `DataPath` into it. `/home` is
+   the only path App Service keeps, and Linux app setting names take `__` where configuration has
+   `:`. App Service also ends TLS in front of the container, so let ASP.NET Core read the forwarded
+   scheme: without it the app sees `http`, the wizard pre-fills an `http://` public URL, and the
+   console's sign-in sends an `http://` callback that does not match the registered one.
+
+   ```bash
+   az webapp config appsettings set -g <rg> -n <app> --slot <slot> --settings \
+     WEBSITES_ENABLE_APP_SERVICE_STORAGE=true \
+     ark_oauth_server__Setup__DataPath=/home/data/ark-idp \
+     ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+   ```
+
+2. Read the setup code from the container log:
+
+   ```bash
+   az webapp log config -g <rg> -n <app> --slot <slot> --docker-container-logging filesystem
+   az webapp log tail   -g <rg> -n <app> --slot <slot>   # restart the slot if the line has scrolled past
+   ```
+
+   Or Portal → the slot → **Monitoring → Log stream**; or **Advanced Tools** (Kudu) → **Bash** →
+   `cat /home/data/ark-idp/setup-code.txt`. Kudu sees only `/home`, so it cannot find the file under
+   the default `DataPath`; `az webapp ssh` reaches the container only if the image runs sshd on port
+   2222.
+
+3. Keep the slot at **one instance** until setup is finished. Each instance holds its own code, so
+   on a scaled-out plan the code is refused whenever a request lands on another instance.
+
+4. In the wizard, enter the `https://` address users will use (the custom domain, if there is one)
+   as the public URL.
+
+SQLite under `/home` sits on a network share, where its file locking is not reliable: fine for a
+trial, but use PostgreSQL or MySQL for a server people depend on. A slot deployed by a pipeline can
+skip the wizard, the setup code and `DataPath` altogether: set `ark_oauth_server__TenantId`,
+`ark_oauth_server__BaseUrl`, `ConnectionStrings__ArkAuthConnection` and
+`ark_oauth_server__AdminUser__Password` as slot app settings (Key Vault references for the secrets).
+The forwarded-headers setting still applies.
 
 ## Upgrading an existing database
 
