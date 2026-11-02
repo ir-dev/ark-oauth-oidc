@@ -127,6 +127,12 @@
                         </div>
                     </div>
 
+                    <label class="switch">
+                        <input type="checkbox" name="show_powered_by" />
+                        <span><b>Show “Powered by Ark Identity Server”</b> under the sign-in card and in the admin console footer.
+                            Off, the pages carry only your brand. Change it later with <code>ark_oauth_server:ShowPoweredBy</code>.</span>
+                    </label>
+
                     <div class="preview">
                         <span class="preview-label">Sign-in page preview</span>
                         <div class="preview-card">
@@ -148,7 +154,7 @@
                                     Appearance
                                 </span>
                             </div>
-                            <span class="ark-powered">
+                            <span class="ark-powered" id="previewPowered">
                                 <img src="{{BASE}}/assets/ark-shield.png" alt="" width="20" height="20" />
                                 <span>Powered by <strong>Ark Identity Server</strong></span>
                             </span>
@@ -542,6 +548,19 @@
                         <p><code id="doneMachineId"></code></p>
                         <p><code id="doneSecret" class="secret"></code> <button type="button" class="link" data-copy="#doneSecret">Copy</button></p>
                         <small>Only its hash was stored. If it is lost, generate a new one in the console.</small>
+                    </div>
+                    <div class="card" id="doneKeysCard" hidden>
+                        <h2>Download the keys</h2>
+                        <p>
+                            The issuer, the signing key pair (kid, public and private PEM) and the machine client’s id and secret,
+                            in one file for whoever sets up applications and pipelines. It is made in this browser, from this page:
+                            once you leave, the secret cannot be shown again.
+                        </p>
+                        <div class="row">
+                            <button type="button" class="btn" id="downloadKeysJson">Download JSON</button>
+                            <button type="button" class="btn" id="downloadKeysXlsx">Download Excel (.xlsx)</button>
+                        </div>
+                        <small>The private key in it can sign tokens as this server. Keep the file as safe as the database, or delete it once copied.</small>
                     </div>
                     <div class="center">
                         <a class="btn primary large" id="doneConsole" href="#">Sign in to the admin console →</a>

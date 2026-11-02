@@ -61,8 +61,10 @@ the code from the start-up log / `setup-code.txt`. Errors are `{ error, msg, fie
 
 `complete` writes `{DataPath}/settings.json` (0600): `ConnectionStrings`, and `ark_oauth_server`
 with `TenantId, BaseUrl, BasePath, Provider, UserPasswordMode, DefaultPw?, AdminUser{Username,Name},
-Admin{SignOutUrl}, Oidc{…}, EmailConfig{…}`. Not written: the admin password, the signing key, the
-machine secret (database only, hashed where secret). The file is a configuration source between
+Admin{SignOutUrl}, Oidc{…}, EmailConfig{…}, ShowPoweredBy` (from `branding.show_powered_by`, default
+`true`). Not written: the admin password, the signing key, the machine secret (database only, hashed
+where secret); the wizard's last screen offers them once, as a JSON or `.xlsx` download built in the
+browser. The file is a configuration source between
 appsettings and user secrets / environment / command line. An existing Ark database is attached,
 not seeded (tenant id must match; no key/client/account created).
 
@@ -81,6 +83,7 @@ not seeded (tenant id must match; no key/client/account created).
 | `Admin` | `ArkAdminConsoleConfig` | — | `SignOutUrl` — host route the console's Sign out uses. `DataTools` — export / import / reset switches, see below. |
 | `Oidc` | `ArkOidcOptions` | see below | Protocol switches; every value has a default. |
 | `EmailConfig` | `ArkEmailConfig` | — | SMTP + branding (`host_logo`, `client_logo`, links, …). |
+| `ShowPoweredBy` | `bool` | `true` | "Powered by Ark Identity Server" under the sign-in card and in the console footer. `false` hides it; the console footer keeps the package version. |
 | `ConnectionStrings:ArkAuthConnection` | `string` | — | The database connection string. |
 
 **`ArkOidcOptions`** (section `ark_oauth_server:Oidc`):

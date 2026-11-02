@@ -72,6 +72,13 @@
         public string CcList { get; set; }
         public string BccList { get; set; }
         public ArkEmailConfig EmailConfig { get; set; }
+        /// <summary>
+        /// Whether the "Powered by Ark Identity Server" mark is drawn under the sign-in card and in
+        /// the admin console's footer. On by default; the setup wizard asks. False leaves only the
+        /// host's own brand on the pages users see — the console footer still names the package
+        /// version, which is what an operator quotes when reporting a problem.
+        /// </summary>
+        public bool ShowPoweredBy { get; set; } = true;
         /// <summary>Standard OAuth 2.1 / OIDC behaviour. Optional — every value has a default.</summary>
         public Protocol.ArkOidcOptions Oidc { get; set; } = new Protocol.ArkOidcOptions();
         /// <summary>The first account seeded into a brand-new database. See <see cref="ArkAdminUserConfig"/>.</summary>

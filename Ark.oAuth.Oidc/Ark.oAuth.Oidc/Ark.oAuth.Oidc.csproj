@@ -72,6 +72,9 @@ Next release — start with nothing configured: the setup wizard. Additive; sugg
 * **Not a race to the first visitor.** From the server's own machine the wizard is open; from
   anywhere else it needs the setup code printed in the start-up log. Setup:RequireToken asks for it
   everywhere; Setup:Enabled=false removes the wizard; Setup:DataPath moves the directory (containers).
+* **The keys, once, in a file.** The last screen downloads the issuer, the signing key pair (kid,
+  public and private PEM) and the machine client id and secret as JSON or Excel (.xlsx), built in
+  the browser; the server never returns the private key or the secret again.
 * **Built-in console sign-in.** AddArkIdp registers a cookie plus the framework's OIDC handler against
   this same server, with discovery and keys read in-process rather than fetched from its own public
   address. Hosts that bring Ark.oAuth.Client keep doing so (AddArkIdp(o => o.ConsoleSignIn = false),
@@ -133,7 +136,8 @@ Also in the next release — themes and text size chosen by the viewer, and a "P
   the pages render exactly as before.
 * **Powered by Ark Identity Server.** The Ark shield under the sign-in card, in the console footer
   and as the wizard's mark. New anonymous assets at /ark-admin/asset/: ark-theme.js, ark-theme.css,
-  ark-shield-64.png, ark-shield-512.png.
+  ark-shield-64.png, ark-shield-512.png. Optional: ark_oauth_server:ShowPoweredBy=false hides it on
+  the sign-in pages and in the console footer (the version stays); the setup wizard asks.
 * The password-reset confirmation page (/oauth/PwdResetThank) is rebuilt on the shared layout; it was
   the last page of the reset flow still on its own stylesheet.
 

@@ -467,6 +467,11 @@ The header lays itself out for whichever marks exist: two get a divider between 
 room both would have shared, and none promotes the host name to being the thing itself rather than
 a caption under an empty space. The admin console's top bar draws the same lockup.
 
+Under the card, and in the console's footer, sits a quiet **"Powered by Ark Identity Server"**
+mark. `ark_oauth_server:ShowPoweredBy` (default `true`; the setup wizard asks) set to `false`
+removes it, leaving only your brand on the pages users see. The console footer still names the
+package version.
+
 ## The setup wizard
 
 **Where it writes.** One directory, `ark-idp-data/` under the content root unless
@@ -485,7 +490,12 @@ be overridden the usual way, for example `ark_oauth_server__EmailConfig__pw` fro
 
 **What it never writes.** The administrator's password and the machine client's secret go into the
 database as hashes; the signing key's private half goes into `signing_keys`. None of them is in
-`settings.json`. The machine secret is shown once, on the last screen.
+`settings.json`. The machine secret is shown once, on the last screen, which also offers
+**Download JSON** and **Download Excel (.xlsx)**: the issuer, discovery and console addresses, the
+signing key pair (kid, public and private PEM) and the machine client's id and secret, in one file
+made in the browser. It is the only time the server hands them out, and the private key in it can
+sign tokens, so keep the file as safe as the database. Not offered when attaching to an existing
+database, which creates neither.
 
 **Who may run it.** Whoever finishes setup becomes the administrator, so an unconfigured server on
 a network is a race to the first visitor. From the server's own machine (a loopback address, no

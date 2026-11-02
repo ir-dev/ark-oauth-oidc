@@ -1069,7 +1069,8 @@ namespace Ark.oAuth.Oidc
                     ["Name"] = Or(req.Admin?.Name, "Administrator")
                 },
                 ["Oidc"] = oidc,
-                ["EmailConfig"] = emailConfig
+                ["EmailConfig"] = emailConfig,
+                ["ShowPoweredBy"] = req.Branding?.ShowPoweredBy ?? true
             };
             if (!string.IsNullOrEmpty(users.DefaultPassword)) server["DefaultPw"] = users.DefaultPassword;
             if (context.RequestServices.GetService<ArkIdpConsoleMarker>() != null)
@@ -1133,7 +1134,12 @@ namespace Ark.oAuth.Oidc
             public string? PrivacyUrl { get; set; }
         }
 
-        sealed class BrandingSection { public string? HostLogo { get; set; } public string? AppLogo { get; set; } }
+        sealed class BrandingSection
+        {
+            public string? HostLogo { get; set; }
+            public string? AppLogo { get; set; }
+            public bool? ShowPoweredBy { get; set; }
+        }
 
         sealed class ServerSection
         {

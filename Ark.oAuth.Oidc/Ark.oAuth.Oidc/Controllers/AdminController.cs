@@ -158,6 +158,7 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.ThemeCss = AssetUrl(appRoot, ThemeCssAsset);
             ViewBag.ThemeJs = AssetUrl(appRoot, ThemeJsAsset);
             ViewBag.ShieldUrl = AssetUrl(appRoot, ShieldAsset);
+            ViewBag.ShowPoweredBy = ser.ShowPoweredBy;
             // Named in the footer: which build of the server package is serving this console.
             ViewBag.PackageVersion = PackageVersion;
             ViewBag.UserPasswordMode = ser.EffectiveUserPasswordMode switch

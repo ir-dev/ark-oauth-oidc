@@ -11,11 +11,15 @@
     Ark shield. Both come from AdminController.Asset. If they fail to load the page renders
     exactly as it would without them, in the default theme.
 *@
+@inject Microsoft.Extensions.Configuration.IConfiguration ArkConfig
 @{
     Layout = null;
     var brand = ViewBag.Brand as Ark.oAuth.Oidc.Endpoints.OidcBrandModel ?? new Ark.oAuth.Oidc.Endpoints.OidcBrandModel();
     var pageTitle = ViewBag.PageTitle as string ?? brand.HostName;
     var appRoot = Context.Request.PathBase.HasValue ? Context.Request.PathBase.Value!.TrimEnd('/') : "";
+    // Read here rather than carried on the brand model: every page on this layout honours it,
+    // including the ones that build no brand of their own. See ArkAuthServerConfig.ShowPoweredBy.
+    var poweredBy = Microsoft.Extensions.Configuration.ConfigurationBinder.GetValue(ArkConfig, "ark_oauth_server:ShowPoweredBy", true);
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -381,10 +385,13 @@
             }
             <div data-ark-appearance></div>
         </div>
-        <a class="ark-powered" href="https://github.com/ir-dev/ark-oauth-oidc" target="_blank" rel="noopener noreferrer">
-            <img src="@Ark.oAuth.Oidc.Controllers.AdminController.AssetUrl(appRoot, Ark.oAuth.Oidc.Controllers.AdminController.ShieldAsset)" alt="" width="20" height="20" />
-            <span>Powered by <strong>Ark Identity Server</strong></span>
-        </a>
+        @if (poweredBy)
+        {
+            <a class="ark-powered" href="https://github.com/ir-dev/ark-oauth-oidc" target="_blank" rel="noopener noreferrer">
+                <img src="@Ark.oAuth.Oidc.Controllers.AdminController.AssetUrl(appRoot, Ark.oAuth.Oidc.Controllers.AdminController.ShieldAsset)" alt="" width="20" height="20" />
+                <span>Powered by <strong>Ark Identity Server</strong></span>
+            </a>
+        }
     </footer>
 </body>
 </html>

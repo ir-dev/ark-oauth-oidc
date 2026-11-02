@@ -36,6 +36,8 @@
     let setupCode = '';
     let codeOk = false;
     let key = null;
+    // What the done screen's downloads are made from. Memory only: never stored, gone with the tab.
+    let handover = null;
     let dbOkFor = null;
     let existingTenants = [];
     const logos = { host_logo: '', app_logo: '' };
@@ -350,10 +352,11 @@
         // The live footer draws each link only when its URL is configured, so the preview does too.
         $('#previewPrivacy').hidden = !val('privacy_url');
         $('#previewTerms').hidden = !val('terms_url');
+        $('#previewPowered').hidden = !val('show_powered_by');
     }
 
     const displayName = () => val('display_name') || `${val('company_name') || 'Your organization'} Identity`;
-    ['company_name', 'display_name', 'privacy_url', 'terms_url'].forEach(n => field(n).addEventListener('input', renderPreview));
+    ['company_name', 'display_name', 'privacy_url', 'terms_url', 'show_powered_by'].forEach(n => field(n).addEventListener('input', renderPreview));
 
     // ------------------------------------------------------------------ server
 
@@ -468,13 +471,16 @@
         e.currentTarget.textContent = t.hidden ? 'Show' : 'Hide';
     });
     $('#downloadKey').addEventListener('click', () => {
-        if (!key) return;
+        if (key) save(new Blob([key.private_pem], { type: 'application/x-pem-file' }), `ark-idp-signing-${key.kid}.pem`);
+    });
+
+    function save(blob, name) {
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([key.private_pem], { type: 'application/x-pem-file' }));
-        a.download = `ark-idp-signing-${key.kid}.pem`;
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    });
+    }
 
     // ------------------------------------------------------------------ secrets
 
@@ -576,7 +582,7 @@
                 company_name: val('company_name'), display_name: val('display_name'),
                 website_url: val('website_url'), terms_url: val('terms_url'), privacy_url: val('privacy_url')
             },
-            branding: { host_logo: logos.host_logo, app_logo: logos.app_logo },
+            branding: { host_logo: logos.host_logo, app_logo: logos.app_logo, show_powered_by: !!val('show_powered_by') },
             server: {
                 tenant_id: val('tenant_id'), tenant_display: val('tenant_display') || `${val('company_name') || val('tenant_id')} Admin Console`,
                 base_url: val('base_url'), base_path: val('base_path')
@@ -613,7 +619,8 @@
                 ['Organization', esc(p.organization.company_name)],
                 ['Sign-in page name', esc(displayName())],
                 ['Logos', `${logo(p.branding.host_logo)} ${logo(p.branding.app_logo)}`],
-                ['Website', esc(p.organization.website_url || '—')]
+                ['Website', esc(p.organization.website_url || '—')],
+                ['“Powered by” mark', p.branding.show_powered_by ? 'Shown' : 'Hidden']
             ]],
             ['server', 'Server address', [
                 ['Issuer', `<code>${esc(appRoot())}/${esc(p.server.tenant_id)}</code>`],
@@ -711,10 +718,162 @@
             $('#doneMachineId').textContent = `client_id: ${r.machine_client_id}`;
             $('#doneSecret').textContent = r.machine_client_secret;
         }
-        // Secrets the page no longer needs.
+        // Attaching to an existing database created no key and no secret, so there is nothing to hand over.
+        handover = r.attached_existing ? null : keyFile(r);
+        $('#doneKeysCard').hidden = !handover;
+        // Secrets the page no longer needs: the downloads read the copy in handover.
         key = null;
         ['admin_password', 'admin_password2', 'db_password', 'smtp_password', 'machine_secret', 'raw_connection'].forEach(n => setVal(n, ''));
         window.scrollTo({ top: 0 });
+    }
+
+    // ------------------------------------------------------------------ key file
+
+    // Made here rather than fetched: once installed the setup API is gone, and the server never
+    // returns the private key or the machine secret again.
+    function keyFile(r) {
+        return {
+            _about: 'Downloaded from the Ark IdP setup wizard. The private key can sign tokens as this server: ' +
+                'keep this file as safe as the database, or delete it once copied.',
+            installed_at: new Date().toISOString(),
+            tenant_id: r.tenant_id,
+            issuer: r.issuer,
+            discovery: r.discovery,
+            admin_console: `${r.issuer}/admin`,
+            administrator: r.admin_username,
+            signing_key: key && {
+                kid: key.kid, algorithm: key.algorithm, key_size: key.key_size,
+                public_key_pem: key.public_pem, private_key_pem: key.private_pem
+            },
+            machine_client: { client_id: r.machine_client_id, client_secret: r.machine_client_secret || null }
+        };
+    }
+
+    function keyRows(k) {
+        const rows = [
+            ['Server', 'Tenant id', k.tenant_id],
+            ['Server', 'Issuer', k.issuer],
+            ['Server', 'Discovery', k.discovery],
+            ['Server', 'Admin console', k.admin_console],
+            ['Server', 'Administrator', k.administrator]
+        ];
+        const s = k.signing_key;
+        if (s) rows.push(
+            ['Signing key', 'Key id (kid)', s.kid],
+            ['Signing key', 'Algorithm', s.algorithm],
+            ['Signing key', 'Key size (bits)', s.key_size],
+            ['Signing key', 'Public key (PEM)', s.public_key_pem],
+            ['Signing key', 'Private key (PEM)', s.private_key_pem]);
+        rows.push(
+            ['Machine client', 'Client id', k.machine_client.client_id],
+            ['Machine client', 'Client secret', k.machine_client.client_secret || 'none set: generate one in the admin console'],
+            ['', 'Installed', k.installed_at],
+            ['', 'Note', k._about]);
+        return rows;
+    }
+
+    const keyFileName = ext => `ark-idp-${handover.tenant_id}-keys.${ext}`;
+    $('#downloadKeysJson').addEventListener('click', () => {
+        if (handover) save(new Blob([JSON.stringify(handover, null, 2)], { type: 'application/json' }), keyFileName('json'));
+    });
+    $('#downloadKeysXlsx').addEventListener('click', () => {
+        if (handover) save(xlsx('Ark IdP keys', ['Section', 'Item', 'Value'], keyRows(handover)), keyFileName('xlsx'));
+    });
+
+    const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    const SHEET_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    const REL_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const DOC_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    const xmlText = s => String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, '')
+        .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+    // A one-sheet workbook written by hand: under script-src 'self' there is no spreadsheet library
+    // to load, and three columns of text need none. Text cells are inline strings, so nothing in a
+    // value is ever read as a formula.
+    function xlsx(sheetName, header, rows) {
+        const cell = (v, ref, style) => typeof v === 'number'
+            ? `<c r="${ref}" s="${style}"><v>${v}</v></c>`
+            : `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xmlText(String(v ?? '').trimEnd())}</t></is></c>`;
+        const row = (values, r, styles) => {
+            // A PEM row is as tall as its text, up to Excel's limit of 409 points: 13pt a line of
+            // 10pt Consolas fits a 2048-bit private key whole.
+            const lines = Math.max(...values.map(v => String(v ?? '').trimEnd().split('\n').length));
+            const height = lines > 1 ? ` ht="${Math.min(409, lines * 13)}" customHeight="1"` : '';
+            return `<row r="${r}"${height}>${values.map((v, i) => cell(v, `${'ABC'[i]}${r}`, styles[i])).join('')}</row>`;
+        };
+        return zip({
+            '[Content_Types].xml': `${XML_HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+                '<Default Extension="xml" ContentType="application/xml"/>' +
+                '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+                '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+                '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
+            '_rels/.rels': `${XML_HEAD}<Relationships xmlns="${REL_NS}">` +
+                `<Relationship Id="rId1" Type="${DOC_REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+            'xl/workbook.xml': `${XML_HEAD}<workbook xmlns="${SHEET_NS}" xmlns:r="${DOC_REL}"><bookViews><workbookView/></bookViews>` +
+                `<sheets><sheet name="${xmlText(sheetName)}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+            'xl/_rels/workbook.xml.rels': `${XML_HEAD}<Relationships xmlns="${REL_NS}">` +
+                `<Relationship Id="rId1" Type="${DOC_REL}/worksheet" Target="worksheets/sheet1.xml"/>` +
+                `<Relationship Id="rId2" Type="${DOC_REL}/styles" Target="styles.xml"/></Relationships>`,
+            // Styles: 0 default, 1 bold (header), 2 top-aligned (labels), 3 top-aligned, wrapped, monospace (values).
+            'xl/styles.xml': `${XML_HEAD}<styleSheet xmlns="${SHEET_NS}">` +
+                '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>' +
+                '<font><sz val="10"/><name val="Consolas"/></font></fonts>' +
+                '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+                '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+                '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+                '<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+                '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+                '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top"/></xf>' +
+                '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf></cellXfs>' +
+                '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>',
+            'xl/worksheets/sheet1.xml': `${XML_HEAD}<worksheet xmlns="${SHEET_NS}">` +
+                '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+                '<cols><col min="1" max="1" width="16" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/>' +
+                '<col min="3" max="3" width="80" customWidth="1"/></cols>' +
+                `<sheetData>${row(header, 1, [1, 1, 1])}${rows.map((r, i) => row(r, i + 2, [2, 2, 3])).join('')}</sheetData></worksheet>`
+        }, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
+    const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+        for (let k = 0; k < 8; k++) n = n & 1 ? 0xEDB88320 ^ (n >>> 1) : n >>> 1;
+        return n >>> 0;
+    });
+    const crc32 = bytes => {
+        let c = 0xFFFFFFFF;
+        for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xFF] ^ (c >>> 8);
+        return (c ^ 0xFFFFFFFF) >>> 0;
+    };
+    // Little-endian header fields, as [width in bytes, value] pairs.
+    const pack = fields => {
+        const view = new DataView(new ArrayBuffer(fields.reduce((n, [w]) => n + w, 0)));
+        let at = 0;
+        for (const [w, v] of fields) { if (w === 4) view.setUint32(at, v, true); else view.setUint16(at, v, true); at += w; }
+        return view;
+    };
+
+    // A ZIP with every entry stored, not deflated: all an .xlsx needs to be, and a few lines.
+    function zip(files, type) {
+        const utf8 = new TextEncoder();
+        const now = new Date();
+        const time = now.getHours() << 11 | now.getMinutes() << 5 | now.getSeconds() >> 1;
+        const date = (now.getFullYear() - 1980) << 9 | (now.getMonth() + 1) << 5 | now.getDate();
+        const entries = [], directory = [];
+        let offset = 0;
+        for (const [path, text] of Object.entries(files)) {
+            const name = utf8.encode(path);
+            const data = utf8.encode(text);
+            const crc = crc32(data);
+            entries.push(pack([[4, 0x04034b50], [2, 20], [2, 0], [2, 0], [2, time], [2, date],
+                [4, crc], [4, data.length], [4, data.length], [2, name.length], [2, 0]]), name, data);
+            directory.push(pack([[4, 0x02014b50], [2, 20], [2, 20], [2, 0], [2, 0], [2, time], [2, date],
+                [4, crc], [4, data.length], [4, data.length], [2, name.length], [2, 0], [2, 0], [2, 0], [2, 0], [4, 0], [4, offset]]), name);
+            offset += 30 + name.length + data.length;
+        }
+        const size = directory.reduce((n, part) => n + part.byteLength, 0);
+        const count = Object.keys(files).length;
+        const end = pack([[4, 0x06054b50], [2, 0], [2, 0], [2, count], [2, count], [4, size], [4, offset], [2, 0]]);
+        return new Blob([...entries, ...directory, end], { type });
     }
 
     // ------------------------------------------------------------------ draft
@@ -756,7 +915,7 @@
         setVal('password_mode', 'admin_managed');
         setVal('key_size', '2048');
         setVal('db_ssl', 'prefer');
-        ['enable_device_flow', 'enable_par', 'enable_backchannel_logout'].forEach(n => setVal(n, true));
+        ['enable_device_flow', 'enable_par', 'enable_backchannel_logout', 'show_powered_by'].forEach(n => setVal(n, true));
     }
 
     async function loadState() {
