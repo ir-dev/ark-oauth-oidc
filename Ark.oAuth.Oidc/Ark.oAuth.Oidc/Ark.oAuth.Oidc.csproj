@@ -54,7 +54,20 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
-Next release — start with nothing configured: the setup wizard. Additive; suggest 2.2.0.
+Next release — a landing page after sign-in. Additive.
+
+* **The wizard asks where sign-in lands.** The Server step has a landing page, prefilled with the
+  public URL (which opens the console). A page of this app is stored as a path in
+  ark_oauth_server:Admin:LandingUrl, so it survives a change of public URL; an address elsewhere is
+  stored as given. Sign-in's own routes are refused, since landing there would loop.
+* **The page you were on wins.** The choice is made once the tokens are validated: a sign-in
+  started on the way to a page (carried through the IdP in state, as before) goes back to it; one
+  started at / lands on the landing page.
+* **/ark-idp/signin?returnUrl=/a/page** signs in and goes there, for a host page's "Sign in" link.
+  A returnUrl that is not a local path is ignored. The auth-error page's "Try again" uses it.
+* Unchanged for existing servers: no LandingUrl means / ends in the console, as it did.
+
+Earlier — start with nothing configured: the setup wizard. Additive; suggest 2.2.0.
 
 * **Two lines, no appsettings.** builder.AddArkIdp() and app.UseArkIdp(). Started with no TenantId or
   no connection string, every browser request goes to /ark-idp/setup (other requests get 503

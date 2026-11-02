@@ -185,6 +185,15 @@
                             <span>Tenant display name</span>
                             <input name="tenant_display" maxlength="120" placeholder="Acme Admin Console" />
                         </label>
+                        <label class="field" id="landingField">
+                            <span>Landing page after sign-in</span>
+                            <input name="landing_url" placeholder="https://id.example.com/" spellcheck="false" />
+                            <small>
+                                Where people go once signed in. The public URL opens the admin console; a path such as
+                                <code>/dashboard</code>, or any full address, sends them there instead. Anyone signing in on
+                                the way to a particular page is taken back to that page.
+                            </small>
+                        </label>
                     </div>
 
                     <details class="advanced">

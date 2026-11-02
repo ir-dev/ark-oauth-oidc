@@ -40,7 +40,7 @@ app.Run();
 | Step | What it captures |
 |---|---|
 | Organization & branding | organization and product name, website / terms / privacy URLs, your logo and a default app logo (uploaded, with a live sign-in page preview) |
-| Server address | public URL, operator tenant id and display name, optional base path. Shows the issuer and discovery URL it will produce |
+| Server address | public URL, operator tenant id and display name, optional base path, and the landing page after sign-in (the public URL unless you choose another page). Shows the issuer and discovery URL it will produce |
 | Database | SQLite, PostgreSQL or MySQL, built from fields or a raw connection string, with **Test connection** |
 | Signing key | **Generate** an RSA key pair (2048 / 3072 / 4096) or import an existing PEM. Shows the kid and public key; the private key can be revealed or downloaded |
 | Administrator | username, name and password (with a generator) |
@@ -49,8 +49,10 @@ app.Run();
 | Review & install | everything on one page, then **Install** |
 
 Install writes the settings, creates and seeds the database, and reloads configuration. **The same
-running process is now the IdP**, with no restart. `/` leads to the sign-in page, and the
-administrator lands in the admin console. Every later start skips the wizard.
+running process is now the IdP**, with no restart. `/` leads to the sign-in page, and from there to
+the landing page: the admin console, unless the wizard was given another page. Anyone who signed in
+on the way to a particular page goes back to that page instead, and a host page's "Sign in" link
+can do the same with `/ark-idp/signin?returnUrl=/that/page`. Every later start skips the wizard.
 
 ### Configuring through appsettings instead
 
@@ -109,7 +111,8 @@ endpoint the authorization middleware cannot see the `[Authorize]` metadata it i
       "Name": "Admin User"
     },
     "Admin": {
-      "SignOutUrl": "/Home/SignOutAll" // where the console's Sign out link goes; see below
+      "SignOutUrl": "/Home/SignOutAll", // where the console's Sign out link goes; see below
+      "LandingUrl": ""                  // AddArkIdp's sign-in only: where it lands when started at /; empty = the console
     },
     "Oidc": {
       "EnableDeviceFlow": true,

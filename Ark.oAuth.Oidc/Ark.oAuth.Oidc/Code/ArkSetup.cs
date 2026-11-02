@@ -905,7 +905,7 @@ namespace Ark.oAuth.Oidc
         sealed record Plan(
             string TenantId, string AppRoot, string BaseUrl, string BasePath, string Issuer,
             string Provider, string Connection, string? PublicKey, string? PrivateKey,
-            string AdminUsername, string? MachineSecret, bool ExistingTenant);
+            string AdminUsername, string? MachineSecret, bool ExistingTenant, string? LandingUrl);
 
         Plan Validate(HttpContext context, SetupRequest req)
         {
@@ -926,6 +926,10 @@ namespace Ark.oAuth.Oidc
                 throw new SetupException("invalid_base_path", "Base path: letters, digits, '_', '-' and '/' only.", "base_path");
 
             var appRoot = Protocol.ArkOidcEndpoints.PublicRoot(new ArkAuthServerConfig { BaseUrl = baseUrl, BasePath = basePath });
+            // Only the built-in sign-in lands anywhere; a host's own client decides for itself.
+            var landing = context.RequestServices.GetService<ArkIdpConsoleMarker>() != null
+                ? NormalizeLanding(server.LandingUrl, appRoot)
+                : null;
             var (provider, connection) = NormalizeDatabase(req.Database);
 
             // An existing Ark database: setup attaches to it instead of seeding, and the
@@ -973,7 +977,33 @@ namespace Ark.oAuth.Oidc
             }
 
             return new Plan(tenant, appRoot, baseUrl, basePath, $"{appRoot}/{tenant}", provider, connection, pub, priv,
-                username, secret.Length == 0 ? null : secret, existing);
+                username, secret.Length == 0 ? null : secret, existing, landing);
+        }
+
+        /// <summary>
+        /// The landing page as it is stored: nothing for the public URL itself (the default), a
+        /// path for a page of this app — so a later change of public URL carries it along — and an
+        /// absolute URL only for a page somewhere else.
+        /// </summary>
+        static string? NormalizeLanding(string? value, string appRoot)
+        {
+            var text = (value ?? "").Trim();
+            if (text.Equals(appRoot, StringComparison.OrdinalIgnoreCase) ||
+                text.StartsWith(appRoot + "/", StringComparison.OrdinalIgnoreCase) ||
+                text.StartsWith(appRoot + "?", StringComparison.OrdinalIgnoreCase))
+                text = "/" + text[appRoot.Length..].TrimStart('/');
+            if (ArkIdpConsole.IsLocalUrl(text))
+            {
+                if (ArkIdpConsole.IsRoot(text)) return null;
+                if (ArkIdpConsole.IsReservedPath(text))
+                    throw new SetupException("reserved_landing_url",
+                        $"Landing page: {text.Split('?', '#')[0]} is part of signing in itself, so landing there would loop. Choose a page of the app.", "landing_url");
+                return text;
+            }
+            if (text.Length == 0) return null;
+            if (Uri.TryCreate(text, UriKind.Absolute, out var url) && url.Scheme is "http" or "https") return text;
+            throw new SetupException("invalid_landing_url",
+                "Landing page: a path in this app such as /dashboard, or a full http(s) address.", "landing_url");
         }
 
         /// <summary>
@@ -1074,7 +1104,11 @@ namespace Ark.oAuth.Oidc
             };
             if (!string.IsNullOrEmpty(users.DefaultPassword)) server["DefaultPw"] = users.DefaultPassword;
             if (context.RequestServices.GetService<ArkIdpConsoleMarker>() != null)
-                server["Admin"] = new JsonObject { ["SignOutUrl"] = $"{context.Request.PathBase}{ArkIdpConsole.SignOutPath}" };
+            {
+                var admin = new JsonObject { ["SignOutUrl"] = $"{context.Request.PathBase}{ArkIdpConsole.SignOutPath}" };
+                if (plan.LandingUrl != null) admin["LandingUrl"] = plan.LandingUrl;
+                server["Admin"] = admin;
+            }
 
             return new JsonObject
             {
@@ -1147,6 +1181,7 @@ namespace Ark.oAuth.Oidc
             public string? TenantDisplay { get; set; }
             public string? BaseUrl { get; set; }
             public string? BasePath { get; set; }
+            public string? LandingUrl { get; set; }
         }
 
         sealed class DatabaseSection { public string? Provider { get; set; } public string? ConnectionString { get; set; } }

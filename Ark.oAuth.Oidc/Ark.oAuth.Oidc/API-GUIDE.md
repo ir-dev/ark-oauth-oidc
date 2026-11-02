@@ -15,7 +15,7 @@ configuration) and by *calling* its HTTP endpoints (protocol + management APIs).
 | Signature | Purpose | Order |
 |---|---|---|
 | `WebApplicationBuilder WebApplicationBuilder.AddArkIdp(Action<ArkIdpOptions>? configure = null)` | Zero-config entry point: attaches the setup wizard's `settings.json` as configuration, calls `AddArkOidcServer`, and (unless `ConsoleSignIn = false`) registers the console's sign-in: cookie `ArkIdpConsole` + OIDC `ArkIdpConsoleOidc` against this same server as `{TenantId}_client`, metadata and keys read in-process. | on the builder |
-| `WebApplication WebApplication.UseArkIdp()` | The whole pipeline: `UseStaticFiles`, `UseRouting`, `UseArkOidcCors`, `UseArkAuthData`, `UseAuthentication`, `UseAuthorization`, `MapControllers`, plus `/` → console (`MapRootToConsole`), `/ark-idp/signout`, `/ark-idp/auth-error`. | where `UseRouting` would go |
+| `WebApplication WebApplication.UseArkIdp()` | The whole pipeline: `UseStaticFiles`, `UseRouting`, `UseArkOidcCors`, `UseArkAuthData`, `UseAuthentication`, `UseAuthorization`, `MapControllers`, plus `/` → sign in, then the landing page (`MapRootToConsole`), `/ark-idp/signin?returnUrl=` (a local path; without one, the landing page), `/ark-idp/signout`, `/ark-idp/auth-error`. A sign-in started on the way to a page returns to that page; one started at `/` lands on `Admin:LandingUrl`. | where `UseRouting` would go |
 | `IApplicationBuilder IApplicationBuilder.UseArkSetup()` | The setup wizard and its gate. Called by `UseArkAuthData`; idempotent. | after `UseRouting`, before authentication |
 | `void IServiceCollection.AddArkOidcServer(IWebHostEnvironment environment)` | Register the DbContext, protocol services, CORS configurator, controllers/views, antiforgery. Unpacks embedded assets to the content root in Development. | in `ConfigureServices` |
 | `void IApplicationBuilder.UseArkAuthData()` | Setup wizard while unconfigured (see below), then the one-time DB bootstrap: create + seed on first run, apply pending schema scripts, reconcile the admin/machine clients and scope catalogue. Latched (runs once per process). | after `UseRouting` |
@@ -61,8 +61,9 @@ the code from the start-up log / `setup-code.txt`. Errors are `{ error, msg, fie
 
 `complete` writes `{DataPath}/settings.json` (0600): `ConnectionStrings`, and `ark_oauth_server`
 with `TenantId, BaseUrl, BasePath, Provider, UserPasswordMode, DefaultPw?, AdminUser{Username,Name},
-Admin{SignOutUrl}, Oidc{…}, EmailConfig{…}, ShowPoweredBy` (from `branding.show_powered_by`, default
-`true`). Not written: the admin password, the signing key, the machine secret (database only, hashed
+Admin{SignOutUrl,LandingUrl?}, Oidc{…}, EmailConfig{…}, ShowPoweredBy` (from `branding.show_powered_by`, default
+`true`; `LandingUrl` from `server.landing_url`, written only when it is not the public URL itself, as a
+path when it is on this server). Not written: the admin password, the signing key, the machine secret (database only, hashed
 where secret); the wizard's last screen offers them once, as a JSON or `.xlsx` download built in the
 browser. The file is a configuration source between
 appsettings and user secrets / environment / command line. An existing Ark database is attached,
@@ -80,7 +81,7 @@ not seeded (tenant id must match; no key/client/account created).
 | `DefaultPw` | `string` | — | Initial password for new users; fallback for `AdminUser:Password`. |
 | `UserPasswordMode` | `string` | `auto` | `admin_managed` \| `email_based` \| `auto`. |
 | `AdminUser` | `ArkAdminUserConfig` | — | Seed account. `Username` (default `admin`), **`Password` (required, no safe default)**, `Name`. |
-| `Admin` | `ArkAdminConsoleConfig` | — | `SignOutUrl` — host route the console's Sign out uses. `DataTools` — export / import / reset switches, see below. |
+| `Admin` | `ArkAdminConsoleConfig` | — | `SignOutUrl` — host route the console's Sign out uses. `LandingUrl` — where the built-in sign-in (`AddArkIdp`) lands when started at `/` or `/ark-idp/signin` with no `returnUrl`: a path in this app or an absolute URL; empty = `/` (the console). `DataTools` — export / import / reset switches, see below. |
 | `Oidc` | `ArkOidcOptions` | see below | Protocol switches; every value has a default. |
 | `EmailConfig` | `ArkEmailConfig` | — | SMTP + branding (`host_logo`, `client_logo`, links, …). |
 | `ShowPoweredBy` | `bool` | `true` | "Powered by Ark Identity Server" under the sign-in card and in the console footer. `false` hides it; the console footer keeps the package version. |

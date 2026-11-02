@@ -25,7 +25,10 @@ namespace Ark.oAuth.Oidc
         /// </summary>
         public bool ConsoleSignIn { get; set; } = true;
 
-        /// <summary><c>/</c> sends the browser to the admin console — and so to the sign-in page.</summary>
+        /// <summary>
+        /// <c>/</c> signs in, then lands on <c>ark_oauth_server:Admin:LandingUrl</c> — the admin
+        /// console unless setup chose another page.
+        /// </summary>
         public bool MapRootToConsole { get; set; } = true;
     }
 
@@ -39,8 +42,51 @@ namespace Ark.oAuth.Oidc
     {
         public const string CookieScheme = "ArkIdpConsole";
         public const string OidcScheme = "ArkIdpConsoleOidc";
+        /// <summary>
+        /// Signs in, then goes on: to <c>?returnUrl=</c> when it names a page on this server,
+        /// otherwise to the landing page. A host's "Sign in" link points here.
+        /// </summary>
+        public const string SignInPath = "/ark-idp/signin";
         public const string SignOutPath = "/ark-idp/signout";
         public const string AuthErrorPath = "/ark-idp/auth-error";
+
+        /// <summary>
+        /// Where a sign-in started for no page in particular ends: <c>ark_oauth_server:Admin:LandingUrl</c>,
+        /// a path in this app or an address anywhere; else the server's root — which, while
+        /// <c>/</c> is the console's, means the console.
+        /// </summary>
+        internal static string LandingUrl(HttpContext ctx)
+        {
+            var sp = ctx.RequestServices;
+            var configured = (sp.GetRequiredService<IConfiguration>()["ark_oauth_server:Admin:LandingUrl"] ?? "").Trim();
+            if (Uri.TryCreate(configured, UriKind.Absolute, out var url) && url.Scheme is "http" or "https") return configured;
+            var pathBase = ctx.Request.PathBase;
+            // The root, or one of sign-in's own routes, would loop — refused by the wizard, but
+            // settings.json can be edited by hand.
+            if (IsLocalUrl(configured) && !IsRoot(configured) && !IsReservedPath(configured)) return $"{pathBase}{configured}";
+            return sp.GetService<ArkIdpOptions>()?.MapRootToConsole ?? true ? $"{pathBase}/admin" : $"{pathBase}/";
+        }
+
+        /// <summary>A path on this server. Not <c>//host</c> or <c>/\host</c>, which a browser reads as another site.</summary>
+        internal static bool IsLocalUrl(string? url) =>
+            !string.IsNullOrEmpty(url) && url[0] == '/' &&
+            (url.Length == 1 || url[1] is not ('/' or '\\')) && !url.Any(char.IsControl);
+
+        /// <summary>The app's root, whatever its query string: a sign-in for no page in particular.</summary>
+        internal static bool IsRoot(string? url, PathString pathBase = default)
+        {
+            if (string.IsNullOrEmpty(url)) return true;
+            var path = url.Split('?', '#')[0];
+            return path == $"{pathBase}/" || (pathBase.HasValue && path == pathBase.Value);
+        }
+
+        /// <summary>Sign-in's own routes and callbacks. Landing on one would sign in, or out, again.</summary>
+        internal static bool IsReservedPath(string localUrl)
+        {
+            var path = new PathString(localUrl.Split('?', '#')[0]);
+            return path.StartsWithSegments("/ark-idp") || path.StartsWithSegments("/signin-oidc") ||
+                   path.StartsWithSegments("/signout-callback-oidc");
+        }
     }
 
     /// <summary>
@@ -167,6 +213,15 @@ namespace Ark.oAuth.Oidc
                             catch (ArgumentException) { }
                             return Task.CompletedTask;
                         },
+                        OnTicketReceived = ctx =>
+                        {
+                            // Signed in and validated. The page the sign-in was started on the
+                            // way to wins — the challenge carried it through the IdP in `state`.
+                            // One started at the root was for no page in particular: it lands.
+                            if (ArkIdpConsole.IsRoot(ctx.ReturnUri, ctx.Request.PathBase))
+                                ctx.ReturnUri = ArkIdpConsole.LandingUrl(ctx.HttpContext);
+                            return Task.CompletedTask;
+                        },
                         OnRemoteFailure = ctx =>
                         {
                             // Not "/": that is the console, which would challenge straight back here.
@@ -197,7 +252,10 @@ namespace Ark.oAuth.Oidc
         internal static void MapArkIdpConsole(this WebApplication app, bool mapRoot)
         {
             if (mapRoot)
-                app.MapGet("/", (HttpContext ctx) => Results.Redirect($"{ctx.Request.PathBase}/admin"));
+                app.MapGet("/", (HttpContext ctx) => SignInAndGo(ctx, $"{ctx.Request.PathBase}/"));
+
+            app.MapGet(ArkIdpConsole.SignInPath, (HttpContext ctx, string? returnUrl) =>
+                SignInAndGo(ctx, ArkIdpConsole.IsLocalUrl(returnUrl) ? returnUrl! : $"{ctx.Request.PathBase}/"));
 
             // Both sessions: the console's cookie here, and the IdP's through end_session —
             // dropping only the first would sign the next visitor straight back in.
@@ -224,10 +282,22 @@ namespace Ark.oAuth.Oidc
                     h1{font-size:1.25rem;margin:0 0 .5rem}code{display:block;white-space:pre-wrap;background:#f7f9fc;padding:.75rem;border-radius:8px;margin:1rem 0}
                     a{color:#3457d5}@media (prefers-color-scheme:dark){body{background:#0f1220;color:#e6e9f2}main{background:#171b2e;border-color:#2a3050}code{background:#11142a}a{color:#8ea6ff}}</style>
                     </head><body><main><h1>Sign-in did not complete</h1><code>{{{WebUtility.HtmlEncode(message)}}}</code>
-                    <p><a href="{{{WebUtility.HtmlEncode(root)}}}/admin">Try again</a> · <a href="{{{WebUtility.HtmlEncode(root)}}}{{{ArkIdpConsole.SignOutPath}}}">Sign out and use another account</a></p></main></body></html>
+                    <p><a href="{{{WebUtility.HtmlEncode(root)}}}{{{ArkIdpConsole.SignInPath}}}">Try again</a> · <a href="{{{WebUtility.HtmlEncode(root)}}}{{{ArkIdpConsole.SignOutPath}}}">Sign out and use another account</a></p></main></body></html>
                     """;
                 return Results.Content(html, "text/html; charset=utf-8");
             });
+        }
+
+        /// <summary>
+        /// Signed in: on to <paramref name="target"/>, or to the landing page when that is the
+        /// root. Not yet: sign in first, carrying the target — <c>OnTicketReceived</c> makes the
+        /// same choice once the tokens are validated.
+        /// </summary>
+        static IResult SignInAndGo(HttpContext ctx, string target)
+        {
+            if (ctx.User.Identity?.IsAuthenticated != true)
+                return Results.Challenge(new AuthenticationProperties { RedirectUri = target }, new List<string> { ArkIdpConsole.OidcScheme });
+            return Results.Redirect(ArkIdpConsole.IsRoot(target, ctx.Request.PathBase) ? ArkIdpConsole.LandingUrl(ctx) : target);
         }
     }
 

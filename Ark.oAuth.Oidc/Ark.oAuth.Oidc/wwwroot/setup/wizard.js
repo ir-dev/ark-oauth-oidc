@@ -195,6 +195,8 @@
                 }
                 if (!TENANT.test(val('tenant_id'))) p = invalid('tenant_id', '2–63 letters, digits, _ or -, starting with a letter or digit.');
                 if (val('base_path') && !/^[A-Za-z0-9_\-/]+$/.test(val('base_path'))) p = invalid('base_path', 'Letters, digits, _, - and / only.');
+                const l = val('landing_url');
+                if (l && !/^\/(?![/\\])/.test(l) && !isUrl(l)) p = invalid('landing_url', 'A path in this app such as /dashboard, or a full http(s) address.');
                 return p;
             }
 
@@ -366,7 +368,16 @@
         return p && !b.toLowerCase().endsWith('/' + p.toLowerCase()) ? `${b}/${p}` : b;
     }
 
+    // The landing page starts as the public URL, and follows it until it is given a page of its own.
+    let landingAuto = '';
+
     function renderServer() {
+        const landing = `${appRoot()}/`;
+        if (!val('landing_url') || val('landing_url') === landingAuto) setVal('landing_url', landing);
+        landingAuto = landing;
+        field('landing_url').placeholder = landing;
+        // A host that signs the console in itself decides where its own sign-in lands.
+        $('#landingField').hidden = env?.console_sign_in === false;
         const issuer = `${appRoot()}/${val('tenant_id') || '…'}`;
         $('#issuerPreview').textContent = issuer;
         $('#discoveryPreview').textContent = `${issuer}/.well-known/openid-configuration`;
@@ -585,7 +596,8 @@
             branding: { host_logo: logos.host_logo, app_logo: logos.app_logo, show_powered_by: !!val('show_powered_by') },
             server: {
                 tenant_id: val('tenant_id'), tenant_display: val('tenant_display') || `${val('company_name') || val('tenant_id')} Admin Console`,
-                base_url: val('base_url'), base_path: val('base_path')
+                base_url: val('base_url'), base_path: val('base_path'),
+                landing_url: env?.console_sign_in ? val('landing_url') : ''
             },
             database: { provider: val('provider'), connection_string: connection() },
             keys: { private_key: key ? key.private_key : '' },
@@ -624,7 +636,10 @@
             ]],
             ['server', 'Server address', [
                 ['Issuer', `<code>${esc(appRoot())}/${esc(p.server.tenant_id)}</code>`],
-                ['Tenant', `${esc(p.server.tenant_id)}: ${esc(p.server.tenant_display)}`]
+                ['Tenant', `${esc(p.server.tenant_id)}: ${esc(p.server.tenant_display)}`],
+                ...(env?.console_sign_in
+                    ? [['Landing page', `<code>${esc(p.server.landing_url || `${appRoot()}/`)}</code>, or the page being opened`]]
+                    : [])
             ]],
             ['database', 'Database', [
                 ['Provider', esc(p.database.provider)],
@@ -663,6 +678,7 @@
     // Server field names, as returned in { field }, to the step and input that hold them.
     const FIELD_MAP = {
         tenant_id: ['server', 'tenant_id'], base_url: ['server', 'base_url'], base_path: ['server', 'base_path'],
+        landing_url: ['server', 'landing_url'],
         provider: ['database', null], connection_string: ['database', null],
         private_key: ['keys', null], key_size: ['keys', null],
         admin_username: ['admin', 'admin_username'], admin_password: ['admin', 'admin_password'],

@@ -198,6 +198,16 @@
         /// </summary>
         public string SignOutUrl { get; set; }
 
+        /// <summary>
+        /// Where the built-in sign-in (<c>AddArkIdp</c>) lands once the tokens are validated, when
+        /// it was started for no page in particular: at <c>/</c>, or at <c>/ark-idp/signin</c>
+        /// without a <c>returnUrl</c>. A sign-in started on the way to a page goes back to that page
+        /// instead. A path (<c>/dashboard</c>) is relative to this app; an absolute URL may be
+        /// anywhere. Empty: the server's root, which is the console unless the host maps <c>/</c>
+        /// itself. The setup wizard asks, defaulting to the public URL.
+        /// </summary>
+        public string LandingUrl { get; set; }
+
         /// <summary>The operator's data page at /{tenant}/admin/data — see <see cref="ArkDataToolsConfig"/>.</summary>
         public ArkDataToolsConfig DataTools { get; set; } = new ArkDataToolsConfig();
     }

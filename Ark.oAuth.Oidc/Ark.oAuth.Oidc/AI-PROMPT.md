@@ -74,7 +74,7 @@ Host bootstrap
  │                  app.UseArkAuthData()  (setup wizard if unconfigured, then one-time DB bootstrap, latched)
  │                  app.UseArkOidcCors()  (only if SPA clients call token/userinfo)
  ├── Config         ark_oauth_server: TenantId, BaseUrl, BasePath, Provider, DefaultPw,
- │                  UserPasswordMode, AdminUser{Username,Password,Name}, Admin{SignOutUrl},
+ │                  UserPasswordMode, AdminUser{Username,Password,Name}, Admin{SignOutUrl,LandingUrl},
  │                  Oidc{...}, EmailConfig{...}, ShowPoweredBy, Setup{Enabled,RequireToken,DataPath};
  │                  ConnectionStrings:ArkAuthConnection
  └── Anti-patterns  Provider "sqlserver"; running requests before UseArkAuthData; seeding with a
@@ -219,7 +219,7 @@ CONFIGURATION ("ark_oauth_server"):
 TenantId (required), BaseUrl (required), BasePath, Provider (sqlite|mysql|postgres),
 DefaultPw, UserPasswordMode (admin_managed|email_based|auto), AdminUser{Username,Password(required),Name},
 ShowPoweredBy=true ("Powered by Ark Identity Server" on sign-in pages and console footer),
-Admin{SignOutUrl}, Oidc{EnableDynamicRegistration=false, RequireRegistrationAccessToken=true,
+Admin{SignOutUrl,LandingUrl}, Oidc{EnableDynamicRegistration=false, RequireRegistrationAccessToken=true,
 EnableDeviceFlow=true, EnablePushedAuthorizationRequests=true, RequirePushedAuthorizationRequests=false,
 AlwaysRequireConsent=false, SessionLifetimeMinutes=480, MaxFailedSignIns=10, LockoutMinutes=15,
 EnableBackChannelLogout=true, BackChannelLogoutTimeoutSeconds=5, LogoutTokenLifetimeSeconds=120,
