@@ -54,7 +54,36 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
-Next release — the management API answers to the operator only. BREAKING: ship as 2.1.0.
+Next release — start with nothing configured: the setup wizard. Additive; suggest 2.2.0.
+
+* **Two lines, no appsettings.** builder.AddArkIdp() and app.UseArkIdp(). Started with no TenantId or
+  no connection string, every browser request goes to /ark-idp/setup (other requests get 503
+  setup_required), and the wizard collects the organization, logos, public URL, tenant, database
+  (SQLite / PostgreSQL / MySQL, with a connection test), the RS256 signing key (generated, 2048 to
+  4096 bits, or imported from PEM), the administrator, users and SMTP (with a test message),
+  protocol options, CORS origins and a machine client secret.
+* **The same process becomes the IdP.** Install writes ark-idp-data/settings.json, creates and seeds
+  the database with what was entered, and reloads configuration. The console's sign-in options and
+  the CORS policy follow the reload, so / leads straight to the sign-in page. No restart.
+* **Secrets stay out of the file.** The administrator password and machine secret are stored only as
+  hashes, the signing key only in signing_keys. settings.json is 0600, its directory ignores itself
+  in git, and it sits below user secrets, environment and command line, so any value can still be
+  overridden. Logos are stored beside it and served from /ark-idp/branding, so emails can show them.
+* **Not a race to the first visitor.** From the server's own machine the wizard is open; from
+  anywhere else it needs the setup code printed in the start-up log. Setup:RequireToken asks for it
+  everywhere; Setup:Enabled=false removes the wizard; Setup:DataPath moves the directory (containers).
+* **Built-in console sign-in.** AddArkIdp registers a cookie plus the framework's OIDC handler against
+  this same server, with discovery and keys read in-process rather than fetched from its own public
+  address. Hosts that bring Ark.oAuth.Client keep doing so (AddArkIdp(o => o.ConsoleSignIn = false),
+  or the existing calls).
+* **Existing hosts are unchanged.** A server configured through appsettings or the environment never
+  sees the wizard. UseArkAuthData now puts the wizard in front of the bootstrap, so hosts built on
+  the lower-level calls get it too when they start unconfigured. An existing Ark database can be
+  attached through the wizard instead of seeded.
+* New dependency: Microsoft.AspNetCore.Authentication.OpenIdConnect 9.0.x (IdentityModel stays on
+  8.8.0).
+
+Earlier — the management API answers to the operator only. BREAKING: ship as 2.1.0.
 
 * **The package decides who may call /api/oauth/v1/….** It used to be a bare [Authorize] against the
   host's default scheme: with the console cookie as the default, any account mapped to the console
@@ -388,6 +417,12 @@ projects, and now carries a readme, an SPDX license expression and a symbol pack
 			package. Raising the floor to 8.8.0 keeps Protocols and Tokens on the same major.
 		-->
 		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.8.0" />
+		<!--
+			The built-in console sign-in that AddArkIdp registers: the framework's own OIDC handler,
+			pointed at this server. Same patch train as the EF packages above; it asks for
+			Microsoft.IdentityModel.Protocols.OpenIdConnect 8.0.x, which the pin above lifts to 8.8.0.
+		-->
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="9.0.10" />
 	</ItemGroup>
 
 </Project>

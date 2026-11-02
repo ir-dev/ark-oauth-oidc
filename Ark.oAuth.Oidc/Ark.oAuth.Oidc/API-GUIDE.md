@@ -14,8 +14,11 @@ configuration) and by *calling* its HTTP endpoints (protocol + management APIs).
 
 | Signature | Purpose | Order |
 |---|---|---|
+| `WebApplicationBuilder WebApplicationBuilder.AddArkIdp(Action<ArkIdpOptions>? configure = null)` | Zero-config entry point: attaches the setup wizard's `settings.json` as configuration, calls `AddArkOidcServer`, and (unless `ConsoleSignIn = false`) registers the console's sign-in: cookie `ArkIdpConsole` + OIDC `ArkIdpConsoleOidc` against this same server as `{TenantId}_client`, metadata and keys read in-process. | on the builder |
+| `WebApplication WebApplication.UseArkIdp()` | The whole pipeline: `UseStaticFiles`, `UseRouting`, `UseArkOidcCors`, `UseArkAuthData`, `UseAuthentication`, `UseAuthorization`, `MapControllers`, plus `/` → console (`MapRootToConsole`), `/ark-idp/signout`, `/ark-idp/auth-error`. | where `UseRouting` would go |
+| `IApplicationBuilder IApplicationBuilder.UseArkSetup()` | The setup wizard and its gate. Called by `UseArkAuthData`; idempotent. | after `UseRouting`, before authentication |
 | `void IServiceCollection.AddArkOidcServer(IWebHostEnvironment environment)` | Register the DbContext, protocol services, CORS configurator, controllers/views, antiforgery. Unpacks embedded assets to the content root in Development. | in `ConfigureServices` |
-| `void IApplicationBuilder.UseArkAuthData()` | One-time DB bootstrap: create + seed on first run, apply pending schema scripts, reconcile the admin/machine clients and scope catalogue. Latched (runs once per process). | after `UseRouting` |
+| `void IApplicationBuilder.UseArkAuthData()` | Setup wizard while unconfigured (see below), then the one-time DB bootstrap: create + seed on first run, apply pending schema scripts, reconcile the admin/machine clients and scope catalogue. Latched (runs once per process). | after `UseRouting` |
 | `void IApplicationBuilder.UseArkOidcCors()` | Enables the CORS middleware for endpoints marked `[EnableCors(ArkCors.PolicyName)]`. | after `UseRouting`, **before** `UseAuthorization` |
 
 The host also calls **`AddArkOidcClient(configuration)`** and **`UseArkOidcClient()`** from
@@ -30,6 +33,38 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}");
 ```
+
+
+## Setup wizard (`/ark-idp/setup`)
+
+Active while `ark_oauth_server:TenantId` or `ConnectionStrings:ArkAuthConnection` is empty and
+`ark_oauth_server:Setup:Enabled` is not `false`. Served by middleware (`ArkSetupMiddleware`, in
+`Code/ArkSetup.cs`), ahead of authentication.
+
+| Route | Answer while unconfigured | Once configured |
+|---|---|---|
+| any browser GET (`Accept: text/html`) | 302 → `/ark-idp/setup` | normal |
+| any other request | 503 `{ "error": "setup_required", "msg": … }` | normal |
+| `GET /ark-idp/setup` | the wizard page | 302 → `/` |
+| `GET /ark-idp/setup/api/state` | environment, defaults, whether a setup code is needed | 404 |
+| `POST /ark-idp/setup/api/verify-code` | `{ code }` → 200 / 403 | 404 |
+| `POST /ark-idp/setup/api/keys/generate` | `{ key_size: 2048\|3072\|4096 }` → `{ kid, public_key, private_key, public_pem, private_pem }` | 404 |
+| `POST /ark-idp/setup/api/keys/import` | `{ private_key }` (PEM PKCS#8/PKCS#1, or base64 PKCS#8) → same | 404 |
+| `POST /ark-idp/setup/api/database/test` | `{ provider, connection_string }` → `{ ok, exists, tenants[], msg }` | 404 |
+| `POST /ark-idp/setup/api/email/test` | `{ email{…}, to }` → `{ ok, msg }` | 404 |
+| `POST /ark-idp/setup/api/complete` | the whole form → writes settings, bootstraps the DB, reloads configuration | 404 |
+| `GET /ark-idp/branding/{file}` | uploaded logos | same |
+
+Every POST must be `Content-Type: application/json` with `X-Ark-Setup: 1`; from anything but an
+unproxied loopback address (or always, with `Setup:RequireToken`) also `X-Ark-Setup-Code: <code>`,
+the code from the start-up log / `setup-code.txt`. Errors are `{ error, msg, field }`.
+
+`complete` writes `{DataPath}/settings.json` (0600): `ConnectionStrings`, and `ark_oauth_server`
+with `TenantId, BaseUrl, BasePath, Provider, UserPasswordMode, DefaultPw?, AdminUser{Username,Name},
+Admin{SignOutUrl}, Oidc{…}, EmailConfig{…}`. Not written: the admin password, the signing key, the
+machine secret (database only, hashed where secret). The file is a configuration source between
+appsettings and user secrets / environment / command line. An existing Ark database is attached,
+not seeded (tenant id must match; no key/client/account created).
 
 ## Configuration (`ArkAuthServerConfig`, section `ark_oauth_server`)
 

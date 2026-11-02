@@ -73,6 +73,8 @@
         public ArkAdminConsoleConfig Admin { get; set; } = new ArkAdminConsoleConfig();
         /// <summary>Who may drive the management API, and how. See <see cref="ArkManagementConfig"/>.</summary>
         public ArkManagementConfig Management { get; set; } = new ArkManagementConfig();
+        /// <summary>The first-run setup wizard. See <see cref="ArkSetupConfig"/>.</summary>
+        public ArkSetupConfig Setup { get; set; } = new ArkSetupConfig();
 
         /// <summary>The parsed onboarding mode, defaulting to the legacy auto behaviour.</summary>
         public ArkUserPasswordMode EffectiveUserPasswordMode =>
@@ -132,6 +134,39 @@
         public string Password { get; set; }
         /// <summary>Display name for the account. Defaults to <c>Admin User</c>.</summary>
         public string Name { get; set; }
+    }
+
+    /// <summary>
+    /// The first-run setup wizard, bound from <c>ark_oauth_server:Setup</c>.
+    ///
+    /// A server with no <c>TenantId</c> or no <c>ConnectionStrings:ArkAuthConnection</c> is not
+    /// configured, and while it is not, every request goes to the wizard at <c>/ark-idp/setup</c>.
+    /// The wizard writes what it collects to <c>settings.json</c> in <see cref="DataPath"/>, which
+    /// is read as configuration from then on — above appsettings.json, below user secrets,
+    /// environment variables and the command line — so any value it wrote can still be overridden
+    /// the usual way. A server configured any other way never sees the wizard.
+    /// </summary>
+    public class ArkSetupConfig
+    {
+        /// <summary>
+        /// False turns the wizard off: an unconfigured server then fails the way it always did,
+        /// naming the missing setting. For deployments that are only ever configured by pipeline.
+        /// </summary>
+        public bool Enabled { get; set; } = true;
+
+        /// <summary>
+        /// Require the setup code even from this machine. By default a request from a loopback
+        /// address with no forwarding headers needs none — that is the developer at
+        /// <c>dotnet run</c> — and any other request needs the code printed in the server log.
+        /// </summary>
+        public bool RequireToken { get; set; }
+
+        /// <summary>
+        /// The directory the wizard writes to: <c>settings.json</c>, the uploaded logos and the
+        /// setup code. Defaults to <c>ark-idp-data</c> under the content root. In a container,
+        /// point it at a persistent volume — the settings are the server's configuration.
+        /// </summary>
+        public string? DataPath { get; set; }
     }
 
     /// <summary>Behaviour of the admin console shipped inside this package.</summary>

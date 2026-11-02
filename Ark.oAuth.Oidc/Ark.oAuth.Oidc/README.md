@@ -14,16 +14,50 @@ and admin UI. The matching client package is [`Ark.oAuth.Client`](https://www.nu
 > (symptom → cause → fix), [`MIGRATION.md`](MIGRATION.md) (versions, schema scripts, upgrading). The
 > C# in this directory is authoritative; do not invent APIs, endpoints, or settings.
 
-## Install
+## Install and run: nothing to configure first
 
 ```bash
-dotnet new mvc -n MyIdp
+dotnet new web -n MyIdp
 cd MyIdp
 dotnet add package Ark.oAuth.Oidc
-dotnet add package Ark.oAuth.Client
 ```
 
-## Program.cs
+```csharp
+using Ark.oAuth.Oidc;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.AddArkIdp();          // the identity provider, and sign-in for its own admin console
+
+var app = builder.Build();
+app.UseHttpsRedirection();
+app.UseArkIdp();              // routing, CORS, setup wizard, bootstrap, auth, endpoints, in order
+app.Run();
+```
+
+`dotnet run` and open the app. With no tenant and no database configured, every page goes to the
+**setup wizard** at `/ark-idp/setup`, which collects everything the server needs:
+
+| Step | What it captures |
+|---|---|
+| Organization & branding | organization and product name, website / terms / privacy URLs, your logo and a default app logo (uploaded, with a live sign-in page preview) |
+| Server address | public URL, operator tenant id and display name, optional base path. Shows the issuer and discovery URL it will produce |
+| Database | SQLite, PostgreSQL or MySQL, built from fields or a raw connection string, with **Test connection** |
+| Signing key | **Generate** an RSA key pair (2048 / 3072 / 4096) or import an existing PEM. Shows the kid and public key; the private key can be revealed or downloaded |
+| Administrator | username, name and password (with a generator) |
+| Users & email | how new users get their first password, a default password, SMTP with **Send test** |
+| Protocol & security | device flow, PAR, dynamic registration, consent, back-channel logout, session and lockout limits, CORS origins, and a generated secret for the machine client |
+| Review & install | everything on one page, then **Install** |
+
+Install writes the settings, creates and seeds the database, and reloads configuration. **The same
+running process is now the IdP**, with no restart. `/` leads to the sign-in page, and the
+administrator lands in the admin console. Every later start skips the wizard.
+
+### Configuring through appsettings instead
+
+A server that already has `ark_oauth_server:TenantId` and `ConnectionStrings:ArkAuthConnection`
+(from appsettings, user secrets, the environment, anything) never sees the wizard. That is the
+route for pipeline-built deployments, and every setting below still applies. To bring your own
+console sign-in, `Ark.oAuth.Client` in this example, use the lower-level calls:
 
 ```csharp
 using Ark.oAuth;
@@ -42,7 +76,7 @@ app.UseStaticFiles();
 
 app.UseRouting();        // must come before UseAuthentication / UseAuthorization
 app.UseArkOidcCors();    // only needed if browser-based clients call the token endpoint
-app.UseArkAuthData();    // one-time database bootstrap
+app.UseArkAuthData();    // setup wizard (if unconfigured), then the one-time database bootstrap
 app.UseArkOidcClient();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -50,6 +84,9 @@ app.UseAuthorization();
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 ```
+
+`builder.AddArkIdp(o => o.ConsoleSignIn = false)` is the middle ground: the wizard and the
+pipeline, with the console's sign-in left to you.
 
 `UseRouting()` has to run before `UseAuthentication()` / `UseAuthorization()`. Without a selected
 endpoint the authorization middleware cannot see the `[Authorize]` metadata it is meant to enforce.
@@ -430,6 +467,59 @@ The header lays itself out for whichever marks exist: two get a divider between 
 room both would have shared, and none promotes the host name to being the thing itself rather than
 a caption under an empty space. The admin console's top bar draws the same lockup.
 
+## The setup wizard
+
+**Where it writes.** One directory, `ark-idp-data/` under the content root unless
+`ark_oauth_server:Setup:DataPath` says otherwise:
+
+| File | Contents |
+|---|---|
+| `settings.json` | the `ark_oauth_server` section and `ConnectionStrings:ArkAuthConnection`, mode 0600 |
+| `branding/` | the uploaded logos, served at `/ark-idp/branding/…` (as files, so activation emails can show them) |
+| `ark_idp.db` | the SQLite database, when SQLite is chosen with the default path |
+| `.gitignore` | `*`: the directory ignores itself, because `dotnet run` puts it inside your project |
+
+`settings.json` is read as configuration on every start. It is inserted **after appsettings.json and
+before user secrets, environment variables and the command line**, so any value it holds can still
+be overridden the usual way, for example `ark_oauth_server__EmailConfig__pw` from a key vault.
+
+**What it never writes.** The administrator's password and the machine client's secret go into the
+database as hashes; the signing key's private half goes into `signing_keys`. None of them is in
+`settings.json`. The machine secret is shown once, on the last screen.
+
+**Who may run it.** Whoever finishes setup becomes the administrator, so an unconfigured server on
+a network is a race to the first visitor. From the server's own machine (a loopback address, no
+`X-Forwarded-For` / `Forwarded` / `X-Real-IP`) the wizard is open. From anywhere else it asks for a
+**setup code**, printed in the log at start-up and saved as `setup-code.txt` beside the settings:
+
+```
+warn: Ark.oAuth.Oidc.Setup[0]
+      Ark IdP is not configured yet. Open /ark-idp/setup on this server in a browser to run the setup
+      wizard. From this machine (localhost) no code is needed. From any other machine, enter the
+      setup code N9VL-VTVB-2T5N.
+```
+
+Every wizard call is a JSON POST with a custom header, which a browser will not send cross-site.
+Once setup is done, `/ark-idp/setup` is gone (404) and the setup code is deleted.
+
+**An existing database.** Point the wizard at a database that already holds Ark tenants and it
+attaches instead of seeding: the tenant id must be one the database has, and no key, client or
+account is created. Enter that database's administrator as the username; it is who the console
+treats as the operator.
+
+**Settings** (`ark_oauth_server:Setup`, from appsettings or the environment):
+
+| Setting | Default | |
+|---|---|---|
+| `Enabled` | `true` | `false` removes the wizard; an unconfigured server then fails naming the missing setting |
+| `RequireToken` | `false` | ask for the setup code from localhost too |
+| `DataPath` | `ark-idp-data` | in a container, a mounted volume, e.g. `ark_oauth_server__Setup__DataPath=/home/data/ark-idp`. The .NET 8+ images run as a non-root user that cannot write to `/app` |
+
+**Containers.** The wizard's directory is the server's configuration, so it has to outlive the
+container: mount a volume and point `DataPath` at it, or configure through the environment and
+never run the wizard at all. Reach the wizard from your machine through the published port with the
+setup code from `docker logs`.
+
 ## Upgrading an existing database
 
 Schema changes ship as numbered scripts, and **they now run themselves**: on start-up the server
@@ -463,6 +553,8 @@ unless `ark_oauth_server:Management:AllowMigrationEndpoint` is `true`, and opera
 ## Before production
 
 1. Set `AdminUser:Password` before the first run, out of band, and change it after first sign-in.
+   With the wizard: run it from the server itself, or with the setup code, before the server is
+   reachable by anyone else, and back up `ark-idp-data/`.
 2. Set a strong `DefaultPw`.
 3. Keep `RequireHttpsMetadata` at `true` on clients.
 4. Leave `EnableDynamicRegistration` off unless you need it, and keep

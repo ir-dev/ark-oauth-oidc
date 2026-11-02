@@ -26,6 +26,9 @@ namespace Ark.oAuth.Oidc
             var names = foundationAssembly.GetManifestResourceNames();
             foreach (var name in names)
             {
+                // The setup wizard is served from the assembly by ArkSetupMiddleware, and its page
+                // is a template: a loose copy under wwwroot would only be a broken duplicate.
+                if (name.StartsWith(assemblyName + ".wwwroot.setup.", StringComparison.Ordinal)) continue;
                 var ext = System.IO.Path.GetExtension(name);
                 var filePath = System.IO.Path.GetFileNameWithoutExtension(name);
                 // Embedded files are prefixed with the full namespace of the assembly, so your file is stored at wwwroot/foundation.css, then
@@ -91,6 +94,11 @@ namespace Ark.oAuth.Oidc
 
         public static void UseArkAuthData(this IApplicationBuilder builder)
         {
+            // The setup wizard goes in front of the bootstrap: with no tenant or no database
+            // configured there is nothing to bootstrap, and every request is the wizard's until
+            // it has written the settings that change that. Configured, it passes everything on.
+            builder.UseArkSetup();
+
             builder.Use(async (context, next) =>
             {
                 if (Interlocked.CompareExchange(ref _dataInitialized, 1, 0) != 0)
@@ -102,59 +110,7 @@ namespace Ark.oAuth.Oidc
                 {
                     try
                     {
-                        var dbContext = scope.ServiceProvider.GetRequiredService<ArkDataContext>();
-                        var creator = dbContext.GetService<IRelationalDatabaseCreator>();
-                        var conf = scope.ServiceProvider.GetRequiredService<IConfiguration>();
-                        var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
-                        if (dbContext.Database.GetPendingMigrations().Any())
-                        {
-                            dbContext.Database.Migrate();
-                        }
-                        // A database with no tables is as fresh as a missing one. This used to be
-                        // !CanConnect(), which only ever meant "the database is missing": a database
-                        // created beforehand for an account that may not create its own — the usual
-                        // arrangement on a managed PostgreSQL server — connected fine and was left
-                        // to the schema updater to fill. CanConnect() also swallows every error, so
-                        // a wrong password or a refused CONNECT was taken for a missing database too.
-                        else if (!creator.Exists() || !creator.HasTables())
-                        {
-                            CreateSchema(dbContext, creator);
-                        }
-
-                        // Schema updates for a database that already exists. Additive scripts
-                        // only, recorded so none of them runs twice, then whatever the entity
-                        // model has that the database still lacks — see ArkSchemaUpdater. This
-                        // used to be an operator's job after every upgrade, and skipping it left
-                        // the entities describing columns the tables did not have: the management
-                        // API then answered a bare 500 that named nothing. On a schema just
-                        // created it only records the scripts as a baseline. It runs before the
-                        // seed so a database left with old, empty tables is current before
-                        // anything is written to it.
-                        ApplySchemaUpdates(scope.ServiceProvider);
-
-                        // Seeding is decided by the data, not the schema: a database without a
-                        // single tenant has never been seeded, whatever tables it has. It used to
-                        // be decided by the schema, so tables created any other way — by the
-                        // updater above, on a database the old CanConnect() test took for
-                        // initialised, or by a seed that failed after creating them — were never
-                        // seeded at all, and ReconcileMachineClient then inserted a client for a
-                        // tenant that did not exist: 23503, FK_clients_tenants_tenant_id. The
-                        // seed is one SaveChanges, so it either happens whole or is tried again on
-                        // the next start.
-                        if (!dbContext.tenants.Any())
-                            await SeedDatabase(scope.ServiceProvider, ser, context);
-                        // Tenants, but not the configured one: TenantId was changed after the
-                        // database was seeded. Every step below assumes that tenant, and the
-                        // first insert would fail on the foreign key without naming either value.
-                        else if (!string.IsNullOrWhiteSpace(ser.TenantId) && !dbContext.tenants.Any(t => t.tenant_id == ser.TenantId))
-                        {
-                            throw new ApplicationException(
-                                $"ark_oauth_server:TenantId is '{ser.TenantId}', but this database has no tenant " +
-                                "of that name. TenantId names the operator tenant the database was first seeded " +
-                                "with; set it back to that value (tenant ids are compared case-sensitively).");
-                        }
-
-                        Reconcile(scope.ServiceProvider);
+                        await BootstrapDatabaseAsync(scope.ServiceProvider, context);
                     }
                     catch (Exception ex)
                     {
@@ -168,6 +124,80 @@ namespace Ark.oAuth.Oidc
                 }
                 await next();
             });
+        }
+
+        /// <summary>
+        /// Records that the database has been bootstrapped by someone other than the middleware
+        /// above — the setup wizard, which runs the same <see cref="BootstrapDatabaseAsync"/> with
+        /// the values it collected and must not have the first request after it do it again.
+        /// </summary>
+        internal static void MarkDataInitialized() => Interlocked.Exchange(ref _dataInitialized, 1);
+
+        /// <summary>
+        /// Creates or updates the schema, seeds an empty database and runs the reconciliations.
+        /// Once per process, from <see cref="UseArkAuthData"/> or from the setup wizard.
+        /// </summary>
+        /// <param name="services">A scope's provider: the data context and its services are scoped.</param>
+        /// <param name="http">The current request, for the public address when <c>BaseUrl</c> is unset.</param>
+        /// <param name="seed">
+        /// What the setup wizard collected that configuration does not carry: the administrator's
+        /// password, a signing key, a machine secret. Only consulted when the database is seeded.
+        /// </param>
+        internal static async Task BootstrapDatabaseAsync(IServiceProvider services, HttpContext? http, ArkSeedOverrides? seed = null)
+        {
+            var dbContext = services.GetRequiredService<ArkDataContext>();
+            var creator = dbContext.GetService<IRelationalDatabaseCreator>();
+            var conf = services.GetRequiredService<IConfiguration>();
+            var ser = conf.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            if (dbContext.Database.GetPendingMigrations().Any())
+            {
+                dbContext.Database.Migrate();
+            }
+            // A database with no tables is as fresh as a missing one. This used to be
+            // !CanConnect(), which only ever meant "the database is missing": a database
+            // created beforehand for an account that may not create its own — the usual
+            // arrangement on a managed PostgreSQL server — connected fine and was left
+            // to the schema updater to fill. CanConnect() also swallows every error, so
+            // a wrong password or a refused CONNECT was taken for a missing database too.
+            else if (!creator.Exists() || !creator.HasTables())
+            {
+                CreateSchema(dbContext, creator);
+            }
+
+            // Schema updates for a database that already exists. Additive scripts
+            // only, recorded so none of them runs twice, then whatever the entity
+            // model has that the database still lacks — see ArkSchemaUpdater. This
+            // used to be an operator's job after every upgrade, and skipping it left
+            // the entities describing columns the tables did not have: the management
+            // API then answered a bare 500 that named nothing. On a schema just
+            // created it only records the scripts as a baseline. It runs before the
+            // seed so a database left with old, empty tables is current before
+            // anything is written to it.
+            ApplySchemaUpdates(services);
+
+            // Seeding is decided by the data, not the schema: a database without a
+            // single tenant has never been seeded, whatever tables it has. It used to
+            // be decided by the schema, so tables created any other way — by the
+            // updater above, on a database the old CanConnect() test took for
+            // initialised, or by a seed that failed after creating them — were never
+            // seeded at all, and ReconcileMachineClient then inserted a client for a
+            // tenant that did not exist: 23503, FK_clients_tenants_tenant_id. The
+            // seed is one SaveChanges, so it either happens whole or is tried again on
+            // the next start.
+            if (!dbContext.tenants.Any())
+                await SeedDatabase(services, ser, http, thumbprintKid: seed != null, seed: seed);
+            // Tenants, but not the configured one: TenantId was changed after the
+            // database was seeded. Every step below assumes that tenant, and the
+            // first insert would fail on the foreign key without naming either value.
+            else if (!string.IsNullOrWhiteSpace(ser.TenantId) && !dbContext.tenants.Any(t => t.tenant_id == ser.TenantId))
+            {
+                throw new ApplicationException(
+                    $"ark_oauth_server:TenantId is '{ser.TenantId}', but this database has no tenant " +
+                    "of that name. TenantId names the operator tenant the database was first seeded " +
+                    "with; set it back to that value (tenant ids are compared case-sensitively).");
+            }
+
+            Reconcile(services);
         }
 
         /// <summary>
@@ -190,15 +220,20 @@ namespace Ark.oAuth.Oidc
         /// previous key had that kid too, and a relying party holding a cached JWKS finds the kid it
         /// knows, never refetches, and fails every signature — the host's own console first.
         /// </param>
-        internal static async Task SeedDatabase(IServiceProvider services, ArkAuthServerConfig ser, HttpContext? http, bool thumbprintKid = false)
+        /// <param name="seed">
+        /// Values from the setup wizard that take precedence over configuration. Null for a
+        /// configuration-driven install, which is everything that existed before the wizard.
+        /// </param>
+        internal static async Task SeedDatabase(IServiceProvider services, ArkAuthServerConfig ser, HttpContext? http, bool thumbprintKid = false, ArkSeedOverrides? seed = null)
         {
             var dbContext = services.GetRequiredService<ArkDataContext>();
-            var admin = ResolveAdminUser(ser);
+            var admin = ResolveAdminUser(ser, seed?.AdminPassword);
             var util = services.GetRequiredService<ArkUtil>();
-            // Signing keys are generated here, in this process. They used to be
-            // fetched from an external HTTPS service, which put the tenant's
-            // private key on the wire and on someone else's machine.
-            var (publicKey, privateKey) = Protocol.ArkCrypto.GenerateRsaKeyPair();
+            // Signing keys are generated here, in this process, unless the wizard brought one —
+            // generated there with the same call, or imported. They used to be fetched from an
+            // external HTTPS service, which put the tenant's private key on the wire and on
+            // someone else's machine.
+            var (publicKey, privateKey) = seed?.SigningKey ?? Protocol.ArkCrypto.GenerateRsaKeyPair();
             var baseurl = !string.IsNullOrEmpty(ser.BaseUrl)
                 ? ser.BaseUrl
                 : http != null
@@ -214,7 +249,7 @@ namespace Ark.oAuth.Oidc
             {
                 tenant_id = ser.TenantId,
                 name = ser.TenantId,
-                display = $"{ser.TenantId} Admin Console",
+                display = string.IsNullOrWhiteSpace(seed?.TenantDisplay) ? $"{ser.TenantId} Admin Console" : seed!.TenantDisplay!,
                 audience = $"{baseurl}/ark/oauth/v1/aud",
                 issuer = $"{baseurl}/ark/oauth/v1/iss",
                 expire_mins = 480,
@@ -242,7 +277,8 @@ namespace Ark.oAuth.Oidc
             {
                 tenant_id = ser.TenantId,
                 client_id = $"{ser.TenantId}_client", //same as server id
-                display = $"{ser.TenantId} Client App (Display)",
+                // the name the sign-in page shows: "to continue to …"
+                display = string.IsNullOrWhiteSpace(seed?.TenantDisplay) ? $"{ser.TenantId} Client App (Display)" : seed!.TenantDisplay!,
                 domain = $"{domain}",
                 expire_mins = 480,
                 name = $"{ser.TenantId} name",
@@ -254,7 +290,8 @@ namespace Ark.oAuth.Oidc
 
                 // standard registration metadata for the admin console client.
                 // It runs in a browser, so it is public and must use PKCE.
-                client_name = $"{ser.TenantId} Admin Console",
+                client_name = string.IsNullOrWhiteSpace(seed?.TenantDisplay) ? $"{ser.TenantId} Admin Console" : seed!.TenantDisplay!,
+                client_logo = string.IsNullOrWhiteSpace(seed?.ConsoleLogo) ? null : seed!.ConsoleLogo,
                 application_type = "web",
                 token_endpoint_auth_method = "none",
                 require_pkce = true,
@@ -277,7 +314,12 @@ namespace Ark.oAuth.Oidc
                 }
             };
             dbContext.clients.Add(cll);
-            dbContext.clients.Add(BuildMachineClient(ser.TenantId, domain));
+            var machine = BuildMachineClient(ser.TenantId, domain);
+            // The wizard's generated secret goes straight into the database as a hash. It is
+            // shown to the operator once and never written to the settings file.
+            if (!string.IsNullOrWhiteSpace(seed?.MachineClientSecret))
+                machine.client_secret_hash = Protocol.ArkCrypto.HashSecret(seed!.MachineClientSecret!);
+            dbContext.clients.Add(machine);
             var lls = new List<string>()
             {
                 "sub",
@@ -414,13 +456,18 @@ namespace Ark.oAuth.Oidc
         /// <c>DefaultPw</c> is accepted as the fallback because it already means "the initial
         /// password for an account created without one", which is exactly what this is.
         /// </summary>
-        internal static (string Username, string Password, string Name) ResolveAdminUser(ArkAuthServerConfig ser)
+        /// <param name="ser">The <c>ark_oauth_server</c> section.</param>
+        /// <param name="password">
+        /// A password from the setup wizard, which is never written to configuration and so wins
+        /// over anything there.
+        /// </param>
+        internal static (string Username, string Password, string Name) ResolveAdminUser(ArkAuthServerConfig ser, string? password = null)
         {
             var cfg = ser.AdminUser ?? new ArkAdminUserConfig();
 
             var username = string.IsNullOrWhiteSpace(cfg.Username) ? "admin" : cfg.Username.Trim();
             var name = string.IsNullOrWhiteSpace(cfg.Name) ? "Admin User" : cfg.Name.Trim();
-            var password = Configured(cfg.Password) ?? Configured(ser.DefaultPw);
+            password = Configured(password) ?? Configured(cfg.Password) ?? Configured(ser.DefaultPw);
 
             if (string.IsNullOrWhiteSpace(password))
                 throw new ApplicationException(
@@ -697,6 +744,7 @@ namespace Ark.oAuth.Oidc
             services.AddCors();
             services.AddSingleton<Microsoft.Extensions.Options.IConfigureOptions<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>,
                 ArkCorsConfigurator>();
+            ArkCorsPolicyProvider.Register(services);
 
             // the management API answers only to the operator — see ArkManagementAuth
             services.AddArkManagementAuth();

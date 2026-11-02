@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The zero-configuration host: a reference to Ark.oAuth.Oidc and two lines in Program.cs.
+    Started with nothing configured it opens the setup wizard; once that is done, it is the IdP.
+    In your own app this ProjectReference is `dotnet add package Ark.oAuth.Oidc`.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Ark.oAuth.Oidc.QuickStart</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ark.oAuth.Oidc\Ark.oAuth.Oidc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- What the wizard writes (settings, secrets, logos, the SQLite file) is this machine's, not the build's. -->
+    <Content Remove="ark-idp-data\**" />
+    <None Remove="ark-idp-data\**" />
+  </ItemGroup>
+
+</Project>

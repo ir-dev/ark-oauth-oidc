@@ -45,6 +45,9 @@ namespace Ark.oAuth.Oidc
         }
         protected override void OnConfiguring(DbContextOptionsBuilder options)
         {
+            // A context built with explicit options keeps them — the setup wizard tests a
+            // connection string before it is anybody's configuration.
+            if (options.IsConfigured) return;
             var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
             if (string.IsNullOrEmpty(ser.Provider) || ser.Provider.ToLower() == "sqlite")
                 options.UseSqlite(_config.GetConnectionString("ArkAuthConnection"));

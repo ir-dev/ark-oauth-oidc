@@ -15,7 +15,8 @@ The provider is multi-tenant; administration is not (one operator tenant adminis
 | `ark_oauth_client_py` | Python client (Flask + framework-agnostic) | PyPI `ark-oauth-client` |
 | `ark_oauth_client_nodejs` | Node client (Express/Connect) | npm `ark-oauth-client` |
 | `Ark.oAuth.Oidc/Ark.Client.Web` | Reference client app — the shape to copy | not published |
-| `Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host` | Runnable IdP host | not published |
+| `Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host` | Runnable IdP host, configured through appsettings | not published |
+| `Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart` | Zero-config IdP host: `AddArkIdp()` + `UseArkIdp()`, setup wizard on first run | not published |
 
 The three client packages are **ports of each other and carry the same version number**. A change to
 one is usually owed to the other two. An integration written in one translates almost line for line.
@@ -73,6 +74,10 @@ These apply in every language and are the source of most "it just says the passw
   `account_switch.require_ark_claims` (Python). It moves the entitlement check to the callback so no
   session is written for an account that cannot use the app, and serves a page offering
   `prompt=login`.
+* **A new IdP needs no configuration.** `builder.AddArkIdp()` + `app.UseArkIdp()`; unconfigured, it
+  serves the setup wizard at `/ark-idp/setup` and writes `ark-idp-data/settings.json` (a config
+  source below user secrets / env). A host with `TenantId` + a connection string never sees it.
+  Wizard code: `Code/ArkSetup.cs`, `Code/ArkIdpHosting.cs`, `wwwroot/setup/`.
 * **.NET only:** keep the `Microsoft.IdentityModel.*` package graph on one version. A mixed graph
   fails only at runtime, on the first challenge, with a message that names none of this.
 * **Python only:** `ArkClientCredentials` always authenticates with `client_secret_post`. The server

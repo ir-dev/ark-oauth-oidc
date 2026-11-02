@@ -453,7 +453,34 @@ GETTINGSTARTED.md. Report each readiness check it prints, and for anything marke
 the exact registration that is missing. Do not put the administrator password in any tracked file.
 ```
 
-**Prompt (new host from NuGet)**
+**Prompt (new host from NuGet, zero-config)**
+
+```text
+Turn this ASP.NET Core app into an Ark identity provider with the Ark.oAuth.Oidc NuGet package and
+nothing else: builder.AddArkIdp(); after Build, app.UseArkIdp(); app.Run(). Add no ark_oauth_server
+settings and no Ark.oAuth.Client. Run it and tell me to open it in a browser: the setup wizard at
+/ark-idp/setup collects the organization, logos, public URL, tenant, database, signing key,
+administrator, email and protocol options, then makes the same process the IdP.
+```
+
+The whole of `Program.cs`:
+
+```csharp
+using Ark.oAuth.Oidc;
+
+var builder = WebApplication.CreateBuilder(args);
+builder.AddArkIdp();
+var app = builder.Build();
+app.UseHttpsRedirection();
+app.UseArkIdp();
+app.Run();
+```
+
+[`Ark.oAuth.Oidc.QuickStart`](Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart) is exactly this; `dotnet run`
+it and open https://localhost:7300. How the wizard stores and protects what it collects:
+[the server README](Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md#the-setup-wizard).
+
+**Prompt (new host from NuGet, configured from appsettings, e.g. for a pipeline)**
 
 ```text
 Turn this ASP.NET Core app into an Ark identity provider with the Ark.oAuth.Oidc and Ark.oAuth.Client

@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Set up Ark IdP</title>
+    <link rel="stylesheet" href="{{BASE}}/assets/wizard.css" />
+    <script src="{{BASE}}/assets/wizard.js" defer></script>
+</head>
+<body data-base="{{BASE}}">
+    <header class="top">
+        <img src="{{BASE}}/assets/ark-logo.png" alt="" class="top-logo" />
+        <div class="top-title">
+            <strong>Ark Identity Provider</strong>
+            <span>First-run setup</span>
+        </div>
+        <span class="top-version">v{{VERSION}}</span>
+    </header>
+
+    <div class="shell" id="shell">
+        <nav class="rail" aria-label="Setup steps">
+            <ol id="stepList"></ol>
+        </nav>
+
+        <main class="panel">
+            <form id="wizard" novalidate autocomplete="off">
+
+                <!-- ============================================================ welcome -->
+                <section class="step" data-step="welcome" data-title="Welcome">
+                    <h1>Let’s turn this app into an identity provider</h1>
+                    <p class="lead">
+                        Nothing has been configured yet, so this app is not serving sign-ins. Over the next few steps you’ll
+                        name your organization, choose a database, create the token signing key and the first administrator.
+                        When you click <b>Install</b>, this same running app becomes your OAuth&nbsp;2.1 / OpenID&nbsp;Connect
+                        server. No restart, and no appsettings to edit by hand.
+                    </p>
+
+                    <ul class="checks" id="envChecks"></ul>
+
+                    <div class="card" id="codeCard" hidden>
+                        <h2>Setup code</h2>
+                        <p>
+                            You’re not on the server’s own machine, so we need to confirm you can see it. The setup code is
+                            printed in the server log, and saved in <code id="codeFile">setup-code.txt</code> next to the settings.
+                        </p>
+                        <div class="row">
+                            <label class="field grow">
+                                <span>Setup code</span>
+                                <input name="setup_code" id="setupCode" placeholder="XXXX-XXXX-XXXX" autocomplete="one-time-code" spellcheck="false" />
+                            </label>
+                            <button type="button" class="btn" id="verifyCode">Verify</button>
+                        </div>
+                        <p class="result" id="codeResult" hidden></p>
+                    </div>
+
+                    <div class="card subtle">
+                        <h2>What you will need</h2>
+                        <ul class="plain">
+                            <li>The public address people will reach this server at, for example <code>https://id.example.com</code>.</li>
+                            <li>A database. SQLite needs nothing; PostgreSQL or MySQL need a server and an account.</li>
+                            <li>Optionally: your logos, and SMTP details if users should receive activation emails.</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <!-- ============================================================ organization -->
+                <section class="step" data-step="organization" data-title="Organization &amp; branding" hidden>
+                    <h1>Organization &amp; branding</h1>
+                    <p class="lead">Shown on the sign-in page, in the admin console, and in the emails users receive.</p>
+
+                    <div class="grid two">
+                        <label class="field">
+                            <span>Organization name <em>required</em></span>
+                            <input name="company_name" required maxlength="80" placeholder="Acme Corp" />
+                        </label>
+                        <label class="field">
+                            <span>Product name on the sign-in page</span>
+                            <input name="display_name" maxlength="120" placeholder="Acme Identity" />
+                            <small>Defaults to “<i>Organization</i> Identity”.</small>
+                        </label>
+                        <label class="field">
+                            <span>Website</span>
+                            <input name="website_url" type="url" placeholder="https://www.acme.com" />
+                        </label>
+                        <label class="field">
+                            <span>Terms of service URL</span>
+                            <input name="terms_url" type="url" placeholder="https://www.acme.com/terms" />
+                        </label>
+                        <label class="field">
+                            <span>Privacy policy URL</span>
+                            <input name="privacy_url" type="url" placeholder="https://www.acme.com/privacy" />
+                        </label>
+                    </div>
+
+                    <div class="grid two logos">
+                        <div class="logo-picker" data-logo="host_logo">
+                            <span class="label">Organization logo</span>
+                            <div class="logo-drop">
+                                <img alt="" hidden />
+                                <span class="logo-empty">No logo</span>
+                            </div>
+                            <div class="row">
+                                <label class="btn small file">Upload…<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/x-icon" /></label>
+                                <button type="button" class="btn small ghost" data-action="clear">Remove</button>
+                            </div>
+                            <input class="url" placeholder="…or an image URL (https://…)" type="url" />
+                            <small>Top-left of the sign-in card. PNG, SVG, JPEG, GIF, WebP or ICO, up to 1&nbsp;MB.</small>
+                        </div>
+                        <div class="logo-picker" data-logo="app_logo">
+                            <span class="label">Admin console / default app logo</span>
+                            <div class="logo-drop">
+                                <img alt="" hidden />
+                                <span class="logo-empty">No logo</span>
+                            </div>
+                            <div class="row">
+                                <label class="btn small file">Upload…<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/x-icon" /></label>
+                                <button type="button" class="btn small ghost" data-action="clear">Remove</button>
+                            </div>
+                            <input class="url" placeholder="…or an image URL (https://…)" type="url" />
+                            <small>Shown beside yours for apps that have no logo of their own.</small>
+                        </div>
+                    </div>
+
+                    <div class="preview">
+                        <span class="preview-label">Sign-in page preview</span>
+                        <div class="preview-card">
+                            <div class="lockup" id="previewLockup"></div>
+                            <div class="preview-name" id="previewName">Acme Identity</div>
+                            <div class="preview-title">Sign in</div>
+                            <div class="preview-input"></div>
+                            <div class="preview-input"></div>
+                            <div class="preview-button">Continue</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============================================================ server -->
+                <section class="step" data-step="server" data-title="Server address" hidden>
+                    <h1>Server address &amp; tenant</h1>
+                    <p class="lead">
+                        The issuer every token carries is <code>{public URL}/{tenant id}</code>. Clients are configured with it, so
+                        choose it as if it were permanent.
+                    </p>
+
+                    <div class="grid two">
+                        <label class="field">
+                            <span>Public URL <em>required</em></span>
+                            <input name="base_url" type="url" required placeholder="https://id.example.com" spellcheck="false" />
+                            <small>Exactly as browsers reach this server. https, except on localhost.</small>
+                        </label>
+                        <label class="field">
+                            <span>Tenant id <em>required</em></span>
+                            <input name="tenant_id" required maxlength="63" placeholder="ark_idp" spellcheck="false" />
+                            <small>The operator tenant: the one that administers all others. Letters, digits, <code>_</code>, <code>-</code>.</small>
+                        </label>
+                        <label class="field">
+                            <span>Tenant display name</span>
+                            <input name="tenant_display" maxlength="120" placeholder="Acme Admin Console" />
+                        </label>
+                    </div>
+
+                    <details class="advanced">
+                        <summary>Hosted under a sub-path?</summary>
+                        <label class="field">
+                            <span>Base path</span>
+                            <input name="base_path" placeholder="auth" spellcheck="false" />
+                            <small>Only if this app is served from e.g. <code>https://example.com/auth</code>. Leave empty otherwise.</small>
+                        </label>
+                    </details>
+
+                    <dl class="derived">
+                        <dt>Issuer</dt><dd><code id="issuerPreview">—</code></dd>
+                        <dt>Discovery</dt><dd><code id="discoveryPreview">—</code></dd>
+                    </dl>
+                    <p class="note warn" id="baseUrlWarn" hidden></p>
+                </section>
+
+                <!-- ============================================================ database -->
+                <section class="step" data-step="database" data-title="Database" hidden>
+                    <h1>Database</h1>
+                    <p class="lead">Where tenants, clients, users, keys and sessions are kept. The tables are created for you.</p>
+
+                    <div class="choices" role="radiogroup" aria-label="Database provider">
+                        <label class="choice">
+                            <input type="radio" name="provider" value="sqlite" />
+                            <span><b>SQLite</b><small>A single file. Nothing to install. Good for development and small deployments.</small></span>
+                        </label>
+                        <label class="choice">
+                            <input type="radio" name="provider" value="postgres" />
+                            <span><b>PostgreSQL</b><small>The recommended production choice.</small></span>
+                        </label>
+                        <label class="choice">
+                            <input type="radio" name="provider" value="mysql" />
+                            <span><b>MySQL</b><small>MySQL 8 or compatible.</small></span>
+                        </label>
+                    </div>
+
+                    <div data-db="sqlite">
+                        <label class="field">
+                            <span>Database file</span>
+                            <input name="sqlite_file" placeholder="ark-idp-data/ark_idp.db" spellcheck="false" />
+                            <small>Beside the settings by default. A relative path is read from the app’s working directory. Created if missing.</small>
+                        </label>
+                    </div>
+
+                    <div data-db="server" hidden>
+                        <div class="grid three">
+                            <label class="field span2">
+                                <span>Host</span>
+                                <input name="db_host" placeholder="localhost" spellcheck="false" />
+                            </label>
+                            <label class="field">
+                                <span>Port</span>
+                                <input name="db_port" type="number" min="1" max="65535" />
+                            </label>
+                            <label class="field">
+                                <span>Database</span>
+                                <input name="db_name" placeholder="ark_idp" spellcheck="false" />
+                            </label>
+                            <label class="field">
+                                <span>Username</span>
+                                <input name="db_user" spellcheck="false" />
+                            </label>
+                            <label class="field">
+                                <span>Password</span>
+                                <input name="db_password" type="password" autocomplete="new-password" />
+                            </label>
+                            <label class="field">
+                                <span>SSL</span>
+                                <select name="db_ssl">
+                                    <option value="prefer">Prefer</option>
+                                    <option value="require">Require</option>
+                                    <option value="disable">Disable</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+
+                    <details class="advanced" id="rawConnDetails">
+                        <summary>Write the connection string myself</summary>
+                        <label class="field">
+                            <span>Connection string</span>
+                            <textarea name="raw_connection" rows="2" spellcheck="false" placeholder="Host=…;Database=…;Username=…;Password=…"></textarea>
+                            <small>When filled in, this is used as is and the fields above are ignored.</small>
+                        </label>
+                    </details>
+
+                    <div class="derived-line">
+                        <span>Connection string</span>
+                        <code id="connPreview">—</code>
+                    </div>
+
+                    <div class="row">
+                        <button type="button" class="btn" id="testDb">Test connection</button>
+                    </div>
+                    <p class="result" id="dbResult" hidden></p>
+                </section>
+
+                <!-- ============================================================ keys -->
+                <section class="step" data-step="keys" data-title="Signing key" hidden>
+                    <h1>Token signing key</h1>
+                    <p class="lead">
+                        Every ID and access token is signed with this RSA key (RS256). Clients verify signatures with the public
+                        half, which is published at the JWKS endpoint. The private half is stored in the database only.
+                        You can rotate it later from the admin console.
+                    </p>
+
+                    <p class="note warn" data-attach-note hidden>You are attaching to an existing database. It keeps the signing keys it already has, so there is nothing to do here.</p>
+
+                    <div class="tabs" role="tablist" data-new-only>
+                        <button type="button" role="tab" class="tab" data-keymode="generate" aria-selected="true">Generate a new key</button>
+                        <button type="button" role="tab" class="tab" data-keymode="import" aria-selected="false">Use an existing key</button>
+                    </div>
+
+                    <div data-keypane="generate" data-new-only>
+                        <div class="row">
+                            <label class="field">
+                                <span>Key size</span>
+                                <select name="key_size">
+                                    <option value="2048">2048 bits: fast, standard</option>
+                                    <option value="3072">3072 bits</option>
+                                    <option value="4096">4096 bits: slower signing</option>
+                                </select>
+                            </label>
+                            <button type="button" class="btn primary" id="genKey">Generate key pair</button>
+                        </div>
+                    </div>
+                    <div data-keypane="import" hidden>
+                        <label class="field">
+                            <span>RSA private key (PEM)</span>
+                            <textarea name="import_key" rows="6" spellcheck="false" placeholder="-----BEGIN PRIVATE KEY-----&#10;…&#10;-----END PRIVATE KEY-----"></textarea>
+                            <small>PKCS#8 or PKCS#1, unencrypted, at least 2048 bits. The public key is derived from it.</small>
+                        </label>
+                        <button type="button" class="btn" id="importKey">Use this key</button>
+                    </div>
+                    <p class="result" id="keyResult" hidden></p>
+
+                    <div class="card key-card" id="keyCard" hidden>
+                        <dl class="kv">
+                            <dt>Key id (kid)</dt><dd><code id="keyKid"></code></dd>
+                            <dt>Algorithm</dt><dd><span id="keyAlg"></span></dd>
+                        </dl>
+                        <label class="field">
+                            <span>Public key <button type="button" class="link" data-copy="#keyPublic">Copy</button></span>
+                            <textarea id="keyPublic" rows="5" readonly spellcheck="false"></textarea>
+                        </label>
+                        <div class="field">
+                            <span>Private key</span>
+                            <div class="row">
+                                <button type="button" class="btn small" id="revealKey">Show</button>
+                                <button type="button" class="btn small" id="downloadKey">Download .pem</button>
+                                <button type="button" class="btn small" data-copy="#keyPrivate">Copy</button>
+                            </div>
+                            <textarea id="keyPrivate" rows="6" readonly spellcheck="false" hidden></textarea>
+                            <small>Keep a copy only if you need one, somewhere as safe as the database. Anyone with it can mint tokens.</small>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ============================================================ admin -->
+                <section class="step" data-step="admin" data-title="Administrator" hidden>
+                    <h1>First administrator</h1>
+                    <p class="lead">
+                        This account signs in to the admin console and runs everything, across every tenant.
+                        Its password is stored only as a hash in the database, never in a settings file.
+                    </p>
+
+                    <p class="note warn" data-attach-note hidden>
+                        You are attaching to an existing database. No account is created and no password changes: enter the username of
+                        <b>its</b> administrator, which is who the console will treat as the operator.
+                    </p>
+
+                    <div class="grid two">
+                        <label class="field">
+                            <span>Username <em>required</em></span>
+                            <input name="admin_username" required spellcheck="false" autocomplete="off" placeholder="admin" />
+                            <small>What you type on the sign-in page. An email address works.</small>
+                        </label>
+                        <label class="field">
+                            <span>Full name</span>
+                            <input name="admin_name" placeholder="Administrator" />
+                        </label>
+                        <label class="field" data-new-only>
+                            <span>Password <em>required</em></span>
+                            <div class="input-group">
+                                <input name="admin_password" type="password" autocomplete="new-password" required />
+                                <button type="button" class="btn small ghost" data-toggle-password="admin_password">Show</button>
+                            </div>
+                            <div class="meter"><i id="pwMeter"></i></div>
+                            <small id="pwHint">At least 10 characters.</small>
+                        </label>
+                        <label class="field" data-new-only>
+                            <span>Confirm password <em>required</em></span>
+                            <input name="admin_password2" type="password" autocomplete="new-password" required />
+                        </label>
+                    </div>
+                    <button type="button" class="btn small" id="genAdminPw" data-new-only>Generate a strong password</button>
+                    <p class="note" id="genAdminPwNote" hidden>Generated and filled in. Copy it now: <code id="genAdminPwValue"></code> <button type="button" class="link" data-copy="#genAdminPwValue">Copy</button></p>
+                </section>
+
+                <!-- ============================================================ users & email -->
+                <section class="step" data-step="users" data-title="Users &amp; email" hidden>
+                    <h1>Users &amp; email</h1>
+                    <p class="lead">How the people you add later get their first password, and how mail leaves this server.</p>
+
+                    <div class="choices" role="radiogroup" aria-label="New user passwords">
+                        <label class="choice">
+                            <input type="radio" name="password_mode" value="admin_managed" />
+                            <span><b>Administrators set them</b><small>New accounts start on a default password you hand out. No email needed.</small></span>
+                        </label>
+                        <label class="choice">
+                            <input type="radio" name="password_mode" value="email_based" />
+                            <span><b>Activation email</b><small>Users with an email address get a link to choose their own. Needs SMTP below.</small></span>
+                        </label>
+                        <label class="choice">
+                            <input type="radio" name="password_mode" value="auto" />
+                            <span><b>Decide per user</b><small>Whoever creates the account chooses.</small></span>
+                        </label>
+                    </div>
+
+                    <label class="field narrow">
+                        <span>Default password for new users</span>
+                        <div class="input-group">
+                            <input name="default_password" type="password" autocomplete="new-password" />
+                            <button type="button" class="btn small ghost" data-toggle-password="default_password">Show</button>
+                            <button type="button" class="btn small" id="genDefaultPw">Generate</button>
+                        </div>
+                        <small>Used when an administrator creates an account without a password. At least 8 characters.</small>
+                    </label>
+
+                    <label class="switch">
+                        <input type="checkbox" name="email_enabled" />
+                        <span>Send email from this server (activation, password reset)</span>
+                    </label>
+
+                    <div id="emailFields" hidden>
+                        <div class="grid three">
+                            <label class="field span2">
+                                <span>SMTP server</span>
+                                <input name="smtp" placeholder="smtp.example.com" spellcheck="false" />
+                            </label>
+                            <label class="field">
+                                <span>Port</span>
+                                <input name="smtp_port" type="number" min="1" max="65535" placeholder="587" />
+                            </label>
+                            <label class="field">
+                                <span>Username</span>
+                                <input name="smtp_user" spellcheck="false" autocomplete="off" />
+                            </label>
+                            <label class="field">
+                                <span>Password</span>
+                                <input name="smtp_password" type="password" autocomplete="new-password" />
+                            </label>
+                            <label class="field">
+                                <span>From address</span>
+                                <input name="smtp_from" type="email" placeholder="no-reply@example.com" />
+                            </label>
+                            <label class="field">
+                                <span>From name</span>
+                                <input name="smtp_display" placeholder="Acme Identity" />
+                            </label>
+                            <label class="field span2">
+                                <span>Subject prefix</span>
+                                <input name="smtp_subject" placeholder="Acme: " />
+                            </label>
+                        </div>
+                        <div class="row">
+                            <label class="field grow">
+                                <span>Send a test message to</span>
+                                <input name="test_to" type="email" placeholder="you@example.com" />
+                            </label>
+                            <button type="button" class="btn" id="testEmail">Send test</button>
+                        </div>
+                        <p class="result" id="emailResult" hidden></p>
+                        <p class="note">The SMTP password is written to the settings file, which only this server’s account can read.
+                            In production you can set it from the environment instead: <code>ark_oauth_server__EmailConfig__pw</code>.</p>
+                    </div>
+                </section>
+
+                <!-- ============================================================ security -->
+                <section class="step" data-step="security" data-title="Protocol &amp; security" hidden>
+                    <h1>Protocol &amp; security</h1>
+                    <p class="lead">Sensible defaults are already set; change only what you know you need.</p>
+
+                    <div class="toggles">
+                        <label class="switch"><input type="checkbox" name="enable_device_flow" /><span><b>Device sign-in</b> (RFC 8628). TVs, CLIs and other devices without a browser.</span></label>
+                        <label class="switch"><input type="checkbox" name="enable_par" /><span><b>Pushed authorization requests</b> (RFC 9126).</span></label>
+                        <label class="switch"><input type="checkbox" name="require_par" /><span><b>Require</b> pushed authorization requests: refuse plain /authorize.</span></label>
+                        <label class="switch"><input type="checkbox" name="enable_dynamic_registration" /><span><b>Dynamic client registration</b> (RFC 7591), behind an access token.</span></label>
+                        <label class="switch"><input type="checkbox" name="always_consent" /><span><b>Always ask for consent</b>, even for first-party apps.</span></label>
+                        <label class="switch"><input type="checkbox" name="enable_backchannel_logout" /><span><b>Back-channel logout</b>: tell apps when a session ends.</span></label>
+                    </div>
+
+                    <div class="grid three">
+                        <label class="field">
+                            <span>Session lifetime, minutes</span>
+                            <input name="session_minutes" type="number" min="5" placeholder="480" />
+                        </label>
+                        <label class="field">
+                            <span>Lock after failed sign-ins</span>
+                            <input name="max_failed" type="number" min="0" placeholder="10" />
+                            <small>0 turns lockout off.</small>
+                        </label>
+                        <label class="field">
+                            <span>Lockout, minutes</span>
+                            <input name="lockout_minutes" type="number" min="1" placeholder="15" />
+                        </label>
+                    </div>
+
+                    <label class="field">
+                        <span>Browser origins allowed to call the token endpoint (CORS)</span>
+                        <textarea name="cors_origins" rows="3" spellcheck="false" placeholder="https://app.example.com&#10;https://localhost:5173"></textarea>
+                        <small>One per line. Only single-page apps need this; server-side apps never do.</small>
+                    </label>
+
+                    <div class="card subtle">
+                        <h2>Automation client</h2>
+                        <p>
+                            A machine client, <code id="machineId">ark_idp_machine</code>, is created for scripts and pipelines that
+                            manage this server through its API. Give it a secret now, or later from the console.
+                        </p>
+                        <div class="input-group">
+                            <input name="machine_secret" type="password" autocomplete="new-password" placeholder="(no secret yet)" spellcheck="false" />
+                            <button type="button" class="btn small ghost" data-toggle-password="machine_secret">Show</button>
+                            <button type="button" class="btn small" id="genMachine">Generate</button>
+                        </div>
+                        <small>Stored only as a hash. It is shown once more when setup finishes.</small>
+                    </div>
+                </section>
+
+                <!-- ============================================================ review -->
+                <section class="step" data-step="review" data-title="Review &amp; install" hidden>
+                    <h1>Review &amp; install</h1>
+                    <p class="lead">Check everything once. Install writes the settings, creates the database and signs you in.</p>
+                    <div id="summary" class="summary"></div>
+                    <div class="card subtle">
+                        <h2>Where things go</h2>
+                        <ul class="plain">
+                            <li>Settings: <code id="settingsPath"></code>, readable only by this server’s account, and git-ignored.
+                                Anything in it can still be overridden by environment variables.</li>
+                            <li>Administrator password, signing key and machine secret: <b>database only</b>. Passwords and secrets as hashes.</li>
+                            <li>Logos: <code>branding/</code> beside the settings, served at <code>/ark-idp/branding/</code>.</li>
+                        </ul>
+                    </div>
+                    <p class="result" id="installResult" hidden></p>
+                </section>
+
+                <!-- ============================================================ done -->
+                <section class="step" data-step="done" data-title="Done" hidden>
+                    <div class="done-mark" aria-hidden="true">✓</div>
+                    <h1 class="center">Your identity provider is ready</h1>
+                    <p class="lead center">This app is now serving OpenID Connect. Sign in to the admin console as <b id="doneAdmin"></b> to register your first application.</p>
+                    <dl class="kv wide">
+                        <dt>Issuer</dt><dd><code id="doneIssuer"></code> <button type="button" class="link" data-copy="#doneIssuer">Copy</button></dd>
+                        <dt>Discovery</dt><dd><code id="doneDiscovery"></code> <button type="button" class="link" data-copy="#doneDiscovery">Copy</button></dd>
+                        <dt>Settings</dt><dd><code id="doneSettings"></code></dd>
+                    </dl>
+                    <div class="card warn" id="doneSecretCard" hidden>
+                        <h2>Machine client secret, shown once</h2>
+                        <p><code id="doneMachineId"></code></p>
+                        <p><code id="doneSecret" class="secret"></code> <button type="button" class="link" data-copy="#doneSecret">Copy</button></p>
+                        <small>Only its hash was stored. If it is lost, generate a new one in the console.</small>
+                    </div>
+                    <div class="center">
+                        <a class="btn primary large" id="doneConsole" href="#">Sign in to the admin console →</a>
+                    </div>
+                </section>
+            </form>
+
+            <footer class="actions" id="actions">
+                <button type="button" class="btn ghost" id="back">Back</button>
+                <span class="spacer"></span>
+                <span class="step-count" id="stepCount"></span>
+                <button type="button" class="btn primary" id="next">Continue</button>
+            </footer>
+        </main>
+    </div>
+
+    <div class="overlay" id="overlay" hidden>
+        <div class="overlay-card">
+            <div class="spinner" aria-hidden="true"></div>
+            <p id="overlayText">Installing…</p>
+        </div>
+    </div>
+</body>
+</html>

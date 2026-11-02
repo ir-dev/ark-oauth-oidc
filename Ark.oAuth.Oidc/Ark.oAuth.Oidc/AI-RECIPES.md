@@ -23,6 +23,10 @@ Config section `ark_oauth_server` · issuer = `{BaseUrl}/{TenantId}` · version 
 ```bash
 dotnet new mvc -n MyIdp && cd MyIdp
 dotnet add package Ark.oAuth.Oidc
+# Zero-config alternative, preferred for a new IdP with a person at the keyboard:
+#   Program.cs = builder.AddArkIdp(); var app = builder.Build(); app.UseArkIdp(); app.Run();
+#   dotnet run, open the app, finish the wizard at /ark-idp/setup. Skip everything below.
+# The configured route, for pipelines:
 dotnet add package Ark.oAuth.Client
 dotnet user-secrets set "ark_oauth_server:AdminUser:Password" "<strong-password>"
 ```

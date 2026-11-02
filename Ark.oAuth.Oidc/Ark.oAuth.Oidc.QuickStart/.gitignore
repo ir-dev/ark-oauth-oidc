@@ -1,0 +1,3 @@
+# Copies AddArkOidcServer unpacks from the package in Development; the package is the source.
+/wwwroot/
+/Migration/

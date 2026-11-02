@@ -29,6 +29,18 @@ Two applications are involved and they are deliberately kept apart:
 
 ## 1. The short version
 
+**Starting a new identity provider of your own?** You need none of this guide's configuration. Two
+lines in `Program.cs`, `builder.AddArkIdp()` and `app.UseArkIdp()`, then `dotnet run`, and the app
+opens a setup wizard that collects everything (logos, database, signing key, administrator) and
+makes itself the IdP. `Ark.oAuth.Oidc.QuickStart` in this repository is exactly that:
+
+```bash
+dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart   # then open https://localhost:7300
+```
+
+The rest of this guide runs the *configured* sample pair, the host and a client application wired
+together through appsettings, which is how the end-to-end flows are demonstrated.
+
 ```bash
 git clone <this repo> && cd ark-oauth-oidc
 

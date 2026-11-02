@@ -19,19 +19,24 @@ namespace Ark.oAuth
     public class ArkUtil
     {
         private readonly IConfiguration _config;
-        private readonly ArkAuthServerConfig _ser;
-        private readonly ark.net.util.EmailUtil _email;
         public ArkUtil(IConfiguration config)
         {
             _config = config;
-            _ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
-            _email = new ark.net.util.EmailUtil(_ser.EmailConfig.email,
-                _ser.EmailConfig.pw,
-                _ser.EmailConfig.from,
-                _ser.EmailConfig.display,
-                _ser.EmailConfig.subject,
-                _ser.EmailConfig.smtp,
-                _ser.EmailConfig.port);
+        }
+
+        // Read per use, not captured in the constructor. This is a singleton, and a server started
+        // with nothing configured is configured later, by the setup wizard, without a restart:
+        // a copy taken at construction would keep the empty one for the life of the process.
+        private ArkAuthServerConfig _ser =>
+            _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+
+        private ark.net.util.EmailUtil _email
+        {
+            get
+            {
+                var ec = _ser.EmailConfig ?? throw new ApplicationException("ark_oauth_server:EmailConfig is not configured");
+                return new ark.net.util.EmailUtil(ec.email, ec.pw, ec.from, ec.display, ec.subject, ec.smtp, ec.port);
+            }
         }
         public ArkAuthServerConfig ServerConfig { get { return _ser; } }
         /// <summary>

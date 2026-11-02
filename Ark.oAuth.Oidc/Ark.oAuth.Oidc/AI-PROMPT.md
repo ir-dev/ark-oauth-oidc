@@ -32,12 +32,18 @@ failures in [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md); upgrades in [`MIGRATION.
 
 ```text
 When using Ark.oAuth.Oidc:
-1. The host wiring is exactly: AddArkOidcServer(env) + AddArkOidcClient(configuration) (the admin
-   console is itself a client) in ConfigureServices; then in the pipeline, in ORDER:
-     UseRouting(); UseArkOidcCors(); UseArkAuthData(); UseArkOidcClient();
-     UseAuthentication(); UseAuthorization();  then MapControllerRoute.
-2. Configure via "ark_oauth_server". Only TenantId + BaseUrl (+ a connection string) are structurally
-   required; AdminUser:Password (or DefaultPw) is required to seed. Everything under Oidc has defaults.
+1. The host wiring is ONE of two shapes:
+   a) Zero-config (new IdPs): builder.AddArkIdp(); ... app.UseArkIdp();  Nothing else. Started with no
+      TenantId / connection string, every request goes to the setup wizard at /ark-idp/setup, which
+      writes ark-idp-data/settings.json, seeds the DB and makes the same process the IdP (no restart).
+      The console's sign-in (cookie + OIDC to itself) is built in. Do NOT also add AddArkOidcClient.
+   b) Configured: AddArkOidcServer(env) + AddArkOidcClient(configuration) (the admin console is itself
+      a client); then in the pipeline, in ORDER:
+        UseRouting(); UseArkOidcCors(); UseArkAuthData(); UseArkOidcClient();
+        UseAuthentication(); UseAuthorization();  then MapControllerRoute.
+   A host with TenantId + ConnectionStrings:ArkAuthConnection set never sees the wizard (either shape).
+2. Configure via "ark_oauth_server" (or let the wizard write it). Only TenantId + BaseUrl (+ a
+   connection string) are structurally required; AdminUser:Password (or DefaultPw) is required to seed. Everything under Oidc has defaults.
 3. Do NOT hard-code endpoint URLs into clients. Clients read {BaseUrl}/{TenantId}/.well-known/
    openid-configuration. The issuer is {BaseUrl}/{TenantId}.
 4. Do NOT invent endpoints, settings, or management routes. Read the source (Code/ArkExtn.cs,
@@ -63,12 +69,14 @@ When using Ark.oAuth.Oidc:
 Host bootstrap
  ├── Purpose        Turn an ASP.NET Core app into the IdP; create/seed/upgrade the database
  ├── Namespace      Ark.oAuth.Oidc
- ├── Entry points   services.AddArkOidcServer(IWebHostEnvironment)
- │                  app.UseArkAuthData()  (one-time DB bootstrap, latched)
+ ├── Entry points   builder.AddArkIdp() + app.UseArkIdp()  (zero-config: wizard + console sign-in + pipeline)
+ │                  services.AddArkOidcServer(IWebHostEnvironment)
+ │                  app.UseArkAuthData()  (setup wizard if unconfigured, then one-time DB bootstrap, latched)
  │                  app.UseArkOidcCors()  (only if SPA clients call token/userinfo)
  ├── Config         ark_oauth_server: TenantId, BaseUrl, BasePath, Provider, DefaultPw,
  │                  UserPasswordMode, AdminUser{Username,Password,Name}, Admin{SignOutUrl},
- │                  Oidc{...}, EmailConfig{...}; ConnectionStrings:ArkAuthConnection
+ │                  Oidc{...}, EmailConfig{...}, Setup{Enabled,RequireToken,DataPath};
+ │                  ConnectionStrings:ArkAuthConnection
  └── Anti-patterns  Provider "sqlserver"; running requests before UseArkAuthData; seeding with a
                     <<placeholder>> password
 
@@ -126,7 +134,8 @@ Migration API
 ## 4. API / configuration decision guide
 
 ```text
-Standing up a new IdP?                     -> AddArkOidcServer(env) + AddArkOidcClient(cfg); set TenantId+BaseUrl+AdminUser:Password
+Standing up a new IdP?                     -> builder.AddArkIdp(); app.UseArkIdp(); run it; finish the wizard at /ark-idp/setup
+Standing up an IdP from a pipeline?        -> AddArkOidcServer(env) + AddArkOidcClient(cfg); set TenantId+BaseUrl+AdminUser:Password
 Onboarding a new application?              -> POST /api/oauth/v1/provision/client (one call, includes the access mapping)
 Turning an app or account off temporarily? -> POST /api/oauth/v1/activation/client | /activation/user (is_active=false; revokes tokens)
 SPA client can't reach /token from browser?-> add its exact origin to Oidc:CorsOrigins, then UseArkOidcCors()
@@ -198,7 +207,8 @@ DO NOT USE WHEN:
 - You need SQL Server, or the implicit/hybrid/ROPC grants.
 
 PRIMARY APIS:
-- services.AddArkOidcServer(env); services.AddArkOidcClient(configuration);
+- builder.AddArkIdp(); app.UseArkIdp();   (zero-config; the setup wizard collects the rest)
+- or: services.AddArkOidcServer(env); services.AddArkOidcClient(configuration);
 - pipeline: UseRouting(); UseArkOidcCors(); UseArkAuthData(); UseArkOidcClient(); UseAuthentication(); UseAuthorization();
 - POST /api/oauth/v1/provision/client        (client + user + redirects + access mapping)
 - POST /api/oauth/v1/activation/client|user  (is_active on/off; revokes tokens)
@@ -240,7 +250,12 @@ PERFORMANCE:
 DB bootstrap runs once (latched). Discovery is cacheable (max-age=300). Back-channel logout deliveries
 run in parallel behind a per-client timeout; a down client cannot block sign-out.
 
-EXAMPLE:
+EXAMPLE (zero-config):
+  builder.AddArkIdp();
+  var app = builder.Build();
+  app.UseArkIdp();     // first run: /ark-idp/setup; after Install, the same process is the IdP
+
+EXAMPLE (configured):
   builder.Services.AddArkOidcServer(builder.Environment);
   builder.Services.AddArkOidcClient(builder.Configuration);
   var app = builder.Build();
