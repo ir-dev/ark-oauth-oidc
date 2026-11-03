@@ -931,7 +931,7 @@
         setVal('password_mode', 'admin_managed');
         setVal('key_size', '2048');
         setVal('db_ssl', 'prefer');
-        ['enable_device_flow', 'enable_par', 'enable_backchannel_logout', 'show_powered_by'].forEach(n => setVal(n, true));
+        ['enable_device_flow', 'enable_par', 'enable_dynamic_registration', 'enable_backchannel_logout', 'show_powered_by'].forEach(n => setVal(n, true));
     }
 
     async function loadState() {
