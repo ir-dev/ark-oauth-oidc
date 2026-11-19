@@ -1,0 +1,73 @@
+ark-oauth-client-js  --  npm publish, key points
+================================================================================
+
+--- quick republish (after the first publish)
+
+    > cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/ark_oauth_client_js
+    > npm ci
+    > npm version X.Y.Z --no-git-tag-version     # the family's version, X.Y.Z only
+    > npm run check                              # build + tests + typecheck
+    > npm publish                                # prepack rebuilds dist/ first
+
+
+--- first publish, step by step
+
+step 1: log in (2FA prompts happen in your own terminal)
+    > npm login
+    > npm whoami
+
+step 2: the name is still free?  (404 on 2026-11-19 = unclaimed)
+    > npm view ark-oauth-client-js
+        E404  -> free, the first publish claims it for your account
+
+step 3: set the version to match the other packages
+        package.json still says 2.1.1, but NuGet, PyPI and npm ark-oauth-client
+        are all at 2.1.7 (checked 2026-11-19). Use the family's current version.
+    > npm version 2.1.7 --no-git-tag-version
+        (also add a matching entry to CHANGELOG.md)
+
+step 4: install, build, test
+    > npm ci
+    > npm run check
+
+step 5: look at what ships (36 files: src, types, dist, README, CHANGELOG, LICENSE)
+    > npm pack --dry-run
+        nothing from test/, e2e/, examples/ or scripts/ should be listed
+
+step 6 (optional): real-IdP end-to-end against a scratch host, never the real IdP
+    > ARK_E2E_PASSWORD='....' npm run e2e
+
+step 7: publish
+    > npm publish
+        publishConfig.access is already "public"
+        with 2FA:  npm publish --otp=123456
+
+step 8: confirm
+    > npm view ark-oauth-client-js version
+    > open https://www.npmjs.com/package/ark-oauth-client-js
+
+
+--- after the first publish: Trusted Publishing (no tokens)
+
+    1. npmjs.com -> ark-oauth-client-js -> Settings -> Trusted publisher -> GitHub Actions
+         repository  ir-dev/ark-oauth-oidc
+         workflow    release.yml
+         environment release
+    2. Allowed actions: TICK "npm publish". New publishers default to
+       "npm stage publish" only, and the workflow then fails with E403
+       "OIDC permission denied".
+    3. Still owed in the repo before release.yml can publish this package:
+         - a publish job for ark_oauth_client_js in .github/workflows/release.yml
+         - ark_oauth_client_js/package.json in scripts/version.sh
+
+
+--- things to remember
+
+  * A version is permanent once npm accepts it. It can't be reused, even after
+    an unpublish. Failed or dry runs don't use one up.
+  * Plain X.Y.Z only, because npm rejects a 4th number. Keep it equal to the
+    NuGet / PyPI / ark-oauth-client version.
+  * dist/ is gitignored and built by "prepack". Don't commit it.
+  * Never put an npm token in this folder or any tracked file. The repo is public.
+  * Wrong-version publish: deprecate it, don't unpublish
+        > npm deprecate ark-oauth-client-js@X.Y.Z "use X.Y.Z+1"
