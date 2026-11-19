@@ -3,7 +3,12 @@
 #
 #   NuGet  Ark.oAuth.Oidc, Ark.oAuth.Client   Ark.oAuth.Oidc/Ark.oAuth.{Oidc,Client}
 #   PyPI   ark-oauth-client                    ark_oauth_client_py
-#   npm    ark-oauth-client                    ark_oauth_client_nodejs
+#   npm    ark-oauth-client      (Node)        ark_oauth_client_nodejs   build-node -> publish-npm-node
+#   npm    ark-oauth-client-js   (browser)     ark_oauth_client_js       build-js   -> publish-npm-js
+#
+# The two npm packages are separate libraries with separate jobs, artifacts and trusted
+# publishers: each is checked against the registry, published and reported on its own, so one
+# being live already (or failing) says nothing about the other.
 #
 # HOW TO RELEASE
 #   1. Write the notes (CHANGELOG.md, <PackageReleaseNotes>), commit and push.
@@ -30,10 +35,11 @@
 #      Then GitHub: Settings -> Secrets and variables -> Actions -> Variables ->
 #      NUGET_USER = your nuget.org profile name (the user name, not the email).
 #   c. PyPI: pypi.org/manage/project/ark-oauth-client/settings/publishing -> add a GitHub publisher.
-#   d. npm: ark-oauth-client has never been published, and npm offers a trusted publisher only on
-#      a package that exists. Publish the first version by hand (`npm publish --access public` in
-#      ark_oauth_client_nodejs), then npmjs.com -> the package -> Settings -> Trusted publisher,
-#      and tick "npm publish" under Allowed actions: new publishers allow only `npm stage publish`.
+#   d. npm: one trusted publisher PER PACKAGE, ark-oauth-client and ark-oauth-client-js, each with
+#      the same four values: npmjs.com -> the package -> Settings -> Trusted publisher, and tick
+#      "npm publish" under Allowed actions (new publishers allow only `npm stage publish`).
+#      npm offers a trusted publisher only on a package that exists, so a package's first version
+#      is published by hand (`npm publish --access public` in its folder). Both already exist.
 
 name: Release
 
@@ -63,7 +69,8 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       nuget_live: ${{ steps.live.outputs.nuget }}
       pypi_live: ${{ steps.live.outputs.pypi }}
-      npm_live: ${{ steps.live.outputs.npm }}
+      npm_node_live: ${{ steps.live.outputs.npm_node }}
+      npm_js_live: ${{ steps.live.outputs.npm_js }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -133,16 +140,20 @@ jobs:
           oidc=$(live "https://api.nuget.org/v3-flatcontainer/ark.oauth.oidc/$VERSION/ark.oauth.oidc.nuspec")
           client=$(live "https://api.nuget.org/v3-flatcontainer/ark.oauth.client/$VERSION/ark.oauth.client.nuspec")
           pypi=$(live "https://pypi.org/pypi/ark-oauth-client/$VERSION/json")
-          npm=$(live "https://registry.npmjs.org/ark-oauth-client/$VERSION")
-          if [ "$(live https://registry.npmjs.org/ark-oauth-client)" = false ]; then
-            echo "::warning::ark-oauth-client has never been published to npm; publish-npm will stop until the first version is published by hand (setup step d)."
-          fi
+          npm_node=$(live "https://registry.npmjs.org/ark-oauth-client/$VERSION")
+          npm_js=$(live "https://registry.npmjs.org/ark-oauth-client-js/$VERSION")
+          for pkg in ark-oauth-client:node ark-oauth-client-js:js; do
+            if [ "$(live "https://registry.npmjs.org/${pkg%%:*}")" = false ]; then
+              echo "::warning::${pkg%%:*} has never been published to npm; publish-npm-${pkg#*:} will stop until the first version is published by hand (setup step d)."
+            fi
+          done
           # Both NuGet packages are pushed together; --skip-duplicate covers one being live already.
           nuget=$([ "$oidc" = true ] && [ "$client" = true ] && echo true || echo false)
           {
             echo "nuget=$nuget"
             echo "pypi=$pypi"
-            echo "npm=$npm"
+            echo "npm_node=$npm_node"
+            echo "npm_js=$npm_js"
           } >> "$GITHUB_OUTPUT"
           {
             echo "### Release $VERSION from \`${GITHUB_SHA::7}\` ($GITHUB_REF_NAME)"
@@ -152,7 +163,8 @@ jobs:
             echo "| NuGet Ark.oAuth.Oidc | $oidc |"
             echo "| NuGet Ark.oAuth.Client | $client |"
             echo "| PyPI ark-oauth-client | $pypi |"
-            echo "| npm ark-oauth-client | $npm |"
+            echo "| npm ark-oauth-client (Node) | $npm_node |"
+            echo "| npm ark-oauth-client-js (browser) | $npm_js |"
             echo
             echo "Packages already live are built and tested, but not published or attached again."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -286,19 +298,98 @@ jobs:
 
       - name: Pack
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/out/npm"
-          npm pack --pack-destination "$GITHUB_WORKSPACE/out/npm"
-          ls -l "$GITHUB_WORKSPACE/out/npm"
-          [ -f "$GITHUB_WORKSPACE/out/npm/ark-oauth-client-$VERSION.tgz" ]
+          mkdir -p "$GITHUB_WORKSPACE/out/npm-node"
+          npm pack --pack-destination "$GITHUB_WORKSPACE/out/npm-node"
+          ls -l "$GITHUB_WORKSPACE/out/npm-node"
+          [ -f "$GITHUB_WORKSPACE/out/npm-node/ark-oauth-client-$VERSION.tgz" ]
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: npm
-          path: out/npm/
+          name: npm-node
+          path: out/npm-node/
+          if-no-files-found: error
+
+  # The browser client, npm ark-oauth-client-js: a separate library from the Node client above.
+  build-js:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    defaults:
+      run:
+        working-directory: ark_oauth_client_js
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ark_oauth_client_js/package-lock.json
+
+      # As in build-dotnet. Also stamps src/version.js and package-lock.json, so `npm ci` below
+      # sees a lock file that agrees with package.json.
+      - name: Stamp the version
+        working-directory: .
+        run: scripts/version.sh set "$VERSION"
+
+      # Dev dependencies only: the React, Vue and Angular adapter tests, the typecheck and the
+      # dist/ build. The package itself has no runtime dependencies.
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # prepack builds dist/ (gitignored) into the tarball.
+      - name: Pack
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/out/npm-js"
+          npm pack --pack-destination "$GITHUB_WORKSPACE/out/npm-js"
+          ls -l "$GITHUB_WORKSPACE/out/npm-js"
+          [ -f "$GITHUB_WORKSPACE/out/npm-js/ark-oauth-client-js-$VERSION.tgz" ]
+
+      # What ships: every file the exports map names (dist/ included, since it is built rather
+      # than committed), nothing from test/, e2e/, examples/ or scripts/, and the packed code
+      # itself reporting the version, since a browser cannot read package.json and src/version.js
+      # holds it as a literal.
+      - name: Verify the package
+        run: |
+          check="$RUNNER_TEMP/npm-js"
+          rm -rf "$check" && mkdir -p "$check"
+          tar -xzf "$GITHUB_WORKSPACE/out/npm-js/ark-oauth-client-js-$VERSION.tgz" -C "$check"
+          cd "$check/package"
+          leaked=$(find test e2e examples scripts node_modules -type f 2>/dev/null | wc -l)
+          [ "$leaked" -eq 0 ] || { echo "::error::the tarball ships $leaked files from test/, e2e/, examples/, scripts/ or node_modules/"; exit 1; }
+          node --input-type=module - <<'EOF'
+          import { existsSync, readFileSync } from 'node:fs';
+          const fail = (msg) => { console.log(`::error::${msg}`); process.exit(1); };
+          const want = process.env.VERSION;
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          if (pkg.version !== want) fail(`package.json says ${pkg.version}, want ${want}`);
+          const targets = (v) => typeof v === 'string' ? [v] : Object.values(v).flatMap(targets);
+          const files = [pkg.main, pkg.types, pkg.unpkg, ...targets(pkg.exports)].filter((f) => !f.includes('*'));
+          const missing = [...new Set(files)].filter((f) => !existsSync(f));
+          if (missing.length) fail(`the tarball is missing ${missing.join(', ')}`);
+          const { VERSION } = await import(new URL('src/index.js', `file://${process.cwd()}/`));
+          if (VERSION !== want) fail(`src/version.js says ${VERSION}, want ${want}`);
+          for (const f of ['dist/ark-oauth-client.global.js', 'dist/ark-oauth-client.global.min.js', 'dist/ark-oauth-client.esm.min.js']) {
+            if (!readFileSync(f, 'utf8').startsWith(`/*! ark-oauth-client-js ${want} `)) fail(`${f} was not built for ${want}`);
+          }
+          console.log(`ark-oauth-client-js ${want}: ${files.length} entry files present, VERSION and dist/ agree`);
+          EOF
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: npm-js
+          path: out/npm-js/
           if-no-files-found: error
 
   publish-nuget:
-    needs: [prepare, build-dotnet, build-python, build-node]
+    needs: [prepare, build-dotnet, build-python, build-node, build-js]
     if: ${{ !inputs.dry_run && needs.prepare.outputs.nuget_live == 'false' }}
     runs-on: ubuntu-latest
     environment: release
@@ -336,7 +427,7 @@ jobs:
           done
 
   publish-pypi:
-    needs: [prepare, build-dotnet, build-python, build-node]
+    needs: [prepare, build-dotnet, build-python, build-node, build-js]
     if: ${{ !inputs.dry_run && needs.prepare.outputs.pypi_live == 'false' }}
     runs-on: ubuntu-latest
     environment: release
@@ -355,17 +446,21 @@ jobs:
       - name: Publish
         run: uv publish --trusted-publishing always --check-url https://pypi.org/simple/ dist/*
 
-  publish-npm:
-    needs: [prepare, build-dotnet, build-python, build-node]
-    if: ${{ !inputs.dry_run && needs.prepare.outputs.npm_live == 'false' }}
+  # The two npm jobs below are the same steps for two separate packages: only `env` and the
+  # artifact name differ. Each package has its own trusted publisher on npmjs.com (setup step d).
+  publish-npm-node:
+    needs: [prepare, build-dotnet, build-python, build-node, build-js]
+    if: ${{ !inputs.dry_run && needs.prepare.outputs.npm_node_live == 'false' }}
     runs-on: ubuntu-latest
     environment: release
     permissions:
       id-token: write
+    env:
+      PACKAGE: ark-oauth-client
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: npm
+          name: npm-node
           path: npm
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -378,9 +473,9 @@ jobs:
       # `npm publish` with ENEEDAUTH, which the run summary shows only as "exit code 1".
       - name: The package exists on npm
         run: |
-          code=$(curl -sS -o /dev/null -w '%{http_code}' https://registry.npmjs.org/ark-oauth-client)
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$PACKAGE")
           if [ "$code" = 404 ]; then
-            echo "::error::ark-oauth-client has never been published to npm, so Trusted Publishing has nothing to attach to. Publish the first version by hand (setup step d at the top of release.yml), add the trusted publisher on npmjs.com, then re-run this job."
+            echo "::error::$PACKAGE has never been published to npm, so Trusted Publishing has nothing to attach to. Publish the first version by hand (setup step d at the top of release.yml), add the trusted publisher on npmjs.com, then re-run this job."
             exit 1
           fi
           [ "$code" = 200 ] || { echo "::error::registry.npmjs.org answered HTTP $code"; exit 1; }
@@ -395,12 +490,54 @@ jobs:
           npm install -g npm@latest
           if ! npm publish ./npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
             reason=$(grep -m1 -E 'npm (error|ERR!) (code |404|403|401)|ENEEDAUTH|E40[134]' "$RUNNER_TEMP/npm.log" || true)
-            echo "::error::npm publish failed: ${reason:-see the job log}. If it is an auth error, check the trusted publisher on npmjs.com: owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release, and 'npm publish' ticked under Allowed actions (a publisher created after 2026-09-03 allows only 'npm stage publish', which fails as E403 'OIDC permission denied for this action')."
+            echo "::error::npm publish of $PACKAGE failed: ${reason:-see the job log}. If it is an auth error, check the trusted publisher on npmjs.com for $PACKAGE: owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release, and 'npm publish' ticked under Allowed actions (a publisher created after 2026-09-03 allows only 'npm stage publish', which fails as E403 'OIDC permission denied for this action')."
+            exit 1
+          fi
+
+  publish-npm-js:
+    needs: [prepare, build-dotnet, build-python, build-node, build-js]
+    if: ${{ !inputs.dry_run && needs.prepare.outputs.npm_js_live == 'false' }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    env:
+      PACKAGE: ark-oauth-client-js
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: npm-js
+          path: npm
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # As in publish-npm-node.
+      - name: The package exists on npm
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$PACKAGE")
+          if [ "$code" = 404 ]; then
+            echo "::error::$PACKAGE has never been published to npm, so Trusted Publishing has nothing to attach to. Publish the first version by hand (setup step d at the top of release.yml), add the trusted publisher on npmjs.com, then re-run this job."
+            exit 1
+          fi
+          [ "$code" = 200 ] || { echo "::error::registry.npmjs.org answered HTTP $code"; exit 1; }
+
+      # As in publish-npm-node. The tarball already holds dist/: publishing a tarball runs no
+      # prepack, so what was verified in build-js is exactly what ships.
+      - name: Publish
+        run: |
+          set -o pipefail
+          npm install -g npm@latest
+          if ! npm publish ./npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
+            reason=$(grep -m1 -E 'npm (error|ERR!) (code |404|403|401)|ENEEDAUTH|E40[134]' "$RUNNER_TEMP/npm.log" || true)
+            echo "::error::npm publish of $PACKAGE failed: ${reason:-see the job log}. If it is an auth error, check the trusted publisher on npmjs.com for $PACKAGE: owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release, and 'npm publish' ticked under Allowed actions (a publisher created after 2026-09-03 allows only 'npm stage publish', which fails as E403 'OIDC permission denied for this action')."
             exit 1
           fi
 
   release:
-    needs: [prepare, build-dotnet, build-python, build-node, publish-nuget, publish-pypi, publish-npm]
+    needs: [prepare, build-dotnet, build-python, build-node, build-js, publish-nuget, publish-pypi, publish-npm-node, publish-npm-js]
     # Skipped publish jobs (already live) are fine; a failed or cancelled one stops the release.
     if: ${{ !cancelled() && !failure() && !inputs.dry_run }}
     runs-on: ubuntu-latest
@@ -412,7 +549,8 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
       NUGET_LIVE: ${{ needs.prepare.outputs.nuget_live }}
       PYPI_LIVE: ${{ needs.prepare.outputs.pypi_live }}
-      NPM_LIVE: ${{ needs.prepare.outputs.npm_live }}
+      NPM_NODE_LIVE: ${{ needs.prepare.outputs.npm_node_live }}
+      NPM_JS_LIVE: ${{ needs.prepare.outputs.npm_js_live }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -427,7 +565,8 @@ jobs:
           mkdir assets
           [ "$NUGET_LIVE" = true ] || cp built/nuget/* assets/
           [ "$PYPI_LIVE" = true ]  || cp built/python/* assets/
-          [ "$NPM_LIVE" = true ]   || cp built/npm/* assets/
+          [ "$NPM_NODE_LIVE" = true ] || cp built/npm-node/* assets/
+          [ "$NPM_JS_LIVE" = true ]   || cp built/npm-js/* assets/
           if [ -n "$(ls assets)" ]; then
             (cd assets && sha256sum * > SHA256SUMS.txt)
           fi
@@ -449,16 +588,18 @@ jobs:
             echo "| Ark.oAuth.Client (.NET) | [nuget.org](https://www.nuget.org/packages/Ark.oAuth.Client/$VERSION) | \`dotnet add package Ark.oAuth.Client --version $VERSION\` |"
             echo "| ark-oauth-client (Python) | [PyPI](https://pypi.org/project/ark-oauth-client/$VERSION/) | \`pip install \"ark-oauth-client[flask]==$VERSION\"\` |"
             echo "| ark-oauth-client (Node) | [npm](https://www.npmjs.com/package/ark-oauth-client/v/$VERSION) | \`npm install ark-oauth-client@$VERSION\` |"
+            echo "| ark-oauth-client-js (browser) | [npm](https://www.npmjs.com/package/ark-oauth-client-js/v/$VERSION) | \`npm install ark-oauth-client-js@$VERSION\` |"
             already=""
-            [ "$NUGET_LIVE" = true ] && already="$already NuGet"
-            [ "$PYPI_LIVE" = true ]  && already="$already PyPI"
-            [ "$NPM_LIVE" = true ]   && already="$already npm"
+            [ "$NUGET_LIVE" = true ]    && already="$already, NuGet"
+            [ "$PYPI_LIVE" = true ]     && already="$already, PyPI"
+            [ "$NPM_NODE_LIVE" = true ] && already="$already, npm ark-oauth-client"
+            [ "$NPM_JS_LIVE" = true ]   && already="$already, npm ark-oauth-client-js"
             if [ -n "$already" ]; then
               echo
-              echo "Already on the registry before this release, so not attached here:$already."
+              echo "Already on the registry before this release, so not attached here: ${already#, }."
             fi
             # The client changelogs are kept per version; quote each one's entry when there is one.
-            for log in "Python|ark_oauth_client_py/CHANGELOG.md" "Node|ark_oauth_client_nodejs/CHANGELOG.md"; do
+            for log in "Python|ark_oauth_client_py/CHANGELOG.md" "Node|ark_oauth_client_nodejs/CHANGELOG.md" "Browser|ark_oauth_client_js/CHANGELOG.md"; do
               entry=$(awk -v v="## $VERSION" '$0 == v {on=1; next} on && /^## / {exit} on' "${log#*|}")
               if [ -n "$entry" ]; then
                 echo

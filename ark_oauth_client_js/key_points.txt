@@ -1,11 +1,21 @@
 ark-oauth-client-js  --  npm publish, key points
 ================================================================================
 
---- quick republish (after the first publish)
+--- republish (after the first publish): the release workflow
 
-    > cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/ark_oauth_client_js
+    GitHub -> Actions -> Release -> Run workflow, typing X.Y.Z.
+    Jobs build-js -> publish-npm-js release this package, separately from the
+    Node client (build-node -> publish-npm-node), at the same version as the
+    others. Tick "dry run" to build, test and verify without publishing.
+    Needs the trusted publisher below.
+
+--- republish by hand (only if the workflow can't)
+
+    > cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc
+    > scripts/version.sh set X.Y.Z              # NOT `npm version`: that leaves
+                                                # src/version.js behind
+    > cd ark_oauth_client_js
     > npm ci
-    > npm version X.Y.Z --no-git-tag-version     # the family's version, X.Y.Z only
     > npm run check                              # build + tests + typecheck
     > npm publish                                # prepack rebuilds dist/ first
 
@@ -56,9 +66,9 @@ step 8: confirm
     2. Allowed actions: TICK "npm publish". New publishers default to
        "npm stage publish" only, and the workflow then fails with E403
        "OIDC permission denied".
-    3. Still owed in the repo before release.yml can publish this package:
-         - a publish job for ark_oauth_client_js in .github/workflows/release.yml
-         - ark_oauth_client_js/package.json in scripts/version.sh
+    3. The repo side is done (2026-11-19): build-js + publish-npm-js in
+       .github/workflows/release.yml, and package.json, package-lock.json and
+       src/version.js in scripts/version.sh.
 
 
 --- things to remember

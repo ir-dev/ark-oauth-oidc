@@ -27,6 +27,7 @@
   <a href="https://www.nuget.org/packages/Ark.oAuth.Client"><img alt="Ark.oAuth.Client on NuGet" src="https://img.shields.io/nuget/v/Ark.oAuth.Client?label=Ark.oAuth.Client&logo=nuget"></a>
   <a href="https://pypi.org/project/ark-oauth-client/"><img alt="ark-oauth-client on PyPI" src="https://img.shields.io/pypi/v/ark-oauth-client?label=PyPI&logo=pypi&logoColor=white"></a>
   <a href="https://www.npmjs.com/package/ark-oauth-client"><img alt="ark-oauth-client on npm" src="https://img.shields.io/npm/v/ark-oauth-client?label=npm&logo=npm"></a>
+  <a href="https://www.npmjs.com/package/ark-oauth-client-js"><img alt="ark-oauth-client-js on npm" src="https://img.shields.io/npm/v/ark-oauth-client-js?label=npm%20browser&logo=npm"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
 </p>
 
@@ -164,6 +165,7 @@ same at `/{tenant}/admin/provisioning`, and the page then shows the equivalent `
 | .NET / ASP.NET Core | `dotnet add package Ark.oAuth.Client` |
 | Python / Flask | `pip install "ark-oauth-client[flask]"` |
 | Node / Express | `npm install ark-oauth-client` |
+| Browser / SPA (React, Next.js, Vue, Angular) | `npm install ark-oauth-client-js` — see [`ark_oauth_client_js`](ark_oauth_client_js) |
 
 ```csharp
 // .NET: "ark_oauth_client": { "Authority": "https://idp.example.com/my_idp", "ClientId": "billing_portal" }
@@ -338,6 +340,7 @@ as facts to cite, not prose to read.
 | [`Ark.oAuth.Oidc/Ark.oAuth.Client`](Ark.oAuth.Oidc/Ark.oAuth.Client) | ASP.NET Core client | NuGet `Ark.oAuth.Client` | same five |
 | [`ark_oauth_client_py`](ark_oauth_client_py) | Python client (Flask + framework-agnostic) | PyPI `ark-oauth-client` | same five, plus `examples/` |
 | [`ark_oauth_client_nodejs`](ark_oauth_client_nodejs) | Node client (Express / Connect) | npm `ark-oauth-client` | `README.md`, `examples/`, `types/` |
+| [`ark_oauth_client_js`](ark_oauth_client_js) | Browser / SPA client (public client; React, Next.js, Vue, Angular adapters) | npm `ark-oauth-client-js` | `README.md`, `examples/`, `types/` |
 | [`Ark.oAuth.Oidc/Ark.Client.Web`](Ark.oAuth.Oidc/Ark.Client.Web) | Reference client app — **the shape to copy** | not published | `README.md` |
 | [`Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart`](Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart) | Zero-config IdP host: `AddArkIdp()` + `UseArkIdp()`, wizard on first run | not published | — |
 | [`Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host`](Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host) | IdP host configured through appsettings | not published | — |

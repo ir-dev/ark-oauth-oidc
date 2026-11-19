@@ -22,6 +22,12 @@ CLIENT=Ark.oAuth.Oidc/Ark.oAuth.Client/Ark.oAuth.Client.csproj
 PYPROJECT=ark_oauth_client_py/pyproject.toml
 PYINIT=ark_oauth_client_py/src/ark_oauth_client/__init__.py
 NPM=ark_oauth_client_nodejs/package.json
+# The browser client is a separate npm package. A browser cannot read package.json at run time,
+# so its VERSION is a literal in src/version.js; and unlike the Node client it has a lock file
+# (dev dependencies), which carries the version twice.
+NPMJS=ark_oauth_client_js/package.json
+NPMJSLOCK=ark_oauth_client_js/package-lock.json
+NPMJSVER=ark_oauth_client_js/src/version.js
 
 # label|file|regex whose first group is the version|suffix the version carries in that field
 entries() {
@@ -35,6 +41,10 @@ FileVersion|$CLIENT|<FileVersion>([^<]*)</FileVersion>|.0
 version|$PYPROJECT|^version = "([^"]*)"|
 __version__|$PYINIT|^__version__ = "([^"]*)"|
 version|$NPM|^  "version": "([^"]*)"|
+version|$NPMJS|^  "version": "([^"]*)"|
+VERSION|$NPMJSVER|^export const VERSION = '([^']*)'|
+version|$NPMJSLOCK|^  "version": "([^"]*)"|
+packages[""]|$NPMJSLOCK|^    "": \{\s*"name": "[^"]*",\s*"version": "([^"]*)"|
 EOF
 }
 
@@ -90,8 +100,9 @@ set)
 			echo "warning: uv lock failed; run it in ark_oauth_client_py" >&2
 	fi
 	report "$2"
-	echo "Now write the release notes by hand: ark_oauth_client_py/CHANGELOG.md and" \
-		"<PackageReleaseNotes> in both csproj files." >&2
+	echo "Now write the release notes by hand: CHANGELOG.md in ark_oauth_client_py," \
+		"ark_oauth_client_nodejs and ark_oauth_client_js, and <PackageReleaseNotes> in both" \
+		"csproj files." >&2
 	;;
 *)
 	echo "usage: scripts/version.sh [show | check [X.Y.Z] | set X.Y.Z]" >&2

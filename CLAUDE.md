@@ -14,12 +14,15 @@ The provider is multi-tenant; administration is not (one operator tenant adminis
 | `Ark.oAuth.Oidc/Ark.oAuth.Client` | ASP.NET Core client | NuGet `Ark.oAuth.Client` |
 | `ark_oauth_client_py` | Python client (Flask + framework-agnostic) | PyPI `ark-oauth-client` |
 | `ark_oauth_client_nodejs` | Node client (Express/Connect) | npm `ark-oauth-client` |
+| `ark_oauth_client_js` | Browser/SPA client (public client; React, Next, Vue, Angular adapters) | npm `ark-oauth-client-js` |
 | `Ark.oAuth.Oidc/Ark.Client.Web` | Reference client app — the shape to copy | not published |
 | `Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host` | Runnable IdP host, configured through appsettings | not published |
 | `Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart` | Zero-config IdP host: `AddArkIdp()` + `UseArkIdp()`, setup wizard on first run | not published |
 
 The three client packages are **ports of each other and carry the same version number**. A change to
 one is usually owed to the other two. An integration written in one translates almost line for line.
+The browser client (`ark_oauth_client_js`) is a fourth port at the same version, using the same names
+wherever a concept is shared, so a change to one of those is owed to it too.
 
 ## Using a client library (the common case)
 
@@ -96,14 +99,18 @@ These apply in every language and are the source of most "it just says the passw
 * **Release runbooks are checked in and kept current**, with commands verified on the release
   machine: `nuget_deploy.txt` and `ark_oauth_client_py/pip_deploy.txt`. Read the runbook before
   publishing; versions are immutable on all three registries once pushed.
-* **Releases go through `.github/workflows/release.yml`** (manual dispatch): all four packages at
-  one version, Trusted Publishing on every registry, then a `vX.Y.Z` GitHub release. Type the
+* **Releases go through `.github/workflows/release.yml`** (manual dispatch): all five packages at
+  one version, Trusted Publishing on every registry, then a `vX.Y.Z` GitHub release. The two npm
+  packages are separate libraries with separate jobs and separate trusted publishers
+  (`build-node`/`publish-npm-node`, `build-js`/`publish-npm-js`). Type the
   version into the run and it is stamped into every manifest on the runner (nothing committed);
   leave it blank and the run fails unless every committed manifest agrees, including the Python
-  `__version__`, which has drifted from `pyproject.toml` more than once. Bump locally with
+  `__version__` and the browser client's `src/version.js`, which hold the version as literals (the
+  Python one has drifted from `pyproject.toml` more than once). Bump locally with
   `scripts/version.sh set X.Y.Z`, never by hand. Plain `X.Y.Z` only: npm rejects a fourth number.
-* **Tests:** `pytest` in `ark_oauth_client_py` (129 tests) and `npm test` in
-  `ark_oauth_client_nodejs`. Both run against a stub IdP (`tests/stub_idp.py`, `test/stub-idp.js`)
+* **Tests:** `pytest` in `ark_oauth_client_py` (129 tests), `npm test` in
+  `ark_oauth_client_nodejs`, and `npm ci && npm test && npm run typecheck` in `ark_oauth_client_js`.
+  All run against a stub IdP (`tests/stub_idp.py`, `test/stub-idp.js`)
   that mirrors the real server's wire behaviour — prefer it to a live server when changing a client.
   **The .NET side has no automated tests**, so `dotnet test` finds nothing. Verify .NET changes
   against a running `Ark.oAuth.Oidc.Host`.
