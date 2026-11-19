@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Ark SPA demo (script tag)</title>
+    <!-- No modules, no bundler: the IIFE build sets window.ArkOAuth.
+         From a CDN: https://cdn.jsdelivr.net/npm/ark-oauth-client-js@2.1.1/dist/ark-oauth-client.global.min.js -->
+    <script src="/dist/ark-oauth-client.global.min.js"></script>
+    <script src="/examples/vanilla/script-tag.js" defer></script>
+  </head>
+  <body>
+    <p id="status">Loading…</p>
+    <button id="signin">Sign in</button>
+    <button id="signout">Sign out</button>
+  </body>
+</html>

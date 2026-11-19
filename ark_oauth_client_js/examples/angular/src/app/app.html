@@ -1,0 +1,14 @@
+<header>
+  @if (ark.isLoading()) { <p>Loading…</p> }
+  <p>Signed in: {{ ark.isAuthenticated() }}</p>
+  <p>Email: {{ ark.user()?.email ?? '(none)' }}</p>
+  <p>Claims: {{ ark.arkClaims().join(', ') }}</p>
+  @if (!ark.isAuthenticated()) {
+    <button type="button" (click)="ark.signinRedirect()">Sign in</button>
+  } @else {
+    <button type="button" (click)="ark.signoutRedirect()">Sign out</button>
+    <button type="button" (click)="loadOrders()">Load orders</button>
+  }
+  <nav><a routerLink="/">Home</a> | <a routerLink="/profile">Profile</a> | <a routerLink="/billing">Billing</a></nav>
+</header>
+<router-outlet />

@@ -1,0 +1,124 @@
+{
+  "name": "ark-oauth-client-js",
+  "version": "2.1.1",
+  "description": "The OpenID Connect client for browser apps signing in against Ark.oAuth.Oidc. Framework-agnostic, with adapters for React, Next.js, Vue and Angular (and a Svelte-compatible store). Authorization code + PKCE as a public client, ID token verification in the browser (signature, nonce, at_hash, c_hash, iss), rotating refresh tokens coordinated across tabs, popup or redirect sign-in, RP-initiated logout, account switching on a shared browser, and an authorised fetch. No runtime dependencies.",
+  "keywords": [
+    "oauth",
+    "oauth2",
+    "oidc",
+    "openid-connect",
+    "pkce",
+    "spa",
+    "browser",
+    "react",
+    "nextjs",
+    "vue",
+    "angular",
+    "svelte",
+    "authentication",
+    "ark"
+  ],
+  "license": "MIT",
+  "author": "Immanuel R",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ir-dev/ark-oauth-oidc.git",
+    "directory": "ark_oauth_client_js"
+  },
+  "homepage": "https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_js#readme",
+  "bugs": "https://github.com/ir-dev/ark-oauth-oidc/issues",
+  "type": "module",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "types": "./types/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./react": {
+      "types": "./types/react.d.ts",
+      "default": "./src/react.js"
+    },
+    "./next": {
+      "types": "./types/next.d.ts",
+      "default": "./src/next.js"
+    },
+    "./vue": {
+      "types": "./types/vue.d.ts",
+      "default": "./src/vue.js"
+    },
+    "./angular": {
+      "types": "./types/angular.d.ts",
+      "default": "./src/angular.js"
+    },
+    "./dist/*": "./dist/*",
+    "./package.json": "./package.json"
+  },
+  "unpkg": "./dist/ark-oauth-client.global.min.js",
+  "jsdelivr": "./dist/ark-oauth-client.global.min.js",
+  "files": [
+    "src",
+    "types",
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "test:watch": "node --test --watch \"test/*.test.js\"",
+    "typecheck": "tsc -p test/types/tsconfig.json",
+    "build": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs",
+    "e2e": "node e2e/real-idp.mjs",
+    "example": "node examples/serve.mjs",
+    "check": "npm run build && npm test && npm run typecheck"
+  },
+  "peerDependencies": {
+    "@angular/core": ">=16.0.0",
+    "next": ">=13.4.0",
+    "react": ">=18.0.0",
+    "rxjs": ">=7.4.0",
+    "vue": ">=3.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@angular/core": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "rxjs": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@angular/common": "^21.2.26",
+    "@angular/compiler": "^21.2.26",
+    "@angular/core": "^21.2.26",
+    "@angular/platform-browser": "^21.2.26",
+    "@angular/router": "^21.2.26",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.28.2",
+    "happy-dom": "^21.0.4",
+    "playwright-core": "^1.65.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "rxjs": "^7.8.2",
+    "typescript": "^7.0.2",
+    "vue": "^3.5.45",
+    "vue-router": "^4.6.5"
+  }
+}
