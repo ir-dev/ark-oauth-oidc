@@ -58,6 +58,16 @@ namespace Ark.oAuth
         /// <summary>Claim type Ark authorization claims are projected onto. Defaults to "role".</summary>
         public string? RoleClaimType { get; set; }
 
+        /// <summary>
+        /// API bearer validation (<c>AddArkOidcApi</c>) accepts only tokens whose header declares
+        /// <c>typ: at+jwt</c> (RFC 9068) — what Ark puts on every access token. Without it an ID
+        /// token, which any SPA holds and whose audience the API does not check unless
+        /// <see cref="Audience"/> is set, passed as an access token. Same default as the Node
+        /// (<c>requireTypeHeader</c>) and Python (<c>require_type_header</c>) ports; turn it off only
+        /// for a provider that does not type its access tokens.
+        /// </summary>
+        public bool RequireAccessTokenTypeHeader { get; set; } = true;
+
         /// <summary>Only turn this off for local development against a plain-http provider.</summary>
         public bool RequireHttpsMetadata { get; set; } = true;
 
@@ -420,9 +430,15 @@ namespace Ark.oAuth
         {
             _http = http;
             _conf = conf;
-            ip = _http.HttpContext.Request.Cookies["ark_oauth_ip"] ?? "";
+            // The ark_oauth_* cookies belong to the v1 flow, which wrote them. Under the standard
+            // flow nothing writes them, so anything they hold came from the browser: reading them
+            // let an anonymous request name its own user_id, ip and claims (ark-news records "who
+            // did this" from user_info). The identity comes from the authenticated principal, and
+            // the address from the connection.
+            var legacy = conf.UseLegacyFlow;
+            ip = legacy ? _http.HttpContext.Request.Cookies["ark_oauth_ip"] ?? "" : "";
             ip = ip.AnyNull() ? _http.HttpContext.Connection.RemoteIpAddress?.ToString() : ip;
-            user_id = _http.HttpContext.Request.Cookies["ark_oauth_email"] ?? "";
+            user_id = legacy ? _http.HttpContext.Request.Cookies["ark_oauth_email"] ?? "" : "";
             foreach (var v in (conf.RouteKey ?? new List<string>()))
             {
                 client_id = (_http.HttpContext.Request.RouteValues[v] ?? "").ToString().ToLower();
@@ -473,6 +489,7 @@ namespace Ark.oAuth
                     return;
                 }
 
+                if (!_conf.UseLegacyFlow) return; // see the constructor: only v1 writes this cookie
                 var str = _http.HttpContext?.Request.ReadCookie($"ark_oauth_ui_claims_{client_id}");
                 if (str.AnyNull()) return;
                 System.Text.Json.JsonDocument tt = System.Text.Json.JsonDocument.Parse(str);

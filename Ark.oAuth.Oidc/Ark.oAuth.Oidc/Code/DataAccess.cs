@@ -400,7 +400,6 @@ namespace Ark.oAuth.Oidc
             var tt = await _ctx.users.FirstOrDefaultAsync(t => t.email == user.email);
             if (tt == null)
             {
-                user.hash_pw = string.IsNullOrEmpty(user.hash_pw) ? _util.HashPasswordPBKDF2(_util.ServerConfig.DefaultPw) : user.hash_pw; //default pw
                 user.ref_uid = Guid.NewGuid().ToString();
                 user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
 
@@ -408,7 +407,14 @@ namespace Ark.oAuth.Oidc
                 // admin-managed/default-password flow. An email-shaped login id no longer forces
                 // one on its own, which is what trapped accounts in reset_mode when SMTP had not
                 // been configured.
-                if (_util.ServerConfig.ShouldUseEmailPasswordFlow(user.email, sendActivationEmail))
+                var emailFlow = _util.ServerConfig.ShouldUseEmailPasswordFlow(user.email, sendActivationEmail);
+                // An account waiting on its activation link cannot sign in at all (reset_mode), so
+                // it starts on a random password nobody knows rather than the shared default.
+                if (string.IsNullOrEmpty(user.hash_pw))
+                    user.hash_pw = _util.HashPasswordPBKDF2(emailFlow
+                        ? Protocol.ArkCrypto.RandomToken(32)
+                        : _util.ServerConfig.RequireDefaultPw());
+                if (emailFlow)
                 {
                     user.reset_mode = true;
                     // Creating the account is the operation being asked for; a template that
@@ -565,18 +571,18 @@ namespace Ark.oAuth.Oidc
             // mapping answered in a fraction of the time a wrong password took, which named the
             // accounts that exist even though the message is the same.
             var verified = _util.VerifyPasswordPBKDF2(pw, usr_cl_cl != null ? usr!.hash_pw ?? "" : ArkUtil.DummyPasswordHash.Value);
+            // Every failure counts towards the lockout, not only a wrong password for an account
+            // that exists and is mapped. Counting only those made the lockout message itself the
+            // account oracle the single error message exists to prevent: ten bad tries named a
+            // real, mapped account ("Too many failed attempts") and left an unknown one on
+            // "not recognised" for ever.
+            if (usr == null || clnt == null || usr_cl_cl == null || !verified)
+                await UpdateStatus(login_id, retry: "increment");
             if (usr == null) throw new ApplicationException("invalid creds");
             if (clnt == null) throw new ApplicationException("invalid creds client");
             if (usr_cl_cl == null) throw new ApplicationException("invalid creds client.");
-            if (!verified)
-            {
-                await UpdateStatus(login_id, retry: "increment");
-                throw new ApplicationException("invalid creds.");
-            }
-            else
-            {
-                await UpdateStatus(login_id, retry: "reset");
-            }
+            if (!verified) throw new ApplicationException("invalid creds.");
+            await UpdateStatus(login_id, retry: "reset");
             if (ArkUtil.IsLegacyPasswordHash(usr.hash_pw))
             {
                 // The password is in hand only now, so this is the one place the original

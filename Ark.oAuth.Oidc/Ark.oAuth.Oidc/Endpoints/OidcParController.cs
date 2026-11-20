@@ -26,6 +26,9 @@ namespace Ark.oAuth.Oidc.Endpoints
             _da = da;
         }
 
+        private const int MaxParameters = 50;
+        private const int MaxPayloadChars = 16 * 1024;
+
         [HttpPost("par")]
         [Consumes("application/x-www-form-urlencoded")]
         public async Task<IActionResult> PushAuthorizationRequest([FromRoute] string tenant_id)
@@ -51,6 +54,15 @@ namespace Ark.oAuth.Oidc.Endpoints
                     if (kv.Key is "client_secret" or "client_assertion" or "client_assertion_type") continue;
                     if (kv.Value.Count > 0 && kv.Value[0] != null) parameters[kv.Key] = kv.Value[0]!;
                 }
+
+                // Every field is stored, and a public client authenticates with its id alone — the
+                // seeded console client among them — so without a ceiling this endpoint stored
+                // whatever anyone posted (a 3 MB field was accepted). A real authorization request
+                // is a few hundred bytes.
+                if (parameters.Count > MaxParameters
+                    || parameters.Sum(p => p.Key.Length + p.Value.Length) > MaxPayloadChars)
+                    throw OAuthException.InvalidRequest(
+                        $"the pushed authorization request is too large (at most {MaxParameters} parameters and {MaxPayloadChars / 1024} KB).");
 
                 // §2.1: client_id must be present and must be the authenticated client
                 var claimed = parameters.GetValueOrDefault("client_id");

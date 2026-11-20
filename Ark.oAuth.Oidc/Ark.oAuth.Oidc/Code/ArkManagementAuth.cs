@@ -112,7 +112,14 @@ namespace Ark.oAuth.Oidc
 
             var tenantId = (config.TenantId ?? "").Trim();
             var machine = MachineClientId(tenantId);
-            if (string.Equals(clientId, machine, StringComparison.Ordinal)) return null;
+            // The machine client acting as itself — a client_credentials token, whose subject is
+            // the client. Today that is the only grant it holds, but an edit or an import that
+            // gave it another (authorization_code, device) would otherwise make every user mapped
+            // to it an operator.
+            if (string.Equals(clientId, machine, StringComparison.Ordinal))
+                return string.Equals(identity.FindFirst("sub")?.Value, machine, StringComparison.Ordinal)
+                    ? null
+                    : $"the token issued to '{machine}' was not issued to the client itself (client_credentials)";
 
             var deviceClients = config.Management?.OperatorDeviceClients ?? new List<string>();
             if (!string.IsNullOrWhiteSpace(clientId)

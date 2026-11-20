@@ -186,8 +186,25 @@ namespace Ark.oAuth
     [Index(nameof(browser_id))]
     public class ArkSession
     {
+        /// <summary>
+        /// The session's public identifier — what every token this session mints carries as
+        /// <c>sid</c>, and what logout tokens name. It is the SHA-256 of
+        /// <see cref="cookie_value"/>, never the cookie itself.
+        ///
+        /// It used to be both. Every ID token, access token, introspection response and logout
+        /// token handed the browser's ark_idp_sid cookie to whoever received it, so any relying
+        /// party or API that saw one token could set that cookie and be signed in as the user at
+        /// every client of the tenant, the operator console included.
+        /// </summary>
         [Key]
         public string session_id { get; set; } = default!;
+        /// <summary>
+        /// The ark_idp_sid cookie, set only on a session just created and never stored. A lookup
+        /// from the cookie hashes it (<see cref="Oidc.Protocol.ArkGrantStore.SessionIdFor"/>).
+        /// </summary>
+        [NotMapped]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? cookie_value { get; set; }
         public string tenant_id { get; set; } = default!;
         public string subject { get; set; } = default!;
         /// <summary>

@@ -60,6 +60,18 @@ namespace Ark.oAuth.Oidc
                 };
             }
         }
+        /// <summary>
+        /// A tenant as it may leave the server. The upsert copies the stored private key onto the
+        /// posted row so an edit cannot rotate it, and used to send that row back — the live
+        /// signing key, in the console's browser, after TenantList had been changed to omit it.
+        /// A copy rather than nulling the field: the row is tracked, and the audit write after
+        /// the save would store the null.
+        /// </summary>
+        private static object? WithoutKeys(ArkTenant? t) => t == null ? null : new
+        {
+            t.tenant_id, t.name, t.display, t.rsa_public, t.issuer, t.audience, t.expire_mins, t.at
+        };
+
         [HttpPost]
         [Route("v1/tenant/upsert")]
         public async Task<dynamic> TenantUpdate([FromServices] DataAccess da, [FromServices] ArkUtil util, [FromBody] ArkTenant tenant)
@@ -90,7 +102,7 @@ namespace Ark.oAuth.Oidc
                 {
                     error = false,
                     msg = "tenants updated successfully.",
-                    data = tenant
+                    data = WithoutKeys(tenant)
                 };
             }
             catch (Exception ex)
@@ -102,7 +114,7 @@ namespace Ark.oAuth.Oidc
                 {
                     error = true,
                     msg = $"{ex.Message}",
-                    data = tenant
+                    data = WithoutKeys(tenant)
                 };
             }
         }
@@ -626,6 +638,26 @@ namespace Ark.oAuth.Oidc
                 };
             }
         }
+        /// <summary>
+        /// Whether this request was authenticated by the management bearer token rather than the
+        /// console cookie.
+        ///
+        /// The two legacy onboarding routes take everything from the query string and answer any
+        /// verb, so a console cookie on its own was enough: a link opened by a signed-in operator —
+        /// SameSite=Lax still sends the cookie on a top-level navigation — created or rewrote an
+        /// account with a password of the link author's choosing, the operator's own included.
+        /// Their callers (AuthClientHelper, the Python helper) always send a bearer token, which a
+        /// cross-site page cannot attach, so they are limited to that.
+        /// </summary>
+        private bool ViaBearerToken => User.Identities.Any(i =>
+            i.IsAuthenticated && i.AuthenticationType == ArkManagementAuth.BearerScheme);
+
+        private static IActionResult BearerOnly() => new ObjectResult(new
+        {
+            error = true,
+            msg = "this legacy route accepts only a bearer token from the machine client; use the provisioning API (v1/provision/*) instead."
+        }) { StatusCode = 403 };
+
         [Route("onboard/full")]
         public async Task<dynamic> OnboardFull([FromServices] Onboard onb,
             [FromQuery] string ten_id,
@@ -638,6 +670,7 @@ namespace Ark.oAuth.Oidc
             [FromQuery] string user_suffix,
             [FromQuery] string user_type)
         {
+            if (!ViaBearerToken) return BearerOnly();
             try
             {
                 await onb.FullSet(ten_id,
@@ -674,6 +707,7 @@ namespace Ark.oAuth.Oidc
             [FromQuery] string full_name,
             [FromQuery] string user_type)
         {
+            if (!ViaBearerToken) return BearerOnly();
             try
             {
                 await onb.UserOnboard(ten_id,

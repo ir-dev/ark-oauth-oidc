@@ -69,6 +69,7 @@ namespace Ark.oAuth.Oidc.Endpoints
         public async Task<IActionResult> DeviceVerificationGet([FromRoute] string tenant_id)
         {
             NoStore();
+            FrameAncestorsSelf(); // an approve button any site could frame is a clickjacking target
             var tenant = await ResolveTenantAsync(tenant_id);
             var userCode = Request.Query["user_code"].FirstOrDefault();
 
@@ -83,6 +84,7 @@ namespace Ark.oAuth.Oidc.Endpoints
         public async Task<IActionResult> DeviceVerificationPost([FromRoute] string tenant_id)
         {
             NoStore();
+            FrameAncestorsSelf(); // an approve button any site could frame is a clickjacking target
             var tenant = await ResolveTenantAsync(tenant_id);
             var form = Request.Form;
             var userCode = form["user_code"].ToString();
@@ -102,7 +104,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 return DevicePage(tenant, "enter_code", "That code has already been used.", userCode, null);
 
             // The user must be signed in before they can approve anything.
-            var session = await _grants.GetSessionAsync(Request.Cookies[OidcAuthorizeController.SessionCookie]);
+            var session = await _grants.GetSessionByCookieAsync(Request.Cookies[OidcAuthorizeController.SessionCookie]);
             if (session == null || !string.Equals(session.tenant_id, tenant.tenant_id, StringComparison.OrdinalIgnoreCase))
             {
                 var ep = Endpoints(tenant.tenant_id);

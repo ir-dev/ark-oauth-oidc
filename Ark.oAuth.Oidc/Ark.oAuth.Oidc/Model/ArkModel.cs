@@ -47,6 +47,25 @@
         public string UploadPath { get; set; }
         public string Provider { get; set; }
         public string DefaultPw { get; set; }
+
+        /// <summary>
+        /// <see cref="DefaultPw"/>, for an account about to be created on it — refused when it is
+        /// empty or still a <c>&lt;&lt;placeholder&gt;&gt;</c>.
+        ///
+        /// The admin seed already refused those; account creation did not. The sample host ships
+        /// <c>"DefaultPw": "&lt;&lt;change-me&gt;&gt;"</c> with admin_managed, so every account created
+        /// in the console or through provisioning signed in with a password published in this
+        /// repository, and an unset value threw from deep inside the hashing instead.
+        /// </summary>
+        public string RequireDefaultPw()
+        {
+            var value = (DefaultPw ?? "").Trim();
+            if (value.Length == 0 || (value.StartsWith("<<") && value.EndsWith(">>")))
+                throw new ApplicationException(
+                    "ark_oauth_server:DefaultPw is not set (or is still a <<placeholder>>), so a new account " +
+                    "has no password to start on. Set it to a strong value, or use UserPasswordMode=email_based.");
+            return DefaultPw;
+        }
         /// <summary>
         /// How newly created user passwords are onboarded.
         ///

@@ -98,7 +98,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                     // Read without spending it: this handler re-enters with the same request_uri
                     // for the sign-in and consent posts. It is marked used once the request
                     // reaches a terminal outcome, below.
-                    var pushed = await _grants.ReadParRequestAsync(requestUri!, client.client_id);
+                    var pushed = await _grants.ReadParRequestAsync(requestUri!, client);
                     // PAR parameters replace the query entirely (RFC 9126 §4)
                     pushed["client_id"] = client.client_id;
                     p = pushed;
@@ -167,7 +167,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 var nonce = p.GetValueOrDefault("nonce");
 
                 // --- authentication ---
-                var session = await _grants.GetSessionAsync(Request.Cookies[SessionCookie]);
+                var session = await _grants.GetSessionByCookieAsync(Request.Cookies[SessionCookie]);
                 if (session != null && !string.Equals(session.tenant_id, tenant.tenant_id, StringComparison.OrdinalIgnoreCase))
                     session = null;
 
@@ -411,7 +411,9 @@ namespace Ark.oAuth.Oidc.Endpoints
 
         private void AppendSessionCookie(ArkSession session)
         {
-            Response.Cookies.Append(SessionCookie, session.session_id, new CookieOptions
+            // The secret, not session_id: the id is the sid every token carries.
+            Response.Cookies.Append(SessionCookie, session.cookie_value
+                ?? throw new InvalidOperationException("only a session just created carries its cookie value."), new CookieOptions
             {
                 HttpOnly = true,
                 Secure = Request.IsHttps,

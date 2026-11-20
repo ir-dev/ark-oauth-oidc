@@ -44,7 +44,13 @@ namespace Ark.oAuth
             string? authority = null, CancellationToken cancellationToken = default)
         {
             var scopeValue = string.Join(" ", scopes ?? Enumerable.Empty<string>());
-            var key = $"{authority ?? _config.ResolveAuthority()}|{clientId}|{scopeValue}";
+            // The credential is part of the key, as in the Node port: without it a caller with the
+            // right client_id and a wrong secret was handed the token another caller had earned —
+            // and an onboarding "test this secret" step passed for a secret the provider refuses.
+            // Hashed, so the cache holds no secret.
+            var credential = Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(clientSecret ?? "")));
+            var key = $"{authority ?? _config.ResolveAuthority()}|{clientId}|{credential}|{scopeValue}";
 
             if (Cache.TryGetValue(key, out var cached) && cached.Succeeded &&
                 cached.ExpiresAt - DateTimeOffset.UtcNow > RenewBefore)

@@ -253,6 +253,17 @@ namespace Ark.oAuth.Oidc
             var authMethod = string.IsNullOrWhiteSpace(req.token_endpoint_auth_method)
                 ? "none" : req.token_endpoint_auth_method!.Trim();
 
+            // Checked before anything is written: a new account on the default password is refused
+            // while DefaultPw is unset or a placeholder (ArkAuthServerConfig.RequireDefaultPw), and
+            // finding that out after the client row exists left a half-provisioned application
+            // that the retry then refused as a duplicate.
+            if (await _da.GetUser(userName) == null
+                && !_util.ServerConfig.ShouldUseEmailPasswordFlow(userName, req.send_activation_email))
+            {
+                try { _util.ServerConfig.RequireDefaultPw(); }
+                catch (ApplicationException ex) { throw new ArkProvisionException("default_password_unset", ex.Message, 409); }
+            }
+
             var client = await _da.UpsertClient(new ArkClient
             {
                 tenant_id = tenant.tenant_id,
@@ -345,6 +356,13 @@ namespace Ark.oAuth.Oidc
                     404);
 
             var claims = DefaultClaims.Concat(Clean(req.claims)).ToList();
+            if (await _da.GetUser(userName) == null
+                && !_util.ServerConfig.ShouldUseEmailPasswordFlow(userName, req.send_activation_email))
+            {
+                // Named as a refusal rather than surfacing as provision_failed (500).
+                try { _util.ServerConfig.RequireDefaultPw(); }
+                catch (ApplicationException ex) { throw new ArkProvisionException("default_password_unset", ex.Message, 409); }
+            }
             var grant = await GrantAsync(tenant.tenant_id, client, userName, req.user_display_name, claims, req.send_activation_email);
 
             _da.Log("provision_user", $"{tenant.tenant_id}/{client.client_id}", "user granted access",
@@ -376,8 +394,9 @@ namespace Ark.oAuth.Oidc
                     email = userName,
                     name = string.IsNullOrWhiteSpace(displayName) ? userName : displayName!.Trim(),
                     type = "user",
-                    is_active = true,
-                    hash_pw = _util.HashPasswordPBKDF2(_util.ServerConfig.DefaultPw)
+                    is_active = true
+                    // No hash_pw: UpsertUser picks it — the configured DefaultPw (refused while it
+                    // is unset or a placeholder) or, for an activation-link account, a random one.
                 }, sendActivationEmail: sendActivationEmail);
             }
 

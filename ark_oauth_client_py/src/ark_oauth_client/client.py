@@ -14,6 +14,7 @@ directly for CLIs, workers, Django, FastAPI, or any flow without a browser.
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from dataclasses import dataclass, field
@@ -389,7 +390,13 @@ class ArkOAuthClient:
 
         identifier = client_id or self._config.client_id
         scope_value = " ".join(scopes)
-        key = f"{self._config.authority}|{identifier}|{scope_value}"
+        # The credential is part of the key, as in the Node port: without it a caller presenting
+        # the right client_id with a wrong secret was handed the token another caller earned.
+        # Hashed, so the cache holds no secret.
+        credential = hashlib.sha256(
+            (client_secret or self._config.client_secret or "").encode("utf-8")
+        ).hexdigest()
+        key = f"{self._config.authority}|{identifier}|{credential}|{scope_value}"
 
         cached = self._service_tokens.get(key)
         if not force and cached and not cached.expired(renew_before_seconds):

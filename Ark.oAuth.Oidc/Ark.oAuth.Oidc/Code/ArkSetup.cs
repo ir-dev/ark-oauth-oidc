@@ -325,7 +325,15 @@ namespace Ark.oAuth.Oidc
             var remote = context.Connection.RemoteIpAddress;
             if (remote == null || !IPAddress.IsLoopback(remote)) return false;
             var h = context.Request.Headers;
-            return !h.ContainsKey("X-Forwarded-For") && !h.ContainsKey("Forwarded") && !h.ContainsKey("X-Real-IP");
+            if (h.ContainsKey("X-Forwarded-For") || h.ContainsKey("Forwarded") || h.ContainsKey("X-Real-IP")) return false;
+            // ...and addressed to this machine by a loopback name. A same-host proxy that adds no
+            // forwarding header (a bare proxy_pass, some tunnels and sidecars) passes the checks
+            // above for every visitor, but forwards the public Host it was reached on; and a
+            // DNS-rebinding page reaches a developer's unconfigured `dotnet run` under its own
+            // name. Either way the first stranger to finish the wizard became the operator.
+            var host = context.Request.Host.Host.Trim('[', ']');
+            return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+                   || (IPAddress.TryParse(host, out var named) && IPAddress.IsLoopback(named));
         }
 
         bool CodeAccepted(HttpContext context, string? code = null)

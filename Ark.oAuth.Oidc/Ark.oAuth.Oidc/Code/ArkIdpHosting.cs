@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Cors.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -49,6 +50,53 @@ namespace Ark.oAuth.Oidc
         public const string SignInPath = "/ark-idp/signin";
         public const string SignOutPath = "/ark-idp/signout";
         public const string AuthErrorPath = "/ark-idp/auth-error";
+
+        /// <summary>
+        /// Re-checks a console session against the database on every request.
+        ///
+        /// The console cookie is sliding — eight hours, renewed by every request — and operator
+        /// status is read from the claims captured at sign-in. Deactivating an operator, deleting
+        /// their mapping to the console client or taking the admin claim off it therefore changed
+        /// nothing for a session already open: it kept full management rights for as long as it
+        /// stayed in use. One indexed lookup per console request is what the switch costs.
+        /// </summary>
+        internal static async Task RevalidateAsync(CookieValidatePrincipalContext ctx)
+        {
+            var principal = ctx.Principal;
+            var subject = principal?.FindFirst("sub")?.Value;
+            var sp = ctx.HttpContext.RequestServices;
+            var ser = sp.GetRequiredService<IConfiguration>().GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
+            var tenantId = ser?.TenantId;
+
+            var still = false;
+            if (!string.IsNullOrWhiteSpace(subject) && !string.IsNullOrWhiteSpace(tenantId))
+            {
+                var db = sp.GetRequiredService<ArkDataContext>();
+                var login = subject!.Trim().ToLower();
+                var consoleClientId = $"{tenantId}_client";
+                var user = await db.users.AsNoTracking().FirstOrDefaultAsync(u => u.email == login);
+                var client = await db.clients.AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.tenant_id == tenantId && c.client_id == consoleClientId);
+                var mapping = user == null || client == null ? null : await db.user_client_claims.AsNoTracking()
+                    .FirstOrDefaultAsync(m => (m.email ?? "").ToLower() == login && m.tenant_id == tenantId && m.client_id == client.id);
+
+                still = user != null && user.is_active && mapping != null;
+
+                // Operator by role rather than by the configured username: the role has to still
+                // be on the mapping, or removing it would take effect only at the next sign-in.
+                var configuredAdmin = ser?.AdminUser?.Username;
+                var byName = !string.IsNullOrWhiteSpace(configuredAdmin)
+                             && string.Equals(login, configuredAdmin!.Trim(), StringComparison.OrdinalIgnoreCase);
+                if (still && !byName && principal!.Claims.Any(c => c.Type == "role" && (c.Value is "admin" or "ark_admin")))
+                    still = mapping!.claims.Any(c => c is "admin" or "ark_admin");
+            }
+
+            if (!still)
+            {
+                ctx.RejectPrincipal();
+                await ctx.HttpContext.SignOutAsync(CookieScheme);
+            }
+        }
 
         /// <summary>
         /// Where a sign-in started for no page in particular ends: <c>ark_oauth_server:Admin:LandingUrl</c>,
@@ -166,6 +214,7 @@ namespace Ark.oAuth.Oidc
                     o.ExpireTimeSpan = TimeSpan.FromHours(8);
                     o.SlidingExpiration = true;
                     o.AccessDeniedPath = ArkIdpConsole.AuthErrorPath;
+                    o.Events = new CookieAuthenticationEvents { OnValidatePrincipal = ArkIdpConsole.RevalidateAsync };
                 })
                 .AddOpenIdConnect(ArkIdpConsole.OidcScheme, o =>
                 {

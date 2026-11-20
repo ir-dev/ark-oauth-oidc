@@ -212,6 +212,18 @@
         return t.content.firstElementChild;
     }
 
+    /**
+     * Escapes text for a Tabulator formatter. A string a custom formatter returns is inserted as
+     * HTML, and the values below are registration data — client_name in particular arrives from
+     * dynamic registration and provisioning unchecked — so returning one raw ran its markup in
+     * the operator's console with the operator's authority.
+     */
+    function esc(value) {
+        return String(value === undefined || value === null ? "" : value)
+            .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
     function lines(value) {
         return (value || "").split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
     }
@@ -492,7 +504,7 @@
                             title: "claims unlocked", field: "claims", editor: "input", widthGrow: 3,
                             formatter: function (cell) {
                                 var v = cell.getValue();
-                                return Array.isArray(v) ? v.join(", ") : (v || "");
+                                return esc(Array.isArray(v) ? v.join(", ") : (v || ""));
                             }
                         },
                         { title: "default", field: "is_default", editor: "tickCross", formatter: "tickCross", width: 90 },
@@ -557,7 +569,7 @@
                             title: "name", field: "client_name", widthGrow: 2,
                             formatter: function (cell) {
                                 var d = cell.getRow().getData();
-                                return d.client_name || d.display || d.name || "";
+                                return esc(d.client_name || d.display || d.name || "");
                             }
                         },
                         { title: "type", field: "application_type", width: 90 },
@@ -566,7 +578,7 @@
                             formatter: function (cell) {
                                 var v = cell.getValue() || "";
                                 var cls = v === "none" ? "ark-badge-warn" : "ark-badge-off";
-                                return '<span class="ark-badge ' + cls + '">' + (v === "none" ? "public" : v) + "</span>";
+                                return '<span class="ark-badge ' + cls + '">' + esc(v === "none" ? "public" : v) + "</span>";
                             }
                         },
                         {
@@ -888,7 +900,8 @@
         return state.clients
             .filter(function (c) { return c.tenant_id === tenantId; })
             .reduce(function (acc, c) {
-                acc[c.id] = (c.client_name || c.display || c.client_id) + " (" + c.client_id + ")";
+                // Escaped here because both the list editor and the formatter below draw it as HTML.
+                acc[c.id] = esc((c.client_name || c.display || c.client_id) + " (" + c.client_id + ")");
                 return acc;
             }, {});
     }
@@ -953,7 +966,7 @@
                         },
                         formatter: function (cell) {
                             var options = clientOptionsFor(cell.getRow().getData().tenant_id);
-                            return options[cell.getValue()] || cell.getValue() || "";
+                            return options[cell.getValue()] || esc(cell.getValue() || "");
                         }
                     },
                     { title: "claims", field: "claims", widthGrow: 3, formatter: claimsCell },

@@ -29,7 +29,7 @@ namespace Ark.oAuth
             await PopulateTenant(ten_id);
             await PopulateClient(ten_id, client_id, client_base_url, client_relative_url, suffix);
             await PopulateClaim(claim_keys);
-            await PopulateUser(ten_id, client_id, user_email, _util.ServerConfig.DefaultPw, user_suffix ?? "", string.IsNullOrEmpty((user_type ?? "").Trim()) ? "user" : user_type);
+            await PopulateUser(ten_id, client_id, user_email, _util.ServerConfig.RequireDefaultPw(), user_suffix ?? "", string.IsNullOrEmpty((user_type ?? "").Trim()) ? "user" : user_type);
             await PopulateUserClaims(ten_id, client_id, user_email, claim_keys);
             return _error.ToString();
         }
@@ -41,6 +41,11 @@ namespace Ark.oAuth
             string full_name,
             string user_type)
         {
+            // Said out loud rather than skipped: a caller creating a customer with a password must
+            // not be told it worked when the account it named already exists with another one.
+            var login_id = (user_email ?? "").ToLower().Trim();
+            if (await _da.GetUser(login_id) != null)
+                throw new ApplicationException($"user '{login_id}' already exists - onboarding does not change an existing account.");
             await PopulateClaim(claim_keys);
             return await PopulateUser(ten_id, client_id, user_email, pw, full_name, utype: user_type);
         }
@@ -67,6 +72,14 @@ namespace Ark.oAuth
         {
             var cll = await _da.GetClient(ten_id, client_id);
             if (cll == null) throw new ApplicationException($"invalid {client_id}/{ten_id}");
+            // Create-only. This was an upsert carrying a password, so onboarding an address that
+            // already had an account replaced that account's password (and its type, and switched a
+            // deactivated account back on). An application that wires its sign-up form to
+            // AuthClientHelper.OnboardUser therefore let anyone take over any existing account by
+            // "signing up" with its email. Existing accounts change through the console or the
+            // provisioning API, which leave them as they are.
+            var existing = await _da.GetUser((user_email ?? "").ToLower().Trim());
+            if (existing != null) return existing;
             var usr = await _da.UpsertUser(new ArkUser()
             {
                 email = user_email,

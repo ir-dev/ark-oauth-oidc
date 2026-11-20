@@ -243,7 +243,10 @@ namespace Ark.oAuth
                     ValidAudience = config.Audience,
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
-                    ClockSkew = TimeSpan.FromMinutes(1)
+                    ClockSkew = TimeSpan.FromMinutes(1),
+                    // An ID token is signed by the same keys under the same issuer; the header
+                    // type is what tells the two apart (see RequireAccessTokenTypeHeader).
+                    ValidTypes = config.RequireAccessTokenTypeHeader ? new[] { "at+jwt", "application/at+jwt" } : null
                 };
             });
         }

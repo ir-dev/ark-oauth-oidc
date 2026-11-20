@@ -31,6 +31,9 @@ namespace Ark.oAuth.Oidc.Protocol
         public int ParLifetimeSeconds { get; set; } = 90;
         public int SessionLifetimeMinutes { get; set; } = 480;
 
+        /// <summary>How often expired codes, tokens, sessions and PAR requests are deleted. 0 turns it off.</summary>
+        public int CleanupIntervalMinutes { get; set; } = 60;
+
         /// <summary>Lock an account after this many consecutive failed sign-ins. 0 disables lockout.</summary>
         public int MaxFailedSignIns { get; set; } = 10;
         public int LockoutMinutes { get; set; } = 15;

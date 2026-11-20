@@ -20,6 +20,20 @@ namespace Ark.oAuth.Oidc.Protocol
 
         private static string Hash(string value) => ArkCrypto.Sha256Base64Url(value);
 
+        /// <summary>
+        /// Whether an artefact recorded against (tenant, client_id) belongs to this client.
+        ///
+        /// Both halves, because client_id is unique within a tenant and nowhere else
+        /// (see the index on <see cref="ArkClient"/>). Comparing the client_id alone let a code or
+        /// refresh token issued at one tenant be redeemed at another tenant's token endpoint by a
+        /// client registered under the same id — a public client needs nothing but that id — and
+        /// the second tenant then signed tokens, and answered /userinfo, for a user it had never
+        /// granted access to.
+        /// </summary>
+        private static bool IssuedTo(string? tenantId, string? clientId, ArkClient client) =>
+            string.Equals(clientId, client.client_id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(tenantId, client.tenant_id, StringComparison.OrdinalIgnoreCase);
+
         // -----------------------------------------------------------------
         // Authorization codes
         // -----------------------------------------------------------------
@@ -81,7 +95,7 @@ namespace Ark.oAuth.Oidc.Protocol
             }
             if (entry.expires_at <= DateTime.UtcNow)
                 throw OAuthException.InvalidGrant("authorization code has expired.");
-            if (!string.Equals(entry.client_id, client.client_id, StringComparison.OrdinalIgnoreCase))
+            if (!IssuedTo(entry.tenant_id, entry.client_id, client))
                 throw OAuthException.InvalidGrant("authorization code was issued to a different client.");
 
             // RFC 6749 §4.1.3: redirect_uri is required at the token endpoint when it was
@@ -213,7 +227,7 @@ namespace Ark.oAuth.Oidc.Protocol
                 throw OAuthException.InvalidGrant("refresh token has been revoked.");
             if (entry.expires_at <= DateTime.UtcNow)
                 throw OAuthException.InvalidGrant("refresh token has expired.");
-            if (!string.Equals(entry.client_id, client.client_id, StringComparison.OrdinalIgnoreCase))
+            if (!IssuedTo(entry.tenant_id, entry.client_id, client))
                 throw OAuthException.InvalidGrant("refresh token was issued to a different client.");
 
             if (client.refresh_token_rotation)
@@ -247,12 +261,12 @@ namespace Ark.oAuth.Oidc.Protocol
         }
 
         /// <summary>Revokes a refresh token by value. Returns false when the token is unknown.</summary>
-        public async Task<bool> RevokeRefreshTokenAsync(string token, string? clientId = null)
+        public async Task<bool> RevokeRefreshTokenAsync(string token, ArkClient? client = null)
         {
             var hash = Hash(token);
             var entry = await _ctx.refresh_tokens.FirstOrDefaultAsync(t => t.token_hash == hash);
             if (entry == null) return false;
-            if (clientId != null && !string.Equals(entry.client_id, clientId, StringComparison.OrdinalIgnoreCase))
+            if (client != null && !IssuedTo(entry.tenant_id, entry.client_id, client))
                 return false;
             await RevokeFamilyAsync(entry.family_id);
             return true;
@@ -316,7 +330,7 @@ namespace Ark.oAuth.Oidc.Protocol
             var entry = await _ctx.device_codes.FirstOrDefaultAsync(d => d.device_code_hash == hash)
                 ?? throw OAuthException.InvalidGrant("device_code is invalid.");
 
-            if (!string.Equals(entry.client_id, client.client_id, StringComparison.OrdinalIgnoreCase))
+            if (!IssuedTo(entry.tenant_id, entry.client_id, client))
                 throw OAuthException.InvalidGrant("device_code was issued to a different client.");
             if (entry.expires_at <= DateTime.UtcNow)
                 throw new OAuthException(OAuthErrorCodes.ExpiredToken, "device_code has expired.");
@@ -407,7 +421,7 @@ namespace Ark.oAuth.Oidc.Protocol
         /// Single use is still enforced, just at the point the request actually finishes: see
         /// <see cref="MarkParConsumedAsync"/>.
         /// </summary>
-        public async Task<Dictionary<string, string>> ReadParRequestAsync(string requestUri, string clientId)
+        public async Task<Dictionary<string, string>> ReadParRequestAsync(string requestUri, ArkClient client)
         {
             var entry = await _ctx.par_requests.FirstOrDefaultAsync(p => p.request_uri == requestUri)
                 ?? throw new OAuthException(OAuthErrorCodes.InvalidRequestUri, "request_uri is unknown.");
@@ -415,7 +429,7 @@ namespace Ark.oAuth.Oidc.Protocol
                 throw new OAuthException(OAuthErrorCodes.InvalidRequestUri, "request_uri has already been used.");
             if (entry.expires_at <= DateTime.UtcNow)
                 throw new OAuthException(OAuthErrorCodes.InvalidRequestUri, "request_uri has expired.");
-            if (!string.Equals(entry.client_id, clientId, StringComparison.OrdinalIgnoreCase))
+            if (!IssuedTo(entry.tenant_id, entry.client_id, client))
                 throw new OAuthException(OAuthErrorCodes.InvalidRequestUri, "request_uri belongs to a different client.");
 
             // The browser is here, so switch from the client's delivery window to the user's
@@ -501,12 +515,27 @@ namespace Ark.oAuth.Oidc.Protocol
         // Sessions
         // -----------------------------------------------------------------
 
+        /// <summary>
+        /// The session id a session cookie stands for. One-way on purpose: the id travels in
+        /// tokens as <c>sid</c>, and nothing that holds a token may be able to work back to the
+        /// cookie that signs the browser in.
+        /// </summary>
+        public static string SessionIdFor(string cookieValue) => Hash("ark_idp_sid:" + cookieValue);
+
+        /// <summary>Resolves the browser's session cookie to a live session.</summary>
+        public Task<ArkSession?> GetSessionByCookieAsync(string? cookieValue) =>
+            string.IsNullOrEmpty(cookieValue)
+                ? Task.FromResult<ArkSession?>(null)
+                : GetSessionAsync(SessionIdFor(cookieValue!));
+
         public async Task<ArkSession> CreateSessionAsync(string tenantId, string subject, int lifetimeMinutes,
             string? browserId = null)
         {
+            var cookie = ArkCrypto.RandomToken(32);
             var session = new ArkSession
             {
-                session_id = ArkCrypto.RandomToken(16),
+                session_id = SessionIdFor(cookie),
+                cookie_value = cookie,
                 tenant_id = tenantId,
                 subject = subject,
                 browser_id = string.IsNullOrWhiteSpace(browserId) ? null : browserId,
@@ -638,42 +667,31 @@ namespace Ark.oAuth.Oidc.Protocol
         // Housekeeping
         // -----------------------------------------------------------------
 
-        /// <summary>Deletes expired protocol state. Safe to call periodically.</summary>
+        /// <summary>
+        /// Deletes expired protocol state. Run periodically by <see cref="ArkGrantCleanupService"/>.
+        ///
+        /// Set-based deletes rather than load-then-remove: this had no caller, so a database that
+        /// has been live for months holds every code, PAR payload, session and assertion it ever
+        /// stored, and the first run must not pull all of that into memory.
+        /// </summary>
         public async Task<int> CleanupExpiredAsync()
         {
             var now = DateTime.UtcNow;
             var removed = 0;
 
-            var codes = await _ctx.auth_codes.Where(c => c.expires_at <= now).ToListAsync();
-            _ctx.auth_codes.RemoveRange(codes); removed += codes.Count;
-
-            var refresh = await _ctx.refresh_tokens.Where(t => t.expires_at <= now).ToListAsync();
-            _ctx.refresh_tokens.RemoveRange(refresh); removed += refresh.Count;
-
-            var devices = await _ctx.device_codes.Where(d => d.expires_at <= now).ToListAsync();
-            _ctx.device_codes.RemoveRange(devices); removed += devices.Count;
-
-            var pars = await _ctx.par_requests.Where(p => p.expires_at <= now).ToListAsync();
-            _ctx.par_requests.RemoveRange(pars); removed += pars.Count;
-
-            var assertions = await _ctx.used_assertions.Where(a => a.expires_at <= now).ToListAsync();
-            _ctx.used_assertions.RemoveRange(assertions); removed += assertions.Count;
-
-            var sessions = await _ctx.sessions.Where(s => s.expires_at <= now).ToListAsync();
-            _ctx.sessions.RemoveRange(sessions); removed += sessions.Count;
+            removed += await _ctx.auth_codes.Where(c => c.expires_at <= now).ExecuteDeleteAsync();
+            removed += await _ctx.refresh_tokens.Where(t => t.expires_at <= now).ExecuteDeleteAsync();
+            removed += await _ctx.device_codes.Where(d => d.expires_at <= now).ExecuteDeleteAsync();
+            removed += await _ctx.par_requests.Where(p => p.expires_at <= now).ExecuteDeleteAsync();
+            removed += await _ctx.used_assertions.Where(a => a.expires_at <= now).ExecuteDeleteAsync();
 
             // The participation rows outlive nothing: once the session is gone there is nobody
             // left to notify, and leaving them behind is what turns this table into the largest
-            // one in the database.
-            var expiredSessionIds = sessions.Select(s => s.session_id).ToList();
-            if (expiredSessionIds.Count > 0)
-            {
-                var orphaned = await _ctx.session_clients
-                    .Where(sc => expiredSessionIds.Contains(sc.session_id)).ToListAsync();
-                _ctx.session_clients.RemoveRange(orphaned); removed += orphaned.Count;
-            }
-
-            if (removed > 0) await _ctx.SaveChangesAsync();
+            // one in the database. Deleted first, while the sessions they hang off still exist.
+            removed += await _ctx.session_clients
+                .Where(sc => _ctx.sessions.Any(s => s.session_id == sc.session_id && s.expires_at <= now))
+                .ExecuteDeleteAsync();
+            removed += await _ctx.sessions.Where(s => s.expires_at <= now).ExecuteDeleteAsync();
             return removed;
         }
     }

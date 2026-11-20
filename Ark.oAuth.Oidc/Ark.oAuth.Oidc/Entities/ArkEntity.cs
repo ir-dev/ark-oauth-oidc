@@ -197,11 +197,19 @@ namespace Ark.oAuth
                 ? scopes
                 : new List<string> { "openid", "profile", "email", "offline_access" };
 
-        /// <summary>A client with no secret is public and must therefore use PKCE.</summary>
+        /// <summary>
+        /// A client with no secret is public and must therefore use PKCE — except a
+        /// private_key_jwt client, which has no secret because its credential is a key pair.
+        ///
+        /// Counting that one as public let the token endpoint accept it with nothing but its
+        /// client_id (the "no credentials" path admits public clients), so its codes and refresh
+        /// tokens were redeemable without the private key it was registered to prove.
+        /// </summary>
         [NotMapped]
         public bool IsPublicClient =>
-            string.IsNullOrEmpty(client_secret_hash) ||
-            string.Equals(token_endpoint_auth_method, "none", StringComparison.OrdinalIgnoreCase);
+            string.Equals(token_endpoint_auth_method, "none", StringComparison.OrdinalIgnoreCase) ||
+            (string.IsNullOrEmpty(client_secret_hash)
+             && !string.Equals(token_endpoint_auth_method, "private_key_jwt", StringComparison.OrdinalIgnoreCase));
     }
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     [Index(nameof(email), IsUnique = true)]

@@ -42,7 +42,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             // This deliberately does not start an authorization request of its own: the verifier
             // for such a request would have nowhere to live, and the user would be bounced to the
             // admin console rather than back to this page. Asking them to sign in is honest.
-            var session = await _grants.GetSessionAsync(Request.Cookies[OidcAuthorizeController.SessionCookie]);
+            var session = await _grants.GetSessionByCookieAsync(Request.Cookies[OidcAuthorizeController.SessionCookie]);
             var operatorTenant = ServerConfig.TenantId;
             var permitted = session != null
                 && (string.Equals(session.tenant_id, tenant.tenant_id, StringComparison.OrdinalIgnoreCase)

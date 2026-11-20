@@ -23,7 +23,10 @@ public class AuthClientHelper
         {
             try
             {
-                var f_url = @$"{cc.AuthServerUrl}/api/oauth/onboard/user?ten_id={cc.TenantId}&client_id={cc.ClientId}&claim_keys={user_claims}&user_email={user_email}&user_pw={pw}&full_name={full_name}&user_type=user";
+                // Every value escaped: an email or name carrying "&user_type=service" (or a second
+                // user_pw) used to add parameters of its own, and the server reads the first of each.
+                static string E(string? v) => Uri.EscapeDataString(v ?? "");
+                var f_url = $"{cc.AuthServerUrl}/api/oauth/onboard/user?ten_id={E(cc.TenantId)}&client_id={E(cc.ClientId)}&claim_keys={E(user_claims)}&user_email={E(user_email)}&user_pw={E(pw)}&full_name={E(full_name)}&user_type=user";
                 var str = await client.GetStringAsync(f_url);
                 var jo = System.Text.Json.JsonSerializer.Deserialize<JsonObject>(str);
                 var att = jo["error"]?.GetValue<bool>();

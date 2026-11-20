@@ -242,6 +242,13 @@ namespace Ark.oAuth.Oidc.Endpoints
                 : scopeValue!.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
 
             client.client_name = Str("client_name") ?? client.client_id;
+            // A display name, shown on the sign-in and consent pages and in the operator console.
+            // Every page encodes it now, but this is the one endpoint where somebody other than
+            // the operator writes it, so markup and control characters are refused at the door.
+            if (client.client_name.Length > 120
+                || client.client_name.Any(ch => char.IsControl(ch) || ch == '<' || ch == '>'))
+                throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                    "client_name must be at most 120 characters, with no '<', '>' or control characters.");
             client.name = client.client_name;
             client.display = client.client_name;
             client.client_logo = Str("logo_uri");
@@ -380,6 +387,13 @@ namespace Ark.oAuth.Oidc.Endpoints
         private async Task EnforceUniqueClientIdAsync(ArkClient client)
         {
             if (await _da.GetClient(client.tenant_id, client.client_id) != null)
+                throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
+                    $"a client with client_id '{client.client_id}' is already registered in tenant '{client.tenant_id}'. Choose a different client_id.", 409);
+            // A client_credentials token's subject is the client_id, and an access token's
+            // audience is the tenant's, shared by every client. A client registered as "admin"
+            // therefore minted tokens that read sub=admin to any API authorising by subject — the
+            // operator's login id. Same 409 and wording as a taken id, so this names no account.
+            if (await _da.GetUser(client.client_id.ToLowerInvariant()) != null)
                 throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,
                     $"a client with client_id '{client.client_id}' is already registered in tenant '{client.tenant_id}'. Choose a different client_id.", 409);
         }

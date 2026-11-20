@@ -376,7 +376,8 @@
 						const itms = cell.getValue();
 						var contain = ark_util.textToDom(`<div class="drop-cell" style="display:flex; flex-wrap: wrap;" ondrop="handleDrop(event, ${cell.getRow().getPosition()})" ondragover="event.preventDefault()"></div>`);
 						(itms || []).forEach((t, ix) => {
-							var dd = ark_util.textToDom(`<span class="tag">${t}<button>×</button></span>`);
+							var dd = ark_util.textToDom(`<span class="tag"><span></span><button>×</button></span>`);
+							dd.querySelector('span').textContent = t; // a claim key is data, never markup
 							dd.querySelector('button').addEventListener('click', evt => {
 								itms.splice(ix, 1);
 								dd.remove();
@@ -497,7 +498,8 @@
 		  var contain = cell.getElement().querySelector('.drop-cell');
 		  if (itms.indexOf(data) < 0) {
 			  ((idx) => {
-				var dd = ark_util.textToDom(`<span class="tag">${data}<button>×</button></span>`);
+				var dd = ark_util.textToDom(`<span class="tag"><span></span><button>×</button></span>`);
+				dd.querySelector('span').textContent = data;
 				dd.querySelector('button').addEventListener('click', evt => {
 					itms.splice(idx, 1);
 					dd.remove();
@@ -779,7 +781,7 @@
 							//formatterParams - parameters set for the column
 							//onRendered - function to call when the formatter has been rendered
 							var dd = cell.getRow().getData();
-							if (dd && dd.client_id && dd.tenant_id) return `<a href='@ViewBag.base_path/oauth/${dd.tenant_id}/v1/.well-known/${dd.client_id}/openid-configuration' target='_blank'>config</a>`
+							if (dd && dd.client_id && dd.tenant_id) return `<a href='@ViewBag.base_path/oauth/${encodeURIComponent(dd.tenant_id)}/v1/.well-known/${encodeURIComponent(dd.client_id)}/openid-configuration' target='_blank'>config</a>`
 							return '';
 						}
 					});

@@ -211,3 +211,16 @@ def test_ark_json_leaves_non_json_alone():
     assert ArkJson.prettify('{"a":1}') == '{\n  "a": 1\n}'
     assert ArkJson.prettify("not json") == "not json"
     assert ArkJson.prettify(None) == ""
+
+
+def test_a_wrong_secret_is_not_answered_from_the_cache(idp):
+    """The cache is keyed on the credential: the right client_id is not enough."""
+    ArkClientCredentials.clear_cache()
+    flow = ArkClientCredentials(config_for(idp))
+    good = flow.get_token("post-app", "post-secret", ["reports.read"])
+    assert good.succeeded
+
+    wrong = flow.get_token("post-app", "WRONG-SECRET", ["reports.read"])
+    assert wrong is not good
+    assert wrong.succeeded is False
+    assert wrong.error == "invalid_client"

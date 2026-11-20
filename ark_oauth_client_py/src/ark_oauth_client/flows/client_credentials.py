@@ -21,6 +21,7 @@ client is configured for.
 
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from dataclasses import dataclass, field
@@ -109,7 +110,10 @@ class ArkClientCredentials:
         session and typically lasts an hour, so re-requesting it per call is pure overhead.
         """
         scope_value = " ".join(scopes or ())
-        key = f"{authority or self._config.resolve_authority()}|{client_id}|{scope_value}"
+        # Keyed on the credential too (hashed), as in the Node port: otherwise a wrong secret
+        # was answered from the cache with a token the provider would have refused it.
+        credential = hashlib.sha256((client_secret or "").encode("utf-8")).hexdigest()
+        key = f"{authority or self._config.resolve_authority()}|{client_id}|{credential}|{scope_value}"
 
         with self._cache_lock:
             cached = self._cache.get(key)

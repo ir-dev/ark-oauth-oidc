@@ -445,3 +445,13 @@ def test_token_set_expiry_is_absolute():
 
     revived = TokenSet.from_dict(tokens.to_dict())
     assert revived.expires_at == tokens.expires_at
+
+
+def test_client_credentials_cache_is_keyed_on_the_secret(idp):
+    client = confidential_client(idp)
+    first = client.client_credentials(scopes=["reports.read"])
+    assert first.access_token
+
+    with pytest.raises(ArkOAuthError) as caught:
+        client.client_credentials(scopes=["reports.read"], client_secret="WRONG-SECRET")
+    assert caught.value.error == "invalid_client"

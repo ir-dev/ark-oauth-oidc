@@ -300,9 +300,13 @@ class ArkFlask:
             )
 
         if self.cookie_secure is None:
-            # Plain http is only ever local development, and a Secure cookie is simply not stored
-            # there — which looks exactly like a broken sign-in loop.
-            self.cookie_secure = bool(app.config.get("SESSION_COOKIE_SECURE", True))
+            # Secure unless the caller passes cookie_secure=False, as the Node and .NET ports do
+            # and as the README always said. This used to read SESSION_COOKIE_SECURE with a True
+            # fallback, but Flask pre-populates that key as False, so the fallback never applied
+            # and the session cookie went out on plain http by default. Browsers store a Secure
+            # cookie for http://localhost, so local development is unaffected; pass
+            # cookie_secure=False only for a plain-http host that is not localhost.
+            self.cookie_secure = True
 
         app.extensions = getattr(app, "extensions", {})
         app.extensions[_EXTENSION_KEY] = self

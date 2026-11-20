@@ -600,3 +600,19 @@ def test_switch_user_completes_a_sign_in_as_the_new_account(idp):
         assert callback.status_code == 302, callback.data
         assert callback.headers["Location"] == "/billing"
         assert client.get("/").data == b"signed in"
+
+
+def test_the_session_cookie_is_secure_by_default(idp):
+    """Flask pre-populates SESSION_COOKIE_SECURE=False; that must not turn the default off."""
+    app = Flask(__name__)
+    app.secret_key = SECRET
+    app.config["TESTING"] = True
+    auth = add_ark_oidc_client(
+        app, {"authority": idp.issuer, "client_id": "web-app", "require_https_metadata": False}, secret=SECRET
+    )
+    with app.test_client() as client:
+        response = client.get("/login")
+
+    cookies = [c for c in response.headers.getlist("Set-Cookie") if c.startswith(auth.cookie_name + "=")]
+    assert cookies, "the login step writes the session cookie"
+    assert all("Secure" in c for c in cookies)

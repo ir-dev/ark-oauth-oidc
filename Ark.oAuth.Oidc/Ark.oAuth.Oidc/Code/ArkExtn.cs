@@ -733,7 +733,17 @@ namespace Ark.oAuth.Oidc
 
             // standard OAuth 2.1 / OIDC protocol services
             services.AddMemoryCache();
-            services.AddHttpClient("ark-oidc", c => c.Timeout = TimeSpan.FromSeconds(10));
+            // Server-side fetches of client-registered URLs (jwks_uri) and back-channel logout
+            // POSTs. No redirects: a 3xx counts as a failure, as ArkBackChannelLogout already
+            // assumed, and a 307/308 can no longer re-POST a logout token to wherever a client's
+            // endpoint points. And a ceiling on what is read: a JWKS is a few KB.
+            services.AddHttpClient("ark-oidc", c =>
+                {
+                    c.Timeout = TimeSpan.FromSeconds(10);
+                    c.MaxResponseContentBufferSize = 256 * 1024;
+                })
+                .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+            services.AddHostedService<Protocol.ArkGrantCleanupService>();
             services.AddScoped<Protocol.ArkKeyService>();
             services.AddScoped<Protocol.ArkClaimsService>();
             services.AddScoped<Protocol.ArkTokenService>();

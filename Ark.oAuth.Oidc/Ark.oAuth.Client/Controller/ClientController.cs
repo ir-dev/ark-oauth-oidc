@@ -19,6 +19,21 @@ namespace Ark.oAuth.Client
         {
             return _config.GetSection("ark_oauth_client").Get<ArkAuthConfig>() ?? throw new ApplicationException("config missing");
         }
+
+        /// <summary>
+        /// The routes below are the v1 flow. They used to answer in every MVC host that referenced
+        /// this package — it is an application part whether or not the legacy flow is in use —
+        /// so a standard-flow application served an anonymous callback that printed stack traces
+        /// and, behind a bare [Authorize], a /config route that returned this configuration
+        /// section, client secret included, to any signed-in user. They now exist only where
+        /// `ark_oauth_client:UseLegacyFlow` is set.
+        /// </summary>
+        public override void OnActionExecuting(Microsoft.AspNetCore.Mvc.Filters.ActionExecutingContext context)
+        {
+            var conf = _config.GetSection("ark_oauth_client").Get<ArkAuthConfig>();
+            if (conf?.UseLegacyFlow != true) context.Result = NotFound();
+            else base.OnActionExecuting(context);
+        }
         [Route("{tenant_id}/v1/client/{client_id}/callback")]
         public async Task<ActionResult> Callback([FromRoute] string tenant_id, [FromRoute] string client_id, [FromQuery] string code, [FromQuery] string state)
         {
@@ -53,13 +68,17 @@ namespace Ark.oAuth.Client
                 }
                 catch (Exception ex)
                 {
-                    Response.StoreCookie($"ark_oauth_ui_claims_{client_id}_error", ex.ToString(), ccc.ExpireMins, ccc.Domain);
+                    // Logged, not written into a cookie: the exception text is server internals.
+                    Console.WriteLine(ex);
                 }
                 ViewBag.redirect = string.Format(ccc.RedirectRelative, client_id);
             }
             catch (Exception exp)
             {
-                ViewBag.error = exp.ToString();
+                // The page used to print exp.ToString() — a stack trace with source paths, to
+                // anyone, in Production too.
+                Console.WriteLine(exp);
+                ViewBag.error = "Sign-in could not be completed. Please try again.";
             }
             return View();
         }
@@ -94,13 +113,9 @@ namespace Ark.oAuth.Client
                 msg = "user_info_error"
             };
         }
-        [Authorize]
-        [Route("{tenant_id}/v1/client/{client_id}/config")]
-        public dynamic Config([FromQuery] string token)
-        {
-            var cc = LoadConfig();
-            return cc;
-        }
+        // The /config route is gone: it returned this whole configuration section, ClientSecret
+        // included, to any signed-in user — every customer of a customer-facing app — and nothing
+        // in the v1 flow ever needed a browser to have it.
         [Authorize]
         [Route("{tenant_id}/v1/client/{client_id}/logoff")]
         public dynamic Logoff()

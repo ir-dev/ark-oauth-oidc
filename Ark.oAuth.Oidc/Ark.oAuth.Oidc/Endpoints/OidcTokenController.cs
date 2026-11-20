@@ -177,6 +177,18 @@ namespace Ark.oAuth.Oidc.Endpoints
                 throw OAuthException.InvalidGrant("the account this refresh token belongs to has been deactivated.");
             }
 
+            // ...and so must the user's access to this client. The authorization and device
+            // endpoints refuse a user with no access mapping, but removing the mapping revoked
+            // nothing: the refresh token kept minting access tokens (with no ark_claims) until the
+            // session ended, so taking someone off an application did not take effect for hours.
+            // Every refresh token is issued to a user who held the mapping at the time, so this
+            // only ever refuses one whose access has since been withdrawn.
+            if (!await _claims.HasClientAccessAsync(entry.subject, tenant.tenant_id, client))
+            {
+                await _grants.RevokeFamilyAsync(entry.family_id);
+                throw OAuthException.InvalidGrant("the account this refresh token belongs to no longer has access to this client.");
+            }
+
             var ctx = new TokenRequestContext
             {
                 Tenant = tenant,

@@ -97,8 +97,13 @@ namespace Ark.oAuth.Oidc.Endpoints
                 if (hint != "access_token")
                 {
                     var refresh = await _grants.FindRefreshTokenAsync(token);
+                    // Refresh tokens are looked up server-wide, so the tenant is checked here: a
+                    // token issued at another tenant is not this endpoint's to describe, even to a
+                    // client of the same id or one listed in IntrospectionClients.
                     if (refresh != null && !refresh.revoked && refresh.consumed_at == null
-                        && refresh.expires_at > DateTime.UtcNow && MayInspect(refresh.client_id))
+                        && refresh.expires_at > DateTime.UtcNow
+                        && string.Equals(refresh.tenant_id, tenant.tenant_id, StringComparison.OrdinalIgnoreCase)
+                        && MayInspect(refresh.client_id))
                     {
                         return Ok(new Dictionary<string, object>
                         {
@@ -152,7 +157,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                     throw OAuthException.InvalidRequest("token is required.");
 
                 // Revoking a refresh token kills its whole rotation family.
-                var revoked = await _grants.RevokeRefreshTokenAsync(token, auth.Client.client_id);
+                var revoked = await _grants.RevokeRefreshTokenAsync(token, auth.Client);
 
                 if (!revoked)
                 {
@@ -192,6 +197,7 @@ namespace Ark.oAuth.Oidc.Endpoints
         public async Task<IActionResult> EndSession([FromRoute] string tenant_id)
         {
             NoStore();
+            FrameAncestorsSelf(); // the logout confirmation is a button too
             var tenant = await ResolveTenantAsync(tenant_id);
             var opt = Options;
 
@@ -208,6 +214,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             // client but proved nothing — and a hint that proves nothing cannot stand in for the
             // user's confirmation below.
             var hintValid = false;
+            JsonWebToken? hintToken = null;
             if (!string.IsNullOrEmpty(idTokenHint))
             {
                 var hint = await _tokens.ValidateIdTokenHintAsync(idTokenHint!, tenant, Endpoints(tenant.tenant_id).Issuer,
@@ -215,9 +222,14 @@ namespace Ark.oAuth.Oidc.Endpoints
                 if (hint.IsValid)
                 {
                     hintValid = true;
+                    hintToken = hint.SecurityToken as JsonWebToken;
                     // Identify the client from the hint when one was not named explicitly.
                     if (string.IsNullOrEmpty(clientId))
-                        clientId = (hint.SecurityToken as JsonWebToken)?.Audiences.FirstOrDefault();
+                        clientId = hintToken?.Audiences.FirstOrDefault();
+                    // ...and when one was, it has to be a client the hint was issued to: the
+                    // post_logout_redirect_uri below is checked against that client's list.
+                    else if (hintToken != null && !hintToken.Audiences.Contains(clientId, StringComparer.OrdinalIgnoreCase))
+                        hintValid = false;
                 }
             }
 
@@ -228,12 +240,16 @@ namespace Ark.oAuth.Oidc.Endpoints
             // unreachable from the browser while remaining perfectly valid at the token endpoint.
             // On a shared machine that is two different people, and ending only the newest is a
             // sign-out that leaves the previous user signed in everywhere they had been.
-            var sessionId = Request.Cookies[OidcAuthorizeController.SessionCookie];
+            var sessionCookie = Request.Cookies[OidcAuthorizeController.SessionCookie];
+            var sessionId = string.IsNullOrEmpty(sessionCookie) ? null : ArkGrantStore.SessionIdFor(sessionCookie!);
             var browserId = Request.Cookies[OidcAuthorizeController.BrowserCookie];
 
             var targets = new List<string>();
+            var targetSubjects = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!string.IsNullOrEmpty(sessionId)) targets.Add(sessionId!);
-            var live = await _grants.GetSessionAsync(sessionId) != null;
+            var current = await _grants.GetSessionAsync(sessionId);
+            var live = current != null;
+            if (current != null) targetSubjects.Add(current.subject);
 
             if (opt.SignOutAllBrowserSessions && !string.IsNullOrEmpty(browserId))
             {
@@ -243,8 +259,21 @@ namespace Ark.oAuth.Oidc.Endpoints
                 foreach (var session in await _grants.GetBrowserSessionsAsync(browserId, scope))
                 {
                     targets.Add(session.session_id);
+                    targetSubjects.Add(session.subject);
                     live = true;
                 }
+            }
+
+            // A hint stands in for the user's confirmation only when it is about the sessions
+            // being ended. Any ID token this tenant signed used to do — so a page could send the
+            // victim's browser here with the attacker's own hint and sign them out of every
+            // application, in every tenant, with no confirmation shown.
+            if (hintValid && live && hintToken != null)
+            {
+                var hintSid = hintToken.TryGetPayloadValue<string>("sid", out var s) ? s : null;
+                var aboutThese = (!string.IsNullOrEmpty(hintSid) && targets.Contains(hintSid!))
+                                 || (!string.IsNullOrEmpty(hintToken.Subject) && targetSubjects.Contains(hintToken.Subject));
+                if (!aboutThese) hintValid = false;
             }
 
             // RP-Initiated Logout 1.0 §2: without a valid id_token_hint the request could have come

@@ -171,7 +171,27 @@ namespace Ark.oAuth.Oidc.Controllers
                         throw new ApplicationException($"Too many failed attempts. Try again in {opt.LockoutMinutes} minutes.");
                 }
 
-                var usr = await _da.ValidateUserCreds(Username, Password, client_id, tenant_id);
+                ArkUser usr;
+                try
+                {
+                    usr = await _da.ValidateUserCreds(Username, Password, client_id, tenant_id);
+                }
+                catch (ArkAccountInactiveException ex)
+                {
+                    // Reached only after the password verified, as on the standard page.
+                    throw new ApplicationException(ex.FriendlyMessage);
+                }
+                catch (Exception ex)
+                {
+                    // ValidateUserCreds says which check failed ("invalid creds" for no such
+                    // account, "invalid creds client." for one without access, "invalid creds."
+                    // for a wrong password), and this page used to print that verbatim — a
+                    // list of which accounts exist for anyone who cared to ask. One message for
+                    // all of them, as the standard sign-in page already does; the reason goes
+                    // to the log instead.
+                    _da.Log("signin_failed", tenant_id, "v1 sign-in failed", $"user: {Username}, reason: {ex.Message}", "warn");
+                    throw new ApplicationException("That username and password combination was not recognised.");
+                }
 
                 // Delegate to the standard grant store. The original code here minted the access
                 // token up front and stored it against a bare GUID, so the "code" was really a
