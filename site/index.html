@@ -413,6 +413,28 @@
   .secband li b { color: #fff; }
   .secband code { background: rgba(255, 255, 255, .1) !important; color: #fff !important; }
 
+  /* ---------- security reviews ---------- */
+  .reviews { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .review { display: grid; gap: 16px; padding: 20px; align-items: center; }
+  @media (min-width: 820px) { .review { grid-template-columns: auto 1fr auto; gap: 24px; padding: 22px 26px; } }
+  .review-date { display: grid; place-items: center; width: 84px; height: 84px; border-radius: 12px; background: var(--brand-soft); color: var(--ink); text-align: center; line-height: 1.1; }
+  .review-date .d { font: 800 1.9rem/1 "Plus Jakarta Sans", Inter, sans-serif; }
+  .review-date .m { font-size: .74rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .review-body h3 { font-size: 1.08rem; }
+  .review-body p { color: var(--muted); margin: 6px 0 0; font-size: .95rem; }
+  .review-stats { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .review-stats li { font-size: .74rem; font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .review-stats .crit { color: #b4232c; border-color: color-mix(in srgb, #b4232c 45%, var(--line)); }
+  :root[data-theme="dark"] .review-stats .crit { color: #ff7a82; border-color: color-mix(in srgb, #ff7a82 45%, var(--line)); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .review-stats .crit { color: #ff7a82; border-color: color-mix(in srgb, #ff7a82 45%, var(--line)); } }
+  .review-stats .high { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+  .review-stats .fixed { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+  .btn-report { display: inline-flex; align-items: center; gap: 8px; justify-self: start; padding: 10px 16px; border-radius: 10px; background: var(--brand); color: #fff; font-weight: 600; font-size: .92rem; white-space: nowrap; }
+  .btn-report:hover { text-decoration: none; background: var(--brand-strong); }
+  :root[data-theme="dark"] .btn-report { color: #06102a; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn-report { color: #06102a; } }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
   /* standards */
   .specs { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
   @media (min-width: 720px) { .specs { grid-template-columns: repeat(2, 1fr); } }
@@ -497,6 +519,7 @@
       <a class="hide-sm" href="#quickstart">Quickstart</a>
       <a class="hide-sm" href="#agents">AI agents</a>
       <a class="hide-sm" href="#try">Try it</a>
+      <a class="hide-sm" href="#reviews">Security</a>
       <a href="https://github.com/ir-dev/ark-oauth-oidc">GitHub</a>
       <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle colour theme">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -1071,6 +1094,34 @@ app.get(<span class="s">'/billing'</span>, auth.requireClaims(<span class="s">'b
         <li><b>Exact redirect matching</b>, and no open redirect before the URI is validated.</li>
         <li><b>No account enumeration.</b> One message for every sign-in failure, constant-time client authentication, and lockout.</li>
       </ul>
+    </div>
+  </section>
+
+  <!-- ===== Security reviews =====
+       Newest first. Each report is a static page under security/, named by its date. -->
+  <section id="reviews">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">Security reviews</div>
+        <h2>Reviewed in the open.</h2>
+        <p>Each review is published with what was found, what was fixed and what operators need to do. Every report opens in a new tab.</p>
+      </div>
+      <ol class="reviews">
+        <li class="card review">
+          <time class="review-date" datetime="2026-11-20"><span><span class="d">20</span><br><span class="m">Nov 2026</span></span></time>
+          <div class="review-body">
+            <h3>Full review: the identity provider and all four client libraries</h3>
+            <p>Prompted by customer-facing use. Fixes include single sign-on session takeover through a token's <code>sid</code>, cross-tenant token redemption, a password reset reachable from a link, console XSS and a client-secret leak in the .NET client. The report also gives upgrade notes and mitigations for the items still open.</p>
+            <ul class="review-stats" aria-label="Summary">
+              <li class="crit">1 critical</li>
+              <li class="high">7 high</li>
+              <li class="fixed">23 fixed</li>
+              <li>9 open, with mitigations</li>
+            </ul>
+          </div>
+          <a class="btn-report" href="security/2026-11-20-security-review.html" target="_blank" rel="noopener">Read the report <span aria-hidden="true">↗</span><span class="visually-hidden">(opens in a new tab)</span></a>
+        </li>
+      </ol>
     </div>
   </section>
 

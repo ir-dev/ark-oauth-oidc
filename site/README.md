@@ -12,6 +12,7 @@ release needs no edit.
 | File | What it is |
 |---|---|
 | `index.html` | The page: setup wizard, onboarding, governance, quickstart, AI agents, standards, PKCE builder, brand marks |
+| `security/YYYY-MM-DD-security-review.html` | One self-contained page per security review, linked (newest first) from the **Security reviews** section of `index.html`, where each opens in a new tab. A new review is a new file plus one `<li class="card review">` entry. Advisory level only: what was wrong, its impact, the fix and what operators must do. No reproduction steps, since this site is public. Publish only once the fixes are released and deployed |
 | `llms.txt` | The machine-readable digest for coding agents ([llmstxt.org](https://llmstxt.org) format). Update it with the README's §4 context block |
 | `assets/img/` | Web-sized copies of the brand images in `Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host/wwwroot/img`. The root `README.md` uses them too |
 | `assets/favicon.png`, `assets/apple-touch-icon.png` | Made from `assets/img/ark-shield-512.png` |

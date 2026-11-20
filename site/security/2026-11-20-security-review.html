@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security review · 20 Nov 2026 · ARK Identity</title>
+<meta name="description" content="Security review of the ARK Identity provider and its .NET, Python, Node and browser client libraries, 20 November 2026: findings, fixes, upgrade notes and open items.">
+<meta name="theme-color" content="#0b1533">
+<meta name="robots" content="index, follow">
+<link rel="icon" type="image/png" href="../assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand: #2450d8; --brand-soft: #e9eefc; --ink: #0b1533; --text: #24304d; --muted: #5d6883;
+    --line: #e1e6f0; --bg: #f5f7fb; --surface: #ffffff;
+    --crit: #b4232c; --high: #c2410c; --med: #a16207; --low: #2f6f8f; --ok: #12805a; --open: #6b4fbb;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(11, 21, 51, .05), 0 8px 28px rgba(11, 21, 51, .07);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --brand: #7fa2ff; --brand-soft: #13214a; --ink: #eef3ff; --text: #ccd5ea; --muted: #8e9ab7;
+      --line: #1d2a4b; --bg: #060c1d; --surface: #0d1630;
+      --crit: #ff7a82; --high: #ff9a5c; --med: #f2c14e; --low: #6cc4e8; --ok: #4cc38a; --open: #b9a2ff;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --brand: #7fa2ff; --brand-soft: #13214a; --ink: #eef3ff; --text: #ccd5ea; --muted: #8e9ab7;
+    --line: #1d2a4b; --bg: #060c1d; --surface: #0d1630;
+    --crit: #ff7a82; --high: #ff9a5c; --med: #f2c14e; --low: #6cc4e8; --ok: #4cc38a; --open: #b9a2ff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: .86em; background: var(--brand-soft); color: var(--ink); padding: .1em .38em; border-radius: 6px; overflow-wrap: anywhere; }
+  h1, h2, h3 { color: var(--ink); line-height: 1.2; margin: 0; }
+  h1, h2 { font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif; letter-spacing: -.02em; }
+  h1 { font-size: clamp(1.9rem, 4.6vw, 2.9rem); font-weight: 800; color: #fff; }
+  h2 { font-size: clamp(1.4rem, 3vw, 1.9rem); font-weight: 800; }
+  h3 { font-size: 1.02rem; font-weight: 600; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 720px) { .wrap { padding: 0 32px; } }
+
+  .nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  .nav .wrap { display: flex; align-items: center; gap: 16px; height: 58px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 700; font-family: "Plus Jakarta Sans", Inter, sans-serif; }
+  .brand:hover { text-decoration: none; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .nav-links { margin-left: auto; display: flex; align-items: center; gap: 18px; font-size: .9rem; }
+  .nav-links a { color: var(--muted); font-weight: 500; }
+  .nav-links a:hover { color: var(--ink); text-decoration: none; }
+  .hide-sm { display: none; }
+  @media (min-width: 760px) { .hide-sm { display: inline; } }
+  .theme-btn { border: 1px solid var(--line); background: var(--surface); color: var(--muted); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; display: grid; place-items: center; }
+  .theme-btn:hover { color: var(--ink); }
+
+  .hero { background: radial-gradient(800px 420px at 90% -20%, rgba(36, 80, 216, .55), transparent 62%), radial-gradient(600px 360px at -10% 120%, rgba(180, 35, 44, .35), transparent 62%), #050b1d; color: #c3cde6; }
+  .hero .wrap { padding-top: 48px; padding-bottom: 52px; }
+  .kicker { font-size: .78rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8fb0ff; margin-bottom: 12px; }
+  .hero .lead { font-size: 1.05rem; max-width: 760px; margin: 16px 0 0; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 22px; font-size: .88rem; color: #aab6d3; }
+  .meta b { color: #fff; font-weight: 600; }
+
+  .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+  @media (min-width: 720px) { .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+  .tile { border-radius: 12px; padding: 14px 16px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .12); }
+  .tile .n { font: 800 1.9rem/1 "Plus Jakarta Sans", Inter, sans-serif; color: #fff; }
+  .tile .l { font-size: .8rem; color: #aab6d3; margin-top: 6px; }
+  .tile.crit { border-color: rgba(255, 122, 130, .5); } .tile.high { border-color: rgba(255, 154, 92, .45); }
+  .tile.open { border-color: rgba(185, 162, 255, .45); }
+
+  main section { padding: 44px 0 8px; }
+  .section-head p { color: var(--muted); margin: 10px 0 0; max-width: 760px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .callout { padding: 18px 20px; border-left: 4px solid var(--brand); margin-top: 18px; }
+  .callout h3 { margin-bottom: 8px; }
+  .callout ol, .callout ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+
+  .grid2 { display: grid; gap: 14px; margin-top: 20px; }
+  @media (min-width: 820px) { .grid2 { grid-template-columns: 1fr 1fr; } }
+  .grid2 .card { padding: 18px 20px; }
+  .grid2 ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: .93rem; }
+
+  .tablewrap { overflow-x: auto; margin-top: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; min-width: 640px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .76rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td.id { font-family: "JetBrains Mono", monospace; font-size: .8rem; color: var(--muted); white-space: nowrap; }
+  td a { color: var(--ink); }
+
+  .sev, .st { display: inline-block; font-size: .72rem; font-weight: 700; letter-spacing: .03em; padding: 2px 9px; border-radius: 999px; white-space: nowrap; border: 1px solid currentColor; }
+  .sev.crit { color: var(--crit); } .sev.high { color: var(--high); } .sev.med { color: var(--med); } .sev.low { color: var(--low); }
+  .st.fixed { color: var(--ok); } .st.open { color: var(--open); }
+
+  .finding { padding: 18px 20px; margin-top: 14px; scroll-margin-top: 72px; }
+  .finding header { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-bottom: 8px; }
+  .finding header .fid { font-family: "JetBrains Mono", monospace; font-size: .78rem; color: var(--muted); }
+  .finding dl { margin: 10px 0 0; display: grid; gap: 8px; }
+  .finding dt { font-size: .74rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+  .finding dd { margin: 2px 0 0; font-size: .95rem; }
+  @media (min-width: 760px) { .finding dl { grid-template-columns: 150px 1fr; } .finding dd { margin: 0; } }
+
+  footer { margin-top: 56px; border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--muted); font-size: .88rem; }
+</style>
+<script>
+  (function () {
+    try { var t = localStorage.getItem('ark-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="../index.html#reviews" aria-label="ARK Identity Server, back to the home page">
+      <img src="../assets/img/ark-shield-64.png" alt="" width="30" height="30">
+      ARK Identity
+    </a>
+    <nav class="nav-links" aria-label="Report sections">
+      <a class="hide-sm" href="#upgrade">Upgrade notes</a>
+      <a class="hide-sm" href="#findings">Findings</a>
+      <a class="hide-sm" href="#open">Open items</a>
+      <a href="../index.html#reviews">All reviews</a>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle colour theme">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="kicker">Security review</div>
+    <h1>Security review — 20 November 2026</h1>
+    <p class="lead">A full review of the ARK identity provider and its four client libraries, prompted by
+      applications now using ARK for customer-facing sign-in. It combined automated scanning, a manual code review
+      of every endpoint and library, and live attack tests against running providers. Every high-impact finding
+      was confirmed against a running provider, fixed, and tested again. The rest are listed with mitigations.</p>
+    <div class="meta">
+      <span>Date <b><time datetime="2026-11-20">20 Nov 2026</time></b></span>
+      <span>Affects <b>v2.1.8 and earlier</b></span>
+      <span>Fixed in <b>the next release</b></span>
+      <span>Scope <b>IdP · .NET · Python · Node · browser clients</b></span>
+    </div>
+    <div class="tiles" role="list" aria-label="Summary">
+      <div class="tile crit" role="listitem"><div class="n">1</div><div class="l">Critical, fixed</div></div>
+      <div class="tile high" role="listitem"><div class="n">7</div><div class="l">High, fixed</div></div>
+      <div class="tile" role="listitem"><div class="n">10</div><div class="l">Medium, fixed</div></div>
+      <div class="tile" role="listitem"><div class="n">5</div><div class="l">Low, fixed</div></div>
+      <div class="tile open" role="listitem"><div class="n">9</div><div class="l">Open, with mitigations</div></div>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- ===== Upgrade notes ===== -->
+  <section id="upgrade">
+    <div class="section-head">
+      <h2>What operators need to do</h2>
+      <p>Upgrade every ARK identity provider and every application that uses an ARK client library to the
+        release that follows v2.1.8. The fixes change some behaviour, and these are the changes you will notice.</p>
+    </div>
+    <div class="card callout">
+      <h3>On the identity provider</h3>
+      <ol>
+        <li><b>Everyone signs in once more after the upgrade.</b> The single sign-on cookie has a new format, so
+          sessions from before the upgrade are not recognised.</li>
+        <li><b>Set a real <code>DefaultPw</code></b>, or use <code>UserPasswordMode=email_based</code>. Creating an account
+          with the default password unset, or still set to a <code>&lt;&lt;placeholder&gt;&gt;</code> value, now fails with
+          <code>409 default_password_unset</code>.</li>
+        <li><b>The legacy <code>onboard/*</code> routes accept only the machine client's bearer token</b> and never change an
+          existing account. Use the provisioning API (<code>v1/provision/*</code>) for new integrations.</li>
+        <li><b>Set <code>BaseUrl</code></b> and restrict <code>AllowedHosts</code> on every production host. Behind a TLS-terminating
+          proxy, enable forwarded headers (on App Service: <code>ASPNETCORE_FORWARDEDHEADERS_ENABLED=true</code>).</li>
+        <li><b>Rate limiting:</b> until the provider has its own, put the sign-in, token, PAR, device and registration
+          endpoints behind rate limiting at your edge (see <a href="#ark-o2">O2</a>).</li>
+      </ol>
+    </div>
+    <div class="card callout">
+      <h3>In applications</h3>
+      <ul>
+        <li><b>.NET APIs</b> using <code>AddArkOidcApi</code> accept only access tokens (<code>typ: at+jwt</code>). If you use a
+          provider that does not mark its access tokens this way, set <code>RequireAccessTokenTypeHeader=false</code>.</li>
+        <li><b>.NET apps</b> no longer serve the legacy <code>/oauth/{tenant}/v1/client/…</code> routes unless
+          <code>ark_oauth_client:UseLegacyFlow</code> is set. The legacy <code>/config</code> route is removed entirely.</li>
+        <li><b>Python / Flask</b> session cookies are now <code>Secure</code> by default, as the documentation already said. Pass
+          <code>cookie_secure=False</code> only for a plain-http host other than localhost.</li>
+        <li><b>APIs should authorise by Ark claims and check the caller's <code>client_id</code></b>, not only that the token is
+          valid (see <a href="#ark-o5">O5</a>).</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== Method ===== -->
+  <section id="method">
+    <div class="section-head">
+      <h2>How the review was done</h2>
+      <p>Scanners find the known-bad patterns. Most of what mattered here, though, is logic that scanners
+        cannot see. Every issue below was found by reading the code, and every high-severity one was then
+        confirmed against a running provider.</p>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Automated scanning</h3>
+        <ul>
+          <li>Dependencies: <code>dotnet list package --vulnerable</code>, <code>npm audit</code>, <code>pip-audit</code>. No known vulnerabilities.</li>
+          <li>Static analysis: Semgrep (586 rules), Bandit, .NET security analyzers. No actionable findings, before or after the fixes.</li>
+          <li>Secrets: gitleaks over the full history and the working tree. Nothing beyond test fixtures and previously documented history.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Manual review and live tests</h3>
+        <ul>
+          <li>Code review of the authorization, token, PAR, device, registration, introspection, revocation, logout and userinfo endpoints; the management API, admin console and setup wizard; and all four client libraries.</li>
+          <li>Live attacks against three scratch providers (two configured hosts and one zero-config QuickStart), all running in Production mode.</li>
+          <li>After the fixes: 46 live checks pass, covering both refused attacks and unchanged legitimate flows. The client suites pass too: Python 132, Node 135, browser 115.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Findings table ===== -->
+  <section id="findings">
+    <div class="section-head">
+      <h2>Findings</h2>
+      <p>Ordered by severity. Each ID links to its details below.</p>
+    </div>
+    <div class="card tablewrap">
+      <table>
+        <thead><tr><th>ID</th><th>Severity</th><th>Area</th><th>Finding</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="id">ARK-01</td><td><span class="sev crit">Critical</span></td><td>IdP sessions</td><td><a href="#ark-01">Single sign-on session takeover from any issued token</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-02</td><td><span class="sev high">High</span></td><td>Token endpoint</td><td><a href="#ark-02">Codes and refresh tokens redeemable at another tenant</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-03</td><td><span class="sev high">High</span></td><td>Management API</td><td><a href="#ark-03">Legacy onboarding routes could reset any password, via a link or a sign-up form</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-04</td><td><span class="sev high">High</span></td><td>Admin console</td><td><a href="#ark-04">Stored cross-site scripting through a registered client name</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-05</td><td><span class="sev high">High</span></td><td>.NET client</td><td><a href="#ark-05">Legacy controller exposed the client secret and stack traces</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-06</td><td><span class="sev high">High</span></td><td>Client authentication</td><td><a href="#ark-06"><code>private_key_jwt</code> clients accepted without their key</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-07</td><td><span class="sev high">High</span></td><td>Accounts</td><td><a href="#ark-07">New accounts created on a published placeholder password</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-08</td><td><span class="sev high">High</span></td><td>.NET client</td><td><a href="#ark-08">API validation accepted ID tokens as access tokens</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-09</td><td><span class="sev med">Medium</span></td><td>Token endpoint</td><td><a href="#ark-09">Refresh tokens kept working after a user's access was removed</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-10</td><td><span class="sev med">Medium</span></td><td>Admin console</td><td><a href="#ark-10">A removed operator kept console rights for the life of the session</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-11</td><td><span class="sev med">Medium</span></td><td>Sign-in</td><td><a href="#ark-11">Account enumeration through sign-in messages and lockout</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-12</td><td><span class="sev med">Medium</span></td><td>Logout</td><td><a href="#ark-12">Logout confirmation bypass (forced sign-out)</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-13</td><td><span class="sev med">Medium</span></td><td>Management API</td><td><a href="#ark-13">Tenant update returned the private signing key</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-14</td><td><span class="sev med">Medium</span></td><td>.NET · Python clients</td><td><a href="#ark-14">Client-credentials token cache ignored the secret</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-15</td><td><span class="sev med">Medium</span></td><td>Python client</td><td><a href="#ark-15">Flask session cookie not <code>Secure</code> by default</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-16</td><td><span class="sev med">Medium</span></td><td>PAR · storage</td><td><a href="#ark-16">Unbounded pushed requests; expired state never purged</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-17</td><td><span class="sev med">Medium</span></td><td>.NET client</td><td><a href="#ark-17">User identity read from browser-supplied legacy cookies</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-18</td><td><span class="sev med">Medium</span></td><td>Setup wizard</td><td><a href="#ark-18">Setup code skipped for proxied or rebound requests</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">ARK-19</td><td><span class="sev low">Low</span></td><td>Hardening</td><td><a href="#ark-19">Five smaller hardening fixes</a></td><td><span class="st fixed">Fixed</span></td></tr>
+          <tr><td class="id">O1</td><td><span class="sev high">High</span></td><td>Deployment</td><td><a href="#ark-o1">Provisioned accounts share an initial password</a></td><td><span class="st open">Open</span></td></tr>
+          <tr><td class="id">O2</td><td><span class="sev med">Medium</span></td><td>Availability</td><td><a href="#ark-o2">No built-in rate limiting</a></td><td><span class="st open">Open</span></td></tr>
+          <tr><td class="id">O3</td><td><span class="sev med">Medium</span></td><td>Accounts</td><td><a href="#ark-o3">No server-side password policy</a></td><td><span class="st open">Open</span></td></tr>
+          <tr><td class="id">O4</td><td><span class="sev med">Medium</span></td><td>Client authentication</td><td><a href="#ark-o4">Confidential clients with no secret behave as public</a></td><td><span class="st open">Open</span></td></tr>
+          <tr><td class="id">O5</td><td><span class="sev med">Medium</span></td><td>Tokens</td><td><a href="#ark-o5">One access-token audience per tenant</a></td><td><span class="st open">Open</span></td></tr>
+          <tr><td class="id">O6–O9</td><td><span class="sev low">Low</span></td><td>Various</td><td><a href="#ark-o6">Host header, server-side fetches, console CSP, client-library defaults</a></td><td><span class="st open">Open</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===== Fixed findings ===== -->
+  <section id="fixed">
+    <div class="section-head">
+      <h2>Fixed findings</h2>
+      <p>Described at the level an operator needs. Reproduction details are left out on purpose.</p>
+    </div>
+
+    <article class="card finding" id="ark-01">
+      <header><span class="fid">ARK-01</span><span class="sev crit">Critical</span><span class="st fixed">Fixed</span><h3>Single sign-on session takeover from any issued token</h3></header>
+      <dl>
+        <dt>Issue</dt><dd>The browser's single sign-on cookie held the same value as the <code>sid</code> claim in every ID token, access token, introspection response and logout token.</dd>
+        <dt>Impact</dt><dd>Anyone who saw one of a user's tokens could use it to sign in as that user at every application in the tenant, without a password. That includes any relying party, any API that receives access tokens, a device the user approved, or a log. In the operator tenant, that extends to the admin console.</dd>
+        <dt>Fix</dt><dd>The cookie is now a random secret. The session identifier carried in tokens is its one-way hash, so holding a token no longer lets anyone produce the cookie. Sessions created before the upgrade are not recognised.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-02">
+      <header><span class="fid">ARK-02</span><span class="sev high">High</span><span class="st fixed">Fixed</span><h3>Codes and refresh tokens redeemable at another tenant</h3></header>
+      <dl>
+        <dt>Issue</dt><dd>A <code>client_id</code> is unique within a tenant only, but authorization codes, refresh tokens, device codes and pushed requests were checked against the <code>client_id</code> alone.</dd>
+        <dt>Impact</dt><dd>Where two tenants register a client under the same id, a user of one tenant could obtain tokens signed by the other tenant, which accepted them, without having any access there.</dd>
+        <dt>Fix</dt><dd>Every grant is now checked against both tenant and client: code, refresh, device and PAR redemption, and refresh-token introspection and revocation.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-03">
+      <header><span class="fid">ARK-03</span><span class="sev high">High</span><span class="st fixed">Fixed</span><h3>Legacy onboarding routes could reset any password, via a link or a sign-up form</h3></header>
+      <dl>
+        <dt>Issue</dt><dd>Two legacy onboarding routes accepted any HTTP verb and authenticated through the admin console's cookie. They also overwrote an existing account's password and reactivated it.</dd>
+        <dt>Impact</dt><dd>An operator who followed a crafted link from another site could have any account's password set, their own included. Separately, an application that wired its public sign-up form to the onboarding helper let anyone take over an existing account by signing up with its address.</dd>
+        <dt>Fix</dt><dd>Both routes accept only the machine client's bearer token, which a cross-site page cannot attach. Onboarding never changes an existing account.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-04">
+      <header><span class="fid">ARK-04</span><span class="sev high">High</span><span class="st fixed">Fixed</span><h3>Stored cross-site scripting through a registered client name</h3></header>
+      <dl>
+        <dt>Issue</dt><dd>Some admin-console grid cells inserted registration data, such as a client's display name, as HTML.</dd>
+        <dt>Impact</dt><dd>Whoever could register a client could run script in the operator's console session, with the operator's authority.</dd>
+        <dt>Fix</dt><dd>Every console formatter now escapes its output, and so does the legacy console view. Dynamic registration also rejects markup and control characters in <code>client_name</code>.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-05">
+      <header><span class="fid">ARK-05</span><span class="sev high">High</span><span class="st fixed">Fixed</span><h3>Legacy controller exposed the client secret and stack traces (.NET client)</h3></header>
+      <dl>
+        <dt>Issue</dt><dd>Every MVC application referencing <code>Ark.oAuth.Client</code> served the v1 controller, whether or not the legacy flow was used. Its configuration route was open to any signed-in user, and its callback printed exception details.</dd>
+        <dt>Impact</dt><dd>Any signed-in user, every customer of a customer-facing app included, could read the application's client secret. Anonymous visitors could see server stack traces.</dd>
+        <dt>Fix</dt><dd>The legacy routes exist only when <code>UseLegacyFlow</code> is set. The configuration route is removed, and errors are logged instead of displayed.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-06">
+      <header><span class="fid">ARK-06</span><span class="sev high">High</span><span class="st fixed">Fixed</span><h3><code>private_key_jwt</code> clients accepted without their key</h3></header>
+      <dl>
+        <dt>Issue</dt><dd>A client registered for <code>private_key_jwt</code> has no stored secret, so the provider treated it as a public client.</dd>
+        <dt>Impact</dt><dd>The token, PAR and revocation endpoints accepted such a client with nothing but its id. Its codes and refresh tokens could be redeemed without the private key it was registered to prove.</dd>
+        <dt>Fix</dt><dd>A <code>private_key_jwt</code> client is confidential and must present a valid signed assertion.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-07">
+      <header><span class="fid">ARK-07</span><span class="sev high">High</span><span class="st fixed">Fixed</span><h3>New accounts created on a published placeholder password</h3></header>
+      <dl>
+        <dt>Issue</dt><dd>The sample configuration ships <code>DefaultPw</code> as a <code>&lt;&lt;placeholder&gt;&gt;</code>. The administrator seed refused that value, but account creation used it as-is.</dd>
+        <dt>Impact</dt><dd>On a host left on the sample value, every account created in the console or through provisioning signed in with a password published in the repository.</dd>
+        <dt>Fix</dt><dd>An empty or placeholder <code>DefaultPw</code> is refused before anything is written (<code>409 default_password_unset</code>). Accounts awaiting email activation start on a random, unusable password.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-08">
+      <header><span class="fid">ARK-08</span><span class="sev high">High</span><span class="st fixed">Fixed</span><h3>API validation accepted ID tokens as access tokens (.NET client)</h3></header>
+      <dl>
+        <dt>Issue</dt><dd><code>AddArkOidcApi</code> did not check the token type, and by default it does not check the audience either.</dd>
+        <dt>Impact</dt><dd>An ID token, which any single-page app holds, was accepted as a bearer token by .NET APIs protected only by <code>[Authorize]</code>. The Node and Python libraries already refused this.</dd>
+        <dt>Fix</dt><dd>Only <code>typ: at+jwt</code> tokens are accepted by default, matching the other libraries. <code>RequireAccessTokenTypeHeader=false</code> turns the check off.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-09">
+      <header><span class="fid">ARK-09</span><span class="sev med">Medium</span><span class="st fixed">Fixed</span><h3>Refresh tokens kept working after a user's access was removed</h3></header>
+      <dl>
+        <dt>Impact</dt><dd>Taking a user off an application stopped new sign-ins, but their existing refresh tokens kept issuing access tokens until the session expired, eight hours by default.</dd>
+        <dt>Fix</dt><dd>The refresh grant re-checks the user's access to the client and revokes the token family when it is gone.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-10">
+      <header><span class="fid">ARK-10</span><span class="sev med">Medium</span><span class="st fixed">Fixed</span><h3>A removed operator kept console rights for the life of the session</h3></header>
+      <dl>
+        <dt>Impact</dt><dd>In the zero-config host, the console session renewed on every request and operator status was read from sign-in claims. Deactivating an operator, removing their console access or taking away their admin claim changed nothing for a session already open.</dd>
+        <dt>Fix</dt><dd>Every console request re-checks the account, its console mapping and its admin claim against the database.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-11">
+      <header><span class="fid">ARK-11</span><span class="sev med">Medium</span><span class="st fixed">Fixed</span><h3>Account enumeration through sign-in messages and lockout</h3></header>
+      <dl>
+        <dt>Impact</dt><dd>The legacy v1 sign-in page used different messages for an unknown account, an account without access and a wrong password. On both sign-in pages, the lockout message appeared only for accounts that exist.</dd>
+        <dt>Fix</dt><dd>Both pages show one message for every credential failure, and every failure, for any username, counts towards the lockout.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-12">
+      <header><span class="fid">ARK-12</span><span class="sev med">Medium</span><span class="st fixed">Fixed</span><h3>Logout confirmation bypass (forced sign-out)</h3></header>
+      <dl>
+        <dt>Impact</dt><dd>Any valid ID token for the tenant skipped the logout confirmation, even one belonging to someone else. A page could sign a visitor out of every application, in every tenant on that browser.</dd>
+        <dt>Fix</dt><dd>A hint skips the confirmation only when it names a session being ended. A <code>client_id</code> sent alongside the hint must be one the hint was issued to.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-13">
+      <header><span class="fid">ARK-13</span><span class="sev med">Medium</span><span class="st fixed">Fixed</span><h3>Tenant update returned the private signing key</h3></header>
+      <dl>
+        <dt>Impact</dt><dd>The management API's tenant update returned the tenant's live private signing key to the console's browser.</dd>
+        <dt>Fix</dt><dd>The response no longer contains private key material.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-14">
+      <header><span class="fid">ARK-14</span><span class="sev med">Medium</span><span class="st fixed">Fixed</span><h3>Client-credentials token cache ignored the secret (.NET, Python)</h3></header>
+      <dl>
+        <dt>Impact</dt><dd>Once a token was cached, the right <code>client_id</code> with any secret received it. A secret-check step could pass for a secret the provider would refuse.</dd>
+        <dt>Fix</dt><dd>The cache key now includes a hash of the credential, as the Node library already did.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-15">
+      <header><span class="fid">ARK-15</span><span class="sev med">Medium</span><span class="st fixed">Fixed</span><h3>Flask session cookie not <code>Secure</code> by default (Python client)</h3></header>
+      <dl>
+        <dt>Impact</dt><dd>Flask pre-sets <code>SESSION_COOKIE_SECURE=False</code>, so the intended secure default never took effect. The session cookie could travel over plain http.</dd>
+        <dt>Fix</dt><dd>The cookie is <code>Secure</code> unless the application passes <code>cookie_secure=False</code>.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-16">
+      <header><span class="fid">ARK-16</span><span class="sev med">Medium</span><span class="st fixed">Fixed</span><h3>Unbounded pushed requests; expired state never purged</h3></header>
+      <dl>
+        <dt>Impact</dt><dd>The PAR endpoint stored whatever a public client posted, and expired codes, sessions and pushed requests were never deleted. Storage could grow without limit.</dd>
+        <dt>Fix</dt><dd>Pushed requests are capped at 50 parameters and 16 KB. A background job deletes expired state hourly (<code>Oidc:CleanupIntervalMinutes</code>; 0 disables it).</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-17">
+      <header><span class="fid">ARK-17</span><span class="sev med">Medium</span><span class="st fixed">Fixed</span><h3>User identity read from browser-supplied legacy cookies (.NET client)</h3></header>
+      <dl>
+        <dt>Impact</dt><dd>The request context read the user id, IP address and claims from v1 cookies even under the standard flow, so an anonymous request could name its own identity to code that records who did what.</dd>
+        <dt>Fix</dt><dd>Those cookies are read only under <code>UseLegacyFlow</code>, and the IP address comes from the connection.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-18">
+      <header><span class="fid">ARK-18</span><span class="sev med">Medium</span><span class="st fixed">Fixed</span><h3>Setup code skipped for proxied or rebound requests</h3></header>
+      <dl>
+        <dt>Impact</dt><dd>On an unconfigured provider, the setup wizard skipped its one-time code for loopback connections. A same-host proxy that adds no forwarding header, or a DNS-rebinding page, could therefore complete setup and become the operator.</dd>
+        <dt>Fix</dt><dd>The no-code path also requires the request to be addressed to <code>localhost</code> or a loopback address.</dd>
+      </dl>
+    </article>
+
+    <article class="card finding" id="ark-19">
+      <header><span class="fid">ARK-19</span><span class="sev low">Low</span><span class="st fixed">Fixed</span><h3>Five smaller hardening fixes</h3></header>
+      <dl>
+        <dt>Fixes</dt><dd>
+          <ul>
+            <li>Dynamic registration refuses a <code>client_id</code> equal to a user's login id, so a machine token can no longer carry a user's subject.</li>
+            <li>Server-side fetches of client JWKS and back-channel logout no longer follow redirects, and responses are size-capped.</li>
+            <li>Management tokens from the machine client must come from <code>client_credentials</code>.</li>
+            <li>The device-approval and logout-confirmation pages set <code>frame-ancestors</code> explicitly.</li>
+            <li>The .NET onboarding helper URL-encodes every value.</li>
+          </ul>
+        </dd>
+      </dl>
+    </article>
+  </section>
+
+  <!-- ===== Open ===== -->
+  <section id="open">
+    <div class="section-head">
+      <h2>Open items and mitigations</h2>
+      <p>These need a product decision or a deployment control rather than a code fix. Until they are
+        addressed, apply the mitigation.</p>
+    </div>
+
+    <article class="card finding" id="ark-o1">
+      <header><span class="fid">O1</span><span class="sev high">High</span><span class="st open">Open</span><h3>Provisioned accounts share an initial password</h3></header>
+      <dl>
+        <dt>Issue</dt><dd>Outside email activation, new accounts start on the configured <code>DefaultPw</code> and are not required to change it.</dd>
+        <dt>Mitigation</dt><dd>For customer-facing accounts, use <code>UserPasswordMode=email_based</code> so each person sets their own password from an activation link. Otherwise, set passwords per user in the console. A forced change at first sign-in is planned.</dd>
+      </dl>
+    </article>
+    <article class="card finding" id="ark-o2">
+      <header><span class="fid">O2</span><span class="sev med">Medium</span><span class="st open">Open</span><h3>No built-in rate limiting</h3></header>
+      <dl>
+        <dt>Issue</dt><dd>Per-account lockout exists, but nothing limits requests per address. Each password or client-secret check is deliberately expensive (PBKDF2), so a modest request rate can exhaust a small instance.</dd>
+        <dt>Mitigation</dt><dd>Rate-limit <code>POST /{tenant}/oauth2/authorize</code>, <code>/token</code>, <code>/par</code>, <code>/device_authorization</code> and <code>/register</code> at the edge (WAF, gateway or reverse proxy).</dd>
+      </dl>
+    </article>
+    <article class="card finding" id="ark-o3">
+      <header><span class="fid">O3</span><span class="sev med">Medium</span><span class="st open">Open</span><h3>No server-side password policy</h3></header>
+      <dl>
+        <dt>Mitigation</dt><dd>Until a minimum length and a breached-password check are enforced, communicate a password policy to users, and prefer email activation so passwords are chosen by their owners.</dd>
+      </dl>
+    </article>
+    <article class="card finding" id="ark-o4">
+      <header><span class="fid">O4</span><span class="sev med">Medium</span><span class="st open">Open</span><h3>Confidential clients with no secret behave as public</h3></header>
+      <dl>
+        <dt>Mitigation</dt><dd>A client registered for <code>client_secret_basic</code> or <code>client_secret_post</code> but without a secret is treated as a public client and relies on PKCE alone. Give every confidential client a secret (regenerate it in the console), or register it deliberately as <code>none</code>.</dd>
+      </dl>
+    </article>
+    <article class="card finding" id="ark-o5">
+      <header><span class="fid">O5</span><span class="sev med">Medium</span><span class="st open">Open</span><h3>One access-token audience per tenant</h3></header>
+      <dl>
+        <dt>Mitigation</dt><dd>Access tokens carry the tenant's audience, whichever application they were issued to. APIs should authorise by Ark claims (<code>require_claims</code> / <code>requiredClaims</code>) and check the token's <code>client_id</code>, not only that the token is valid.</dd>
+      </dl>
+    </article>
+    <article class="card finding" id="ark-o6">
+      <header><span class="fid">O6–O9</span><span class="sev low">Low</span><span class="st open">Open</span><h3>Host header, server-side fetches, console CSP, client-library defaults</h3></header>
+      <dl>
+        <dt>Items</dt><dd>
+          <ul>
+            <li><b>O6:</b> with <code>BaseUrl</code> unset, the Host header shapes the issuer and the console's configuration. Always set <code>BaseUrl</code> and restrict <code>AllowedHosts</code>.</li>
+            <li><b>O7:</b> server-side fetches (client JWKS, back-channel logout) do not block private network ranges. Restrict egress from the provider.</li>
+            <li><b>O8:</b> admin-console pages have no Content-Security-Policy, and a third-party grid script is loaded without Subresource Integrity.</li>
+            <li><b>O9:</b> client-library defaults: logout by GET without a CSRF check (Node, Python); .NET silent refresh does not update roles; access-denied page framing (Python, .NET); trust-proxy on by default (Node, Python).</li>
+          </ul>
+        </dd>
+      </dl>
+    </article>
+  </section>
+
+  <footer>
+    <p>Reviewed on <time datetime="2026-11-20">20 November 2026</time>. Report a vulnerability privately through
+      <a href="https://github.com/ir-dev/ark-oauth-oidc/security">GitHub security advisories</a>, never in a public issue.</p>
+    <p><a href="../index.html#reviews">← Back to all security reviews</a></p>
+  </footer>
+</main>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var save = function (v) { try { localStorage.setItem('ark-theme', v); } catch (e) {} };
+    document.getElementById('themeBtn').addEventListener('click', function () {
+      var dark = root.dataset.theme
+        ? root.dataset.theme === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.dataset.theme = dark ? 'light' : 'dark';
+      save(root.dataset.theme);
+    });
+  })();
+</script>
+</body>
+</html>

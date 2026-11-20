@@ -432,9 +432,9 @@ namespace Ark.oAuth
             _conf = conf;
             // The ark_oauth_* cookies belong to the v1 flow, which wrote them. Under the standard
             // flow nothing writes them, so anything they hold came from the browser: reading them
-            // let an anonymous request name its own user_id, ip and claims (ark-news records "who
-            // did this" from user_info). The identity comes from the authenticated principal, and
-            // the address from the connection.
+            // let an anonymous request name its own user_id, ip and claims — and applications record
+            // "who did this" from user_info. The identity comes from the authenticated principal,
+            // and the address from the connection.
             var legacy = conf.UseLegacyFlow;
             ip = legacy ? _http.HttpContext.Request.Cookies["ark_oauth_ip"] ?? "" : "";
             ip = ip.AnyNull() ? _http.HttpContext.Connection.RemoteIpAddress?.ToString() : ip;
