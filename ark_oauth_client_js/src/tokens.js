@@ -7,7 +7,7 @@ import { decodeJwt } from './jwt.js';
  * means something only at the instant it is received, and a token set read back from sessionStorage
  * after a reload cannot answer "are you still valid" from a number relative to a forgotten moment.
  *
- * The same class, fields and JSON shape as `TokenSet` in `ark-oauth-client` for Node.
+ * The same class, fields and JSON shape as `TokenSet` in `ark-oauth-client-node`.
  */
 export class TokenSet {
   /**

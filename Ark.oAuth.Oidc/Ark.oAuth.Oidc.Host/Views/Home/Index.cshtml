@@ -345,8 +345,8 @@ auth = add_ark_oidc_client(app, {
 @@app.get("/billing")
 @@auth.require_claims("billing.admin")
 def billing(): return current_ark.user["name"]</code></pre>
-<pre data-panel="node" hidden><code><span class="c">// npm install ark-oauth-client</span>
-import { arkExpress } from 'ark-oauth-client';
+<pre data-panel="node" hidden><code><span class="c">// npm install ark-oauth-client-node</span>
+import { arkExpress } from 'ark-oauth-client-node';
 
 const auth = arkExpress({
   authority: '@ViewBag.Issuer',
@@ -409,7 +409,7 @@ app.get('/billing', auth.requireClaims('billing.admin'), handler);</code></pre>
                 <a href="https://www.nuget.org/packages/Ark.oAuth.Oidc" target="_blank" rel="noopener">Ark.oAuth.Oidc</a>
                 <a href="https://www.nuget.org/packages/Ark.oAuth.Client" target="_blank" rel="noopener">Ark.oAuth.Client</a>
                 <a href="https://pypi.org/project/ark-oauth-client/" target="_blank" rel="noopener">ark-oauth-client (PyPI)</a>
-                <a href="@repo/tree/main/ark_oauth_client_nodejs" target="_blank" rel="noopener">ark-oauth-client (Node)</a>
+                <a href="@repo/tree/main/ark_oauth_client_nodejs" target="_blank" rel="noopener">ark-oauth-client-node (Node)</a>
             </div>
             <div>
                 <h4>This host</h4>

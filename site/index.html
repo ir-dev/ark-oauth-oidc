@@ -992,12 +992,12 @@ auth = add_ark_oidc_client(app, {
         <div class="stack">
           <div class="code">
             <div class="code-head">terminal<button class="copy" type="button">Copy</button></div>
-<pre>npm install ark-oauth-client</pre>
+<pre>npm install ark-oauth-client-node</pre>
           </div>
           <div class="code">
             <div class="code-head">server.js<button class="copy" type="button">Copy</button></div>
 <pre><span class="k">import</span> express <span class="k">from</span> <span class="s">'express'</span>;
-<span class="k">import</span> { arkExpress } <span class="k">from</span> <span class="s">'ark-oauth-client'</span>;
+<span class="k">import</span> { arkExpress } <span class="k">from</span> <span class="s">'ark-oauth-client-node'</span>;
 
 <span class="k">const</span> app = express();
 <span class="k">const</span> auth = arkExpress({
@@ -1046,11 +1046,11 @@ app.get(<span class="s">'/billing'</span>, auth.requireClaims(<span class="s">'b
           <div class="links"><a href="https://pypi.org/project/ark-oauth-client/">pypi.org</a><a href="https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_py">README</a></div>
         </article>
         <article class="card pkg">
-          <div class="reg">npm <span class="ver" data-reg="npm" data-id="ark-oauth-client">·</span></div>
-          <h3>ark-oauth-client</h3>
+          <div class="reg">npm <span class="ver" data-reg="npm" data-id="ark-oauth-client-node">·</span></div>
+          <h3>ark-oauth-client-node</h3>
           <p>A Node client: Express/Connect middleware, bearer protection and sessions that interoperate with the Python client.</p>
-          <div class="install">npm install ark-oauth-client</div>
-          <div class="links"><a href="https://www.npmjs.com/package/ark-oauth-client">npmjs.com</a><a href="https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_nodejs">README</a></div>
+          <div class="install">npm install ark-oauth-client-node</div>
+          <div class="links"><a href="https://www.npmjs.com/package/ark-oauth-client-node">npmjs.com</a><a href="https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_nodejs">README</a></div>
         </article>
       </div>
     </div>

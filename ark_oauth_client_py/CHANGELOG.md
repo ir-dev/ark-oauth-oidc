@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.2.0
+
+A security release, published with `Ark.oAuth.Oidc` 2.2.0. Upgrade the provider too. Its single
+sign-on sessions from before the upgrade are not recognised, so every user signs in at the provider
+once more.
+
+**Behaviour change: the Flask session cookie is Secure by default**, as the README always said and
+as the Node and .NET clients do. `ArkFlask` used to read `SESSION_COOKIE_SECURE`, but Flask presets
+that key to `False`, so the cookie went out on plain http. Browsers keep a Secure cookie for
+`http://localhost`, so local development is unaffected. Pass `cookie_secure=False` only for a
+plain-http host that is not localhost.
+
+**Fixed: the client-credentials cache ignored the secret.** Once a token was cached, a caller with
+the right `client_id` and any secret was given it. A setup step that tested a secret could pass for
+one the provider refuses. `ArkOAuthClient.client_credentials` and `ArkClientCredentials` key the
+cache on a SHA-256 of the secret, so the cache holds no secret.
+
+The Node port is now published on npm as `ark-oauth-client-node`. This package keeps its name.
+
 ## 2.0.11
 
 `cryptography` is now required at a version clear of every published advisory. The floor was

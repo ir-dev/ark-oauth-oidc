@@ -76,7 +76,7 @@ step 8: confirm
   * A version is permanent once npm accepts it. It can't be reused, even after
     an unpublish. Failed or dry runs don't use one up.
   * Plain X.Y.Z only, because npm rejects a 4th number. Keep it equal to the
-    NuGet / PyPI / ark-oauth-client version.
+    NuGet / PyPI / ark-oauth-client-node version.
   * dist/ is gitignored and built by "prepack". Don't commit it.
   * Never put an npm token in this folder or any tracked file. The repo is public.
   * Wrong-version publish: deprecate it, don't unpublish

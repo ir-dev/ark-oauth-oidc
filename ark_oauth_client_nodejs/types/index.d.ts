@@ -1,5 +1,5 @@
 /**
- * Type declarations for ark-oauth-client.
+ * Type declarations for ark-oauth-client-node.
  *
  * Hand-written rather than generated, so the documentation an editor shows is the documentation
  * the source carries. Everything below mirrors src/ exactly; when one changes, so does the other.

@@ -13,7 +13,7 @@ The provider is multi-tenant; administration is not (one operator tenant adminis
 | `Ark.oAuth.Oidc/Ark.oAuth.Oidc` | The IdP / authorization server | NuGet `Ark.oAuth.Oidc` |
 | `Ark.oAuth.Oidc/Ark.oAuth.Client` | ASP.NET Core client | NuGet `Ark.oAuth.Client` |
 | `ark_oauth_client_py` | Python client (Flask + framework-agnostic) | PyPI `ark-oauth-client` |
-| `ark_oauth_client_nodejs` | Node client (Express/Connect) | npm `ark-oauth-client` |
+| `ark_oauth_client_nodejs` | Node client (Express/Connect) | npm `ark-oauth-client-node` (`ark-oauth-client` up to 2.1.8) |
 | `ark_oauth_client_js` | Browser/SPA client (public client; React, Next, Vue, Angular adapters) | npm `ark-oauth-client-js` |
 | `Ark.oAuth.Oidc/Ark.Client.Web` | Reference client app — the shape to copy | not published |
 | `Samples/client-js/react-client` | React SPA sample (browser only) on `ark-oauth-client-js`, with a guided QuickStart setup page | not published |
@@ -52,7 +52,7 @@ app.UseAuthorization();
 
 ```js
 // Node — ark_oauth_client_nodejs/README.md has the full reference
-import { arkExpress } from 'ark-oauth-client';
+import { arkExpress } from 'ark-oauth-client-node';
 const auth = arkExpress({ authority, clientId, redirectUri, secret });
 app.use(auth);
 app.get('/billing', auth.requireClaims('billing.admin'), handler);

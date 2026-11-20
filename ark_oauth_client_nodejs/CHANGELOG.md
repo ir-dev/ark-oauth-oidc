@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.2.0
+
+**Renamed to `ark-oauth-client-node`.** Up to 2.1.8 this package was published as
+`ark-oauth-client`. That name is deprecated and gets no further releases. The new name makes the
+package distinct from the Python `ark-oauth-client` on PyPI and the browser `ark-oauth-client-js`.
+
+```bash
+npm uninstall ark-oauth-client
+npm install ark-oauth-client-node
+```
+
+Then change the import specifier from `'ark-oauth-client'` to `'ark-oauth-client-node'`, and
+`'ark-oauth-client/express'` to `'ark-oauth-client-node/express'`. There is no API change: the
+same exports, options and types, and session data and the denial cookie are read as before.
+
+The built-in access-denied page names the package in its footer as `ark-oauth-client-node 2.2.0`.
+
+Published with `Ark.oAuth.Oidc` 2.2.0, a security release. Upgrade the provider too. Its single
+sign-on sessions from before the upgrade are not recognised, so every user signs in at the provider
+once more.
+
 ## 2.1.1
 
 The first release of the Node client published to npm, at the version `Ark.oAuth.Client` and the

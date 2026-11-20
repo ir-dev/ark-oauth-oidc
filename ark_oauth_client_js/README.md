@@ -13,7 +13,7 @@ No runtime dependencies: Web Crypto, `fetch`, Web Storage, BroadcastChannel and 
 npm install ark-oauth-client-js
 ```
 
-It is the browser sibling of `ark-oauth-client` (Node), `ark-oauth-client` (Python) and
+It is the browser sibling of `ark-oauth-client-node` (Node), `ark-oauth-client` (Python) and
 `Ark.oAuth.Client` (.NET), carries the same version number, and uses the same names wherever the
 concepts are shared (`TokenSet`, `ArkOAuthError`, `accountSwitch`, `checkSetup()`, ...).
 
@@ -182,7 +182,7 @@ the server render and the first browser render both show `loading`, so hydration
 
 Signing in happens in the browser; the access token is not available to server components or
 route handlers. If your Next.js server itself must call APIs as the user, use a server-side
-client (`ark-oauth-client` for Node) behind the app instead.
+client (`ark-oauth-client-node`) behind the app instead.
 
 ## Vue
 

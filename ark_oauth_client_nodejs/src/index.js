@@ -1,12 +1,12 @@
 /**
- * ark-oauth-client — the OAuth 2.1 / OpenID Connect client for Node applications talking to an
+ * ark-oauth-client-node — the OAuth 2.1 / OpenID Connect client for Node applications talking to an
  * Ark identity server.
  *
  * There is one URL to configure: the issuer, `{BaseUrl}/{TenantId}`. Every endpoint, signing key
  * and capability is read from the provider's discovery document, so an application does not need
  * to be redeployed when the provider rotates a key or moves an endpoint.
  *
- *   import { ArkOAuthClient, arkExpress } from 'ark-oauth-client';
+ *   import { ArkOAuthClient, arkExpress } from 'ark-oauth-client-node';
  *
  *   const auth = arkExpress({
  *     authority: 'https://idp.example.com/my_idp',

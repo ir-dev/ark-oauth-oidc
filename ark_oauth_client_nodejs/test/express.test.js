@@ -525,7 +525,7 @@ describe('account switching on a shared browser', () => {
         assert.match(result.body, /Billing &lt;Portal&gt;/, 'the display name is escaped');
         assert.match(result.body, /action="\/ark\/switch-user"/);
         assert.match(result.body, /name="returnUrl" value="\/profile"/);
-        assert.match(result.body, /ark-oauth-client \d+\.\d+\.\d+/);
+        assert.match(result.body, /ark-oauth-client-node \d+\.\d+\.\d+/);
         assert.match(result.response.headers.get('content-security-policy'), /default-src 'none'/);
         assert.equal(result.response.headers.get('cache-control'), 'no-store');
 

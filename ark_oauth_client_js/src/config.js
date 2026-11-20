@@ -137,7 +137,7 @@ export function normalizeConfig(options = {}) {
     throw new ArkConfigError(
       'ark_oauth_client: a browser app cannot keep a client secret or a private key: anything in the bundle is readable by ' +
         "every visitor. Register this app as a public client (token endpoint auth method 'none'; PKCE protects the code), " +
-        'or keep the confidential client on a server with ark-oauth-client (Node), ark-oauth-client (Python) or Ark.oAuth.Client (.NET).'
+        'or keep the confidential client on a server with ark-oauth-client-node (Node), ark-oauth-client (Python) or Ark.oAuth.Client (.NET).'
     );
   }
 

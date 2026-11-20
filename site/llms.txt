@@ -1,6 +1,6 @@
 # ARK Identity Server
 
-> Self-hosted OAuth 2.1 / OpenID Connect identity provider for ASP.NET Core (NuGet Ark.oAuth.Oidc), with client libraries for .NET (NuGet Ark.oAuth.Client), Python (PyPI ark-oauth-client) and Node (npm ark-oauth-client). The clients are ports of each other and share one version number. Multi-tenant at the protocol layer; administered by one operator tenant. Runs on SQLite, MySQL or PostgreSQL. MIT. Repository: https://github.com/ir-dev/ark-oauth-oidc
+> Self-hosted OAuth 2.1 / OpenID Connect identity provider for ASP.NET Core (NuGet Ark.oAuth.Oidc), with client libraries for .NET (NuGet Ark.oAuth.Client), Python (PyPI ark-oauth-client) and Node (npm ark-oauth-client-node). The clients are ports of each other and share one version number. Multi-tenant at the protocol layer; administered by one operator tenant. Runs on SQLite, MySQL or PostgreSQL. MIT. Repository: https://github.com/ir-dev/ark-oauth-oidc
 
 Source of truth is the code. Where a document and the source disagree, follow the source and say so.
 

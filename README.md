@@ -26,7 +26,7 @@
   <a href="https://www.nuget.org/packages/Ark.oAuth.Oidc"><img alt="Ark.oAuth.Oidc on NuGet" src="https://img.shields.io/nuget/v/Ark.oAuth.Oidc?label=Ark.oAuth.Oidc&logo=nuget"></a>
   <a href="https://www.nuget.org/packages/Ark.oAuth.Client"><img alt="Ark.oAuth.Client on NuGet" src="https://img.shields.io/nuget/v/Ark.oAuth.Client?label=Ark.oAuth.Client&logo=nuget"></a>
   <a href="https://pypi.org/project/ark-oauth-client/"><img alt="ark-oauth-client on PyPI" src="https://img.shields.io/pypi/v/ark-oauth-client?label=PyPI&logo=pypi&logoColor=white"></a>
-  <a href="https://www.npmjs.com/package/ark-oauth-client"><img alt="ark-oauth-client on npm" src="https://img.shields.io/npm/v/ark-oauth-client?label=npm&logo=npm"></a>
+  <a href="https://www.npmjs.com/package/ark-oauth-client-node"><img alt="ark-oauth-client-node on npm" src="https://img.shields.io/npm/v/ark-oauth-client-node?label=npm%20node&logo=npm"></a>
   <a href="https://www.npmjs.com/package/ark-oauth-client-js"><img alt="ark-oauth-client-js on npm" src="https://img.shields.io/npm/v/ark-oauth-client-js?label=npm%20browser&logo=npm"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
 </p>
@@ -164,7 +164,7 @@ same at `/{tenant}/admin/provisioning`, and the page then shows the equivalent `
 |---|---|
 | .NET / ASP.NET Core | `dotnet add package Ark.oAuth.Client` |
 | Python / Flask | `pip install "ark-oauth-client[flask]"` |
-| Node / Express | `npm install ark-oauth-client` |
+| Node / Express | `npm install ark-oauth-client-node` |
 | Browser / SPA (React, Next.js, Vue, Angular) | `npm install ark-oauth-client-js` — see [`ark_oauth_client_js`](ark_oauth_client_js) · runnable React sample with a guided setup: [`Samples/client-js/react-client`](Samples/client-js/react-client) |
 
 ```csharp
@@ -339,7 +339,7 @@ as facts to cite, not prose to read.
 | [`Ark.oAuth.Oidc/Ark.oAuth.Oidc`](Ark.oAuth.Oidc/Ark.oAuth.Oidc) | The IdP / authorization server | NuGet `Ark.oAuth.Oidc` | `AI-PROMPT.md` `AI-RECIPES.md` `API-GUIDE.md` `TROUBLESHOOTING.md` `MIGRATION.md` |
 | [`Ark.oAuth.Oidc/Ark.oAuth.Client`](Ark.oAuth.Oidc/Ark.oAuth.Client) | ASP.NET Core client | NuGet `Ark.oAuth.Client` | same five |
 | [`ark_oauth_client_py`](ark_oauth_client_py) | Python client (Flask + framework-agnostic) | PyPI `ark-oauth-client` | same five, plus `examples/` |
-| [`ark_oauth_client_nodejs`](ark_oauth_client_nodejs) | Node client (Express / Connect) | npm `ark-oauth-client` | `README.md`, `examples/`, `types/` |
+| [`ark_oauth_client_nodejs`](ark_oauth_client_nodejs) | Node client (Express / Connect) | npm `ark-oauth-client-node` | `README.md`, `examples/`, `types/` |
 | [`ark_oauth_client_js`](ark_oauth_client_js) | Browser / SPA client (public client; React, Next.js, Vue, Angular adapters) | npm `ark-oauth-client-js` | `README.md`, `examples/`, `types/` |
 | [`Samples/client-js/react-client`](Samples/client-js/react-client) | **React sample, browser only** (Team Library): its landing page walks through registering it on the QuickStart IdP | not published | `README.md`, incl. a prompt for adding Ark sign-in to a React app |
 | [`Ark.oAuth.Oidc/Ark.Client.Web`](Ark.oAuth.Oidc/Ark.Client.Web) | Reference client app — **the shape to copy** | not published | `README.md` |
@@ -376,7 +376,7 @@ machine-to-machine helpers. Their names differ only by language convention (`Req
 |---|---|---|
 | "Add login to my ASP.NET Core / MVC / Razor app" | [S1](#s1--sign-users-in-to-an-aspnet-core-app) | `Ark.oAuth.Client` |
 | "Add login to my Flask / Django / FastAPI app" | [S2](#s2--sign-users-in-to-a-python-app) | `ark-oauth-client` (PyPI) |
-| "Add login to my Express / Node app" | [S3](#s3--sign-users-in-to-a-node-app) | `ark-oauth-client` (npm) |
+| "Add login to my Express / Node app" | [S3](#s3--sign-users-in-to-a-node-app) | `ark-oauth-client-node` (npm) |
 | "A React/Angular/Vue SPA, mobile or desktop app needs to sign in" | [S4](#s4--browser-spa-or-native-public-client) | IdP `CorsOrigins` + any OIDC library |
 | "Protect my API with bearer tokens" | [S5](#s5--protect-an-api-resource-server) | any client package |
 | "A service/job/cron needs a token with no user" | [S6](#s6--machine-to-machine-client-credentials) | client credentials |
@@ -531,7 +531,7 @@ for a client registered with anything but `client_secret_post` (use `ArkOAuthCli
 **Prompt**
 
 ```text
-Add Ark sign-in to this Node app with the ark-oauth-client npm package. Do not hand-roll OAuth.
+Add Ark sign-in to this Node app with the ark-oauth-client-node npm package. Do not hand-roll OAuth.
 Use arkExpress({ authority: "<https://idp.example.com/my_idp>", clientId: "<my-app>",
 redirectUri: "<https://app.example.com/signin-oidc>", postLogoutRedirectUri: "<https://app.example.com/>",
 secret: process.env.ARK_SESSION_SECRET }) and app.use(auth). Protect <routes> with auth.requireAuth()
@@ -549,7 +549,7 @@ the typings in [`types/`](ark_oauth_client_nodejs/types).
 
 ```js
 import express from 'express';
-import { arkExpress } from 'ark-oauth-client';
+import { arkExpress } from 'ark-oauth-client-node';
 
 const app = express();
 const auth = arkExpress({
@@ -1403,7 +1403,7 @@ PROJECT CONTEXT: ARK Identity Server (repo ark-oauth-oidc, public)
 
 WHAT: OAuth 2.1 / OpenID Connect provider for ASP.NET Core (NuGet Ark.oAuth.Oidc) and client
 libraries: .NET Ark.oAuth.Client (NuGet), Python ark-oauth-client (PyPI, Flask + ArkOAuthClient),
-Node ark-oauth-client (npm, arkExpress/arkBearer/ArkOAuthClient). The clients are ports of each other.
+Node ark-oauth-client-node (npm, arkExpress/arkBearer/ArkOAuthClient). The clients are ports of each other.
 
 CLIENT INTEGRATION — the whole of it:
   .NET    builder.Services.AddArkOidcClient(builder.Configuration); UseRouting -> UseAuthentication -> UseAuthorization

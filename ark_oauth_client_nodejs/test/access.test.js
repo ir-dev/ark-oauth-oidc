@@ -100,7 +100,7 @@ describe('the access-denied page', () => {
     assert.match(html, /&lt;script&gt;/);
     assert.match(html, /value="\/a&quot;b"/);
     assert.match(html, /mailto:help@example\.com/);
-    assert.ok(html.includes(`ark-oauth-client ${VERSION}`));
+    assert.ok(html.includes(`ark-oauth-client-node ${VERSION}`));
     assert.doesNotMatch(html, /<script/i, 'the page carries no script of any kind');
   });
 

@@ -3,7 +3,7 @@
 #
 #   NuGet  Ark.oAuth.Oidc, Ark.oAuth.Client   Ark.oAuth.Oidc/Ark.oAuth.{Oidc,Client}
 #   PyPI   ark-oauth-client                    ark_oauth_client_py
-#   npm    ark-oauth-client      (Node)        ark_oauth_client_nodejs   build-node -> publish-npm-node
+#   npm    ark-oauth-client-node (Node)        ark_oauth_client_nodejs   build-node -> publish-npm-node
 #   npm    ark-oauth-client-js   (browser)     ark_oauth_client_js       build-js   -> publish-npm-js
 #
 # The two npm packages are separate libraries with separate jobs, artifacts and trusted
@@ -35,11 +35,14 @@
 #      Then GitHub: Settings -> Secrets and variables -> Actions -> Variables ->
 #      NUGET_USER = your nuget.org profile name (the user name, not the email).
 #   c. PyPI: pypi.org/manage/project/ark-oauth-client/settings/publishing -> add a GitHub publisher.
-#   d. npm: one trusted publisher PER PACKAGE, ark-oauth-client and ark-oauth-client-js, each with
-#      the same four values: npmjs.com -> the package -> Settings -> Trusted publisher, and tick
-#      "npm publish" under Allowed actions (new publishers allow only `npm stage publish`).
+#   d. npm: one trusted publisher PER PACKAGE, ark-oauth-client-node and ark-oauth-client-js, each
+#      with the same four values: npmjs.com -> the package -> Settings -> Trusted publisher, and
+#      tick "npm publish" under Allowed actions (new publishers allow only `npm stage publish`).
 #      npm offers a trusted publisher only on a package that exists, so a package's first version
-#      is published by hand (`npm publish --access public` in its folder). Both already exist.
+#      is published by hand (`npm publish --access public` in its folder). ark-oauth-client-js
+#      exists. The Node client was published as ark-oauth-client up to 2.1.8 and renamed to
+#      ark-oauth-client-node in 2.2.0, so ark-oauth-client-node needs that first hand publish and
+#      its own publisher. The old ark-oauth-client is deprecated, not published by this workflow.
 
 name: Release
 
@@ -140,9 +143,9 @@ jobs:
           oidc=$(live "https://api.nuget.org/v3-flatcontainer/ark.oauth.oidc/$VERSION/ark.oauth.oidc.nuspec")
           client=$(live "https://api.nuget.org/v3-flatcontainer/ark.oauth.client/$VERSION/ark.oauth.client.nuspec")
           pypi=$(live "https://pypi.org/pypi/ark-oauth-client/$VERSION/json")
-          npm_node=$(live "https://registry.npmjs.org/ark-oauth-client/$VERSION")
+          npm_node=$(live "https://registry.npmjs.org/ark-oauth-client-node/$VERSION")
           npm_js=$(live "https://registry.npmjs.org/ark-oauth-client-js/$VERSION")
-          for pkg in ark-oauth-client:node ark-oauth-client-js:js; do
+          for pkg in ark-oauth-client-node:node ark-oauth-client-js:js; do
             if [ "$(live "https://registry.npmjs.org/${pkg%%:*}")" = false ]; then
               echo "::warning::${pkg%%:*} has never been published to npm; publish-npm-${pkg#*:} will stop until the first version is published by hand (setup step d)."
             fi
@@ -163,7 +166,7 @@ jobs:
             echo "| NuGet Ark.oAuth.Oidc | $oidc |"
             echo "| NuGet Ark.oAuth.Client | $client |"
             echo "| PyPI ark-oauth-client | $pypi |"
-            echo "| npm ark-oauth-client (Node) | $npm_node |"
+            echo "| npm ark-oauth-client-node (Node) | $npm_node |"
             echo "| npm ark-oauth-client-js (browser) | $npm_js |"
             echo
             echo "Packages already live are built and tested, but not published or attached again."
@@ -301,7 +304,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/out/npm-node"
           npm pack --pack-destination "$GITHUB_WORKSPACE/out/npm-node"
           ls -l "$GITHUB_WORKSPACE/out/npm-node"
-          [ -f "$GITHUB_WORKSPACE/out/npm-node/ark-oauth-client-$VERSION.tgz" ]
+          [ -f "$GITHUB_WORKSPACE/out/npm-node/ark-oauth-client-node-$VERSION.tgz" ]
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -456,7 +459,7 @@ jobs:
     permissions:
       id-token: write
     env:
-      PACKAGE: ark-oauth-client
+      PACKAGE: ark-oauth-client-node
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -587,12 +590,12 @@ jobs:
             echo "| Ark.oAuth.Oidc (IdP) | [nuget.org](https://www.nuget.org/packages/Ark.oAuth.Oidc/$VERSION) | \`dotnet add package Ark.oAuth.Oidc --version $VERSION\` |"
             echo "| Ark.oAuth.Client (.NET) | [nuget.org](https://www.nuget.org/packages/Ark.oAuth.Client/$VERSION) | \`dotnet add package Ark.oAuth.Client --version $VERSION\` |"
             echo "| ark-oauth-client (Python) | [PyPI](https://pypi.org/project/ark-oauth-client/$VERSION/) | \`pip install \"ark-oauth-client[flask]==$VERSION\"\` |"
-            echo "| ark-oauth-client (Node) | [npm](https://www.npmjs.com/package/ark-oauth-client/v/$VERSION) | \`npm install ark-oauth-client@$VERSION\` |"
+            echo "| ark-oauth-client-node (Node) | [npm](https://www.npmjs.com/package/ark-oauth-client-node/v/$VERSION) | \`npm install ark-oauth-client-node@$VERSION\` |"
             echo "| ark-oauth-client-js (browser) | [npm](https://www.npmjs.com/package/ark-oauth-client-js/v/$VERSION) | \`npm install ark-oauth-client-js@$VERSION\` |"
             already=""
             [ "$NUGET_LIVE" = true ]    && already="$already, NuGet"
             [ "$PYPI_LIVE" = true ]     && already="$already, PyPI"
-            [ "$NPM_NODE_LIVE" = true ] && already="$already, npm ark-oauth-client"
+            [ "$NPM_NODE_LIVE" = true ] && already="$already, npm ark-oauth-client-node"
             [ "$NPM_JS_LIVE" = true ]   && already="$already, npm ark-oauth-client-js"
             if [ -n "$already" ]; then
               echo

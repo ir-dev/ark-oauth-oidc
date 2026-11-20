@@ -26,9 +26,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.1.1</Version>
-		<AssemblyVersion>2.1.1.0</AssemblyVersion>
-		<FileVersion>2.1.1.0</FileVersion>
+		<Version>2.2.0</Version>
+		<AssemblyVersion>2.2.0.0</AssemblyVersion>
+		<FileVersion>2.2.0.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -50,6 +50,28 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.2.0 — security release, alongside Ark.oAuth.Oidc 2.2.0. Upgrade both.
+
+Behaviour changes:
+* **AddArkOidcApi accepts only access tokens.** A token's header must declare typ at+jwt
+  (RFC 9068), which Ark puts on every access token. Before this, an ID token, which every SPA
+  holds, was accepted as an access token. If you use a provider that does not type its access
+  tokens, set ark_oauth_client:RequireAccessTokenTypeHeader=false.
+* **The v1 client routes are gone unless ark_oauth_client:UseLegacyFlow is set.** ClientController
+  is an application part, so it used to answer in every MVC host that referenced this package.
+  Its callback printed stack traces, and its /config route returned this configuration section,
+  client secret included, to any signed-in user. /config is removed entirely.
+
+Fixed:
+* The ArkAuthContext user_info no longer reads its user, IP or claims from the ark_oauth_* cookies
+  outside the legacy flow. Only v1 writes those cookies, so anything in them came from the browser.
+* The ArkClientCredentials token cache is keyed on the client secret too (hashed). Before this, a
+  caller with the right client_id and a wrong secret got another caller's token.
+* AuthClientHelper escapes every value it puts in the onboarding URL.
+
+Still owed by your API: authorise by Ark claims and check the caller's client_id. Every client of a
+tenant shares one access-token audience.
+
 2.1.0 — account switching on a shared browser.
 
 Fixes the case where two people use one browser. Single sign-on is browser-wide, so once the first

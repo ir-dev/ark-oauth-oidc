@@ -1,0 +1,9 @@
+
+--- republish by hand (only if the workflow can't)
+
+    > cd /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc
+
+    > cd ark_oauth_client_nodejs
+    > npm ci
+    > npm run check                              # build + tests + typecheck
+    > npm publish                                # prepack rebuilds dist/ first

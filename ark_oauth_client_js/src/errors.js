@@ -6,7 +6,7 @@
  * library that collapses `invalid_grant` and a CORS failure into one thrown string forces the
  * application to parse English to decide whether to retry, sign the user in again, or give up.
  *
- * The names and fields match `ark-oauth-client` for Node, so code that handles errors from one
+ * The names and fields match `ark-oauth-client-node`, so code that handles errors from one
  * reads the same against the other.
  */
 

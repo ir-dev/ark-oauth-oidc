@@ -30,9 +30,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.1.1</Version>
-		<AssemblyVersion>2.1.1.0</AssemblyVersion>
-		<FileVersion>2.1.1.0</FileVersion>
+		<Version>2.2.0</Version>
+		<AssemblyVersion>2.2.0.0</AssemblyVersion>
+		<FileVersion>2.2.0.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -54,6 +54,47 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.2.0 — security release. Upgrade every Ark IdP and every app using an Ark client library.
+
+Follows a full review of the provider and the four client libraries, done because apps now use Ark
+for customer-facing sign-in (site/security/2026-11-20-security-review.html in the repo). Every
+high-severity finding was confirmed on a running provider, fixed, and checked again.
+
+What you will notice:
+* **Everyone signs in once more.** The single sign-on cookie is now a random secret, and the sid
+  claim in tokens is its SHA-256 hash. Before this, any token was enough to rebuild the cookie and
+  take over the user's session. Sessions created before the upgrade are not recognised.
+* **New accounts need a real DefaultPw** (or UserPasswordMode=email_based). If it is unset or still
+  a &lt;&lt;placeholder&gt;&gt;, account creation fails with 409 default_password_unset.
+* **The legacy onboard/* routes** accept only the machine client's bearer token, and they never
+  change an existing account. Before this, the console cookie was enough to reset any password. Use
+  v1/provision/* for new integrations.
+
+Also fixed:
+* Codes, refresh tokens, device codes, PAR requests, introspection and revocation are checked
+  against the tenant as well as the client. A client_id is unique only within its tenant, so a
+  token could be minted at another tenant.
+* A private_key_jwt client must present its assertion. Before this, the token endpoint treated it
+  as public and accepted its client_id alone.
+* The console grids escape registered data, which closes a stored XSS through a client name.
+  Dynamic registration refuses markup in client_name and a client_id that names a user.
+* A refresh re-checks the user's access mapping. In the zero-config host, every console request
+  re-checks the operator's account, console mapping and admin claim, so removing an operator takes
+  effect immediately.
+* Both sign-in pages show one message for every credential failure. Every failure counts towards
+  the lockout, whether or not the username exists.
+* An id_token_hint skips the logout confirmation only when it names a session being ended, so
+  another page can no longer sign a visitor out without asking.
+* A tenant update no longer returns the private signing key.
+* PAR payloads are capped at 16 KB. Expired grants are purged on a timer
+  (ark_oauth_server:Oidc:CleanupIntervalMinutes, default 60, 0 turns it off).
+* The setup wizard skips the setup code only for a loopback connection with a loopback Host.
+
+Still open: no built-in rate limiting (rate-limit the sign-in, token, PAR, device and registration
+endpoints at your edge), no password policy, and provisioned accounts share an initial password.
+
+The npm Node client is renamed ark-oauth-client-node from this release. The API is unchanged.
+
 Next release — a landing page after sign-in. Additive.
 
 * **The wizard asks where sign-in lands.** The Server step has a landing page, prefilled with the

@@ -10,7 +10,7 @@
 - **`2.0.11`** (`<Version>` in `Ark.oAuth.Client.csproj`), `net9.0`.
 - Ships in lockstep with **`Ark.oAuth.Oidc 2.0.11`** — the client and server packages deliberately
   carry the **same version number**. Upgrade both together.
-- The Python (`ark-oauth-client` / PyPI) and Node (`ark-oauth-client` / npm) clients are ports of
+- The Python (`ark-oauth-client` / PyPI) and Node (`ark-oauth-client-node` / npm) clients are ports of
   this one and carry the same version; an integration translates almost line-for-line.
 
 > **Version-number vs changelog note (flagged discrepancy):** the `PackageReleaseNotes` in the

@@ -1,4 +1,4 @@
-# ark-oauth-client
+# ark-oauth-client-node
 
 The OAuth 2.1 / OpenID Connect client for **Node.js** applications talking to an
 [ARK Identity Server](../README.md).
@@ -10,8 +10,13 @@ be redeployed when a key rotates or an endpoint moves.
 No runtime dependencies. Everything is built on `node:crypto` and the global `fetch`.
 
 ```bash
-npm install ark-oauth-client
+npm install ark-oauth-client-node
 ```
+
+> **Renamed in 2.2.0.** Up to 2.1.8 this package was published as `ark-oauth-client`, which is
+> deprecated and gets no further releases. The API is unchanged: replace the dependency and change
+> the import specifier from `'ark-oauth-client'` to `'ark-oauth-client-node'`
+> (and `'ark-oauth-client/express'` to `'ark-oauth-client-node/express'`).
 
 ---
 
@@ -39,7 +44,7 @@ npm install ark-oauth-client
 
 ```js
 import express from 'express';
-import { arkExpress } from 'ark-oauth-client';
+import { arkExpress } from 'ark-oauth-client-node';
 
 const app = express();
 
@@ -241,8 +246,8 @@ const auth = arkExpress({
   mapping with no authorization claim still satisfies "any `ark_claims`".
 * **`/ark/no-access`** names the account that is signed in and offers **Sign in as a different user**,
   which challenges with `prompt=login` so the provider draws its sign-in form instead of answering
-  from its session. It is a self-contained page — no script, a strict CSP, `ark-oauth-client <version>`
-  in the footer. A guarded route a signed-in browser lacks a claim for lands here too.
+  from its session. It is a self-contained page — no script, a strict CSP,
+  `ark-oauth-client-node <version>` in the footer. A guarded route a signed-in browser lacks a claim for lands here too.
 * **`/ark/switch-user`** and **`/ark/sign-out`** accept only a same-origin `POST`. The return URL is
   kept to same-origin paths. `endProviderSessionOnSwitch: true` makes switching a full provider
   sign-out, for a kiosk.
@@ -273,7 +278,7 @@ reads it unchanged — C# (`ClientId`), camel or snake spellings, the whole file
 
 ```js
 import { readFileSync } from 'node:fs';
-import { arkExpress, ArkAuthConfig } from 'ark-oauth-client';
+import { arkExpress, ArkAuthConfig } from 'ark-oauth-client-node';
 
 const settings = JSON.parse(readFileSync('appsettings.json', 'utf8'));
 app.use(arkExpress({ ...ArkAuthConfig.fromMapping(settings), secret: process.env.ARK_SESSION_SECRET }));
@@ -290,7 +295,7 @@ app.use(arkExpress({ ...ArkAuthConfig.fromMapping(settings), secret: process.env
 ## Protecting an API
 
 ```js
-import { arkBearer } from 'ark-oauth-client';
+import { arkBearer } from 'ark-oauth-client-node';
 
 const bearer = arkBearer({
   authority: 'https://idp.example.com/my_idp',
@@ -340,7 +345,7 @@ instant.
 For CLIs, workers, Fastify/Koa/Hapi, or any flow the middleware does not cover.
 
 ```js
-import { ArkOAuthClient } from 'ark-oauth-client';
+import { ArkOAuthClient } from 'ark-oauth-client-node';
 
 const client = new ArkOAuthClient({ authority, clientId, clientSecret, redirectUri });
 ```
@@ -430,7 +435,7 @@ Every error carries what is needed to decide what to do next, rather than a stri
 | `ArkNetworkError` | The call did not complete: refused, DNS, timeout | Retry with backoff |
 
 ```js
-import { ArkOAuthError } from 'ark-oauth-client';
+import { ArkOAuthError } from 'ark-oauth-client-node';
 
 try {
   await client.refresh(token);

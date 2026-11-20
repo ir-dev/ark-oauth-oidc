@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.0
+
+No API change. Published at the family's version, with `Ark.oAuth.Oidc` 2.2.0, a security
+release. Upgrade the provider too. Its single sign-on sessions from before the upgrade are not
+recognised, so every user signs in at the provider once more.
+
+The Node client this package mirrors is now published as `ark-oauth-client-node` (formerly
+`ark-oauth-client`). The docs and the `ArkConfigError` message for a client secret in the browser
+use the new name.
+
 ## 2.1.1
 
 The first release of the browser client, at the version the .NET, Python and Node clients carry.

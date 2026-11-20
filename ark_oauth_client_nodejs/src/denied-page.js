@@ -78,6 +78,6 @@ export function renderAccessDeniedPage(options, { app, account = null, returnUrl
 
   // Which client library drew this page: it is the one screen a stuck user is looking at while
   // somebody else works out why the account is wrong, and they cannot run `npm ls` on the host.
-  parts.push(`<p class="ver">ark-oauth-client ${escapeHtml(VERSION)}</p>`, '</main></body></html>');
+  parts.push(`<p class="ver">ark-oauth-client-node ${escapeHtml(VERSION)}</p>`, '</main></body></html>');
   return parts.join('');
 }

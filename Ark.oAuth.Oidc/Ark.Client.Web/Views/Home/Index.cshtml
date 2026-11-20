@@ -357,8 +357,8 @@ auth = add_ark_oidc_client(app, {
 @@app.get("/admin")
 @@auth.require_claims("sample.admin")      <span class="c"># Ark claims, not scopes</span>
 def admin(): return current_ark.user["name"]</pre>
-<pre data-panel="node" hidden><span class="c">// npm install ark-oauth-client</span>
-import { arkExpress } from 'ark-oauth-client';
+<pre data-panel="node" hidden><span class="c">// npm install ark-oauth-client-node</span>
+import { arkExpress } from 'ark-oauth-client-node';
 
 const auth = arkExpress({
   authority: '@Model.Authority',

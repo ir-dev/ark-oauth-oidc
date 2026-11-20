@@ -19,7 +19,7 @@ stands alone and repeats the facts it depends on, so you can paste one without t
 | IdP | NuGet `Ark.oAuth.Oidc`, `net9.0`, namespace `Ark.oAuth.Oidc` |
 | .NET client | NuGet `Ark.oAuth.Client`, `net9.0`, namespace **`Ark.oAuth`** (not `Ark.oAuth.Client`) |
 | Python client | PyPI `ark-oauth-client`, Python 3.9+, import `ark_oauth_client` |
-| Node client | npm `ark-oauth-client`, Node 20+, ESM, no runtime dependencies |
+| Node client | npm `ark-oauth-client-node` from 2.2.0 (`ark-oauth-client` up to 2.1.8, so the 2.1.4 lines below keep that name), Node 20+, ESM, no runtime dependencies |
 | Issuer / authority | `{BaseUrl}{BasePath}/{TenantId}`. Discovery is at `{issuer}/.well-known/openid-configuration` |
 | Deeper docs, shipped inside each package | `AI-PROMPT.md`, `AI-RECIPES.md`, `API-GUIDE.md`, `TROUBLESHOOTING.md`, `MIGRATION.md`, next to each README |
 
