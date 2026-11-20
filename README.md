@@ -165,7 +165,7 @@ same at `/{tenant}/admin/provisioning`, and the page then shows the equivalent `
 | .NET / ASP.NET Core | `dotnet add package Ark.oAuth.Client` |
 | Python / Flask | `pip install "ark-oauth-client[flask]"` |
 | Node / Express | `npm install ark-oauth-client` |
-| Browser / SPA (React, Next.js, Vue, Angular) | `npm install ark-oauth-client-js` — see [`ark_oauth_client_js`](ark_oauth_client_js) |
+| Browser / SPA (React, Next.js, Vue, Angular) | `npm install ark-oauth-client-js` — see [`ark_oauth_client_js`](ark_oauth_client_js) · runnable React sample with a guided setup: [`Samples/client-js/react-client`](Samples/client-js/react-client) |
 
 ```csharp
 // .NET: "ark_oauth_client": { "Authority": "https://idp.example.com/my_idp", "ClientId": "billing_portal" }
@@ -341,6 +341,7 @@ as facts to cite, not prose to read.
 | [`ark_oauth_client_py`](ark_oauth_client_py) | Python client (Flask + framework-agnostic) | PyPI `ark-oauth-client` | same five, plus `examples/` |
 | [`ark_oauth_client_nodejs`](ark_oauth_client_nodejs) | Node client (Express / Connect) | npm `ark-oauth-client` | `README.md`, `examples/`, `types/` |
 | [`ark_oauth_client_js`](ark_oauth_client_js) | Browser / SPA client (public client; React, Next.js, Vue, Angular adapters) | npm `ark-oauth-client-js` | `README.md`, `examples/`, `types/` |
+| [`Samples/client-js/react-client`](Samples/client-js/react-client) | **React sample, browser only** (Team Library): its landing page walks through registering it on the QuickStart IdP | not published | `README.md`, incl. a prompt for adding Ark sign-in to a React app |
 | [`Ark.oAuth.Oidc/Ark.Client.Web`](Ark.oAuth.Oidc/Ark.Client.Web) | Reference client app — **the shape to copy** | not published | `README.md` |
 | [`Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart`](Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart) | Zero-config IdP host: `AddArkIdp()` + `UseArkIdp()`, wizard on first run | not published | — |
 | [`Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host`](Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host) | IdP host configured through appsettings | not published | — |
@@ -593,7 +594,9 @@ a loopback redirect URI (any port is accepted on loopback). Tell me what to regi
 `/flows/spa` example in [`Ark.Client.Web`](Ark.oAuth.Oidc/Ark.Client.Web/README.md#the-other-flows),
 server recipe 5 in [`Ark.oAuth.Oidc/AI-RECIPES.md`](Ark.oAuth.Oidc/Ark.oAuth.Oidc/AI-RECIPES.md).
 The client's generated setup page, `/{tenant}/oauth2/integrate/{client_id}`, prints working
-`oidc-client-ts` config for that exact registration.
+`oidc-client-ts` config for that exact registration. For React, prefer `ark-oauth-client-js`: the
+runnable sample [`Samples/client-js/react-client`](Samples/client-js/react-client) is wired with it,
+and its README has a paste-ready prompt for adding Ark sign-in to an existing React app.
 
 **Done when:** the token call from the browser succeeds without a CORS error, the client record has
 `token_endpoint_auth_method: none`, and no secret exists anywhere in the shipped bundle.

@@ -490,7 +490,7 @@ jobs:
           npm install -g npm@latest
           if ! npm publish ./npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
             reason=$(grep -m1 -E 'npm (error|ERR!) (code |404|403|401)|ENEEDAUTH|E40[134]' "$RUNNER_TEMP/npm.log" || true)
-            echo "::error::npm publish of $PACKAGE failed: ${reason:-see the job log}. If it is an auth error, check the trusted publisher on npmjs.com for $PACKAGE: owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release, and 'npm publish' ticked under Allowed actions (a publisher created after 2026-09-03 allows only 'npm stage publish', which fails as E403 'OIDC permission denied for this action')."
+            echo "::error::npm publish of $PACKAGE failed: ${reason:-see the job log}. The package exists (the step above checked), so E404 on the PUT means no trusted publisher on npmjs.com matched this run and npm went on without credentials: add or correct the one for $PACKAGE with owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release. E403 'OIDC permission denied for this action' means it matched but 'npm publish' is not ticked under Allowed actions (publishers created after 2026-09-03 allow only 'npm stage publish'). The OIDC token is minted per attempt, so 'Re-run failed jobs' picks up a fix made on npmjs.com."
             exit 1
           fi
 
@@ -532,7 +532,7 @@ jobs:
           npm install -g npm@latest
           if ! npm publish ./npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
             reason=$(grep -m1 -E 'npm (error|ERR!) (code |404|403|401)|ENEEDAUTH|E40[134]' "$RUNNER_TEMP/npm.log" || true)
-            echo "::error::npm publish of $PACKAGE failed: ${reason:-see the job log}. If it is an auth error, check the trusted publisher on npmjs.com for $PACKAGE: owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release, and 'npm publish' ticked under Allowed actions (a publisher created after 2026-09-03 allows only 'npm stage publish', which fails as E403 'OIDC permission denied for this action')."
+            echo "::error::npm publish of $PACKAGE failed: ${reason:-see the job log}. The package exists (the step above checked), so E404 on the PUT means no trusted publisher on npmjs.com matched this run and npm went on without credentials: add or correct the one for $PACKAGE with owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release. E403 'OIDC permission denied for this action' means it matched but 'npm publish' is not ticked under Allowed actions (publishers created after 2026-09-03 allow only 'npm stage publish'). The OIDC token is minted per attempt, so 'Re-run failed jobs' picks up a fix made on npmjs.com."
             exit 1
           fi
 

@@ -16,6 +16,7 @@ The provider is multi-tenant; administration is not (one operator tenant adminis
 | `ark_oauth_client_nodejs` | Node client (Express/Connect) | npm `ark-oauth-client` |
 | `ark_oauth_client_js` | Browser/SPA client (public client; React, Next, Vue, Angular adapters) | npm `ark-oauth-client-js` |
 | `Ark.oAuth.Oidc/Ark.Client.Web` | Reference client app — the shape to copy | not published |
+| `Samples/client-js/react-client` | React SPA sample (browser only) on `ark-oauth-client-js`, with a guided QuickStart setup page | not published |
 | `Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host` | Runnable IdP host, configured through appsettings | not published |
 | `Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart` | Zero-config IdP host: `AddArkIdp()` + `UseArkIdp()`, setup wizard on first run | not published |
 

@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# Your local settings (issuer and client id). Copy .env.example to .env.local.
+.env.local
+.env.*.local
+*.log
