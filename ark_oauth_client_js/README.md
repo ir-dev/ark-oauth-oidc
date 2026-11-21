@@ -296,7 +296,7 @@ Solid: `const state = from((set) => ark.subscribe(set))`. Lit, Alpine, htmx, web
 No modules and no bundler: the IIFE build defines `window.ArkOAuth`.
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/ark-oauth-client-js@2.3.0/dist/ark-oauth-client.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ark-oauth-client-js@2.4.0/dist/ark-oauth-client.global.min.js"></script>
 <script>
   const ark = new ArkOAuth.ArkBrowserClient({ authority: 'https://idp.example.com/my_idp', clientId: 'my-spa' });
   ark.subscribe((s) => (document.title = s.isAuthenticated ? s.user.email : 'Signed out'));

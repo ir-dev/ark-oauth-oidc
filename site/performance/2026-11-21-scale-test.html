@@ -165,11 +165,11 @@
     <p class="lead">Can one ARK identity provider hold the sessions of 30,000 people who are all working at once?
       The provider was loaded with 30,000 accounts and driven through real sign-ins, single sign-on, token
       refreshes and UserInfo calls, first as released and then after the scale work described here. Every
-      number below was measured; the release that carries the changes is the one after 2.3.0.</p>
+      number below was measured; the release that carries the changes is 2.4.0.</p>
     <div class="meta">
       <span>Date <b><time datetime="2026-11-21">21 Nov 2026</time></b></span>
       <span>Before <b>v2.3.0</b></span>
-      <span>After <b>the next release</b></span>
+      <span>After <b>v2.4.0</b></span>
       <span>Scope <b>IdP on PostgreSQL · MySQL · SQLite</b></span>
     </div>
     <div class="tiles" role="list" aria-label="Summary">
@@ -238,7 +238,7 @@
     <div class="tablewrap card">
       <table>
         <tbody>
-          <tr><th scope="row">Provider</th><td><code>Ark.oAuth.Oidc.Host</code> from this repository, Release build, run as a published application. "Before" is commit <code>e598f81</code> (version 2.3.0); "after" is the working tree of 21 November 2026.</td></tr>
+          <tr><th scope="row">Provider</th><td><code>Ark.oAuth.Oidc.Host</code> from this repository, Release build, run as a published application. "Before" is commit <code>e598f81</code> (version 2.3.0); "after" is the working tree of 21 November 2026, which is released as 2.4.0.</td></tr>
           <tr><th scope="row">Runtime</th><td>.NET 10.0.1 with ASP.NET Core 10.0.1 (SDK 10.0.101), server garbage collector, Kestrel, HTTP/1.1</td></tr>
           <tr><th scope="row">Data access</th><td>EF Core 10.0.15; Npgsql provider 10.0.4; MySql.EntityFrameworkCore 10.0.12; Microsoft.Data.Sqlite 10.0.15. Connection pool: 100 per instance (the drivers' default).</td></tr>
           <tr><th scope="row">Tokens</th><td>Microsoft.IdentityModel 8.23.0; RS256 with a 2048-bit key; passwords and client secrets PBKDF2-SHA256 at 210,000 iterations</td></tr>

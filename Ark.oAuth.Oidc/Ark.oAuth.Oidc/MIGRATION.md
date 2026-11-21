@@ -8,10 +8,15 @@
 
 ## Current version
 
-- **`2.3.0`** (`<Version>` in `Ark.oAuth.Oidc.csproj`), `net10.0`, EF Core `10.0.x`.
-- Ships in lockstep with **`Ark.oAuth.Client 2.3.0`** — deliberately the **same version number** —
-  and with the Python, Node and browser clients at 2.3.0. Upgrade both .NET packages together.
-- **2.3.0 moves to .NET 10 (LTS) and EF Core 10, and changes nothing else.** Endpoints, discovery,
+- **`2.4.0`** (`<Version>` in `Ark.oAuth.Oidc.csproj`), `net10.0`, EF Core `10.0.x`.
+- Ships in lockstep with **`Ark.oAuth.Client 2.4.0`** — deliberately the **same version number** —
+  and with the Python, Node and browser clients at 2.4.0. Upgrade both .NET packages together.
+- **2.4.0 is the scale release: built to hold 30,000 signed-in users and to run on more than one
+  instance.** Endpoints, discovery, tokens, pages and existing configuration are as in 2.3.0, so
+  every client that works with a 2.3.0 provider works with 2.4.0, and the four client packages are
+  unchanged. The first start adds indexes to an existing database, and on PostgreSQL and MySQL the
+  `data_protection_keys` table; see the 2.4.0 entry under "Behavioural changes by version".
+- **2.3.0 moved to .NET 10 (LTS) and EF Core 10, and changed nothing else.** Endpoints, discovery,
   tokens, pages, configuration and schema are as in 2.2.1, so every client that works with a 2.2.x
   provider works with 2.3.0. 2.2.1 is the last `net9.0` release (it is 2.2.0 republished, no code
   change), and .NET 9 left support on 2026-11-10. Retarget a `net9.0` host to `net10.0` before
@@ -123,6 +128,33 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
 
 ## Behavioural changes by version (from the .csproj notes)
 
+- **2.4.0 — scale: 30,000 signed-in users, more than one instance; nothing changes on the wire.**
+  Sign-in and token lookups ask for the stored value first and fall back to a `lower()` index
+  instead of comparing `lower(column)` across the whole table. Tenants, clients, scopes and the
+  signing key are kept in memory for `Oidc:ReferenceCacheSeconds` (30), and a confidential client's
+  verified secret for `Oidc:ClientSecretCacheSeconds` (300); nothing about a user is cached, and
+  nothing is refused on a cached copy. Password hashing is bounded by
+  `Oidc:MaxConcurrentPasswordHashes` (0 = half the cores). The data-protection key ring is kept in
+  the server's database on PostgreSQL and MySQL (`DataProtectionKeys: auto`). Failed sign-ins are
+  counted atomically. The purge also removes refresh tokens whose session has ended. The audit
+  trail is written in batches off the request path, and error rows, which were being discarded,
+  are now written.
+  - **Schema, applied by the first start:** the missing indexes on the hot paths (including
+    `refresh_tokens.session_id` and the `expires_at` columns), never a unique index and never
+    fatal; and the `data_protection_keys` table where the key ring moves into the database. It
+    reads each table once, so allow that start longer on a database with millions of rows.
+  - **Upgrade action:** none is required; every new setting has a default. The keys the machine
+    was already using are copied into the database the first time, so the upgrade signs nobody
+    out. A host that configures its own key storage (`PersistKeysTo…`) keeps it; `off` leaves the
+    ring to the host, `database` moves it on SQLite too.
+  - **What an operator will notice:** with more than one instance, a change that takes something
+    away from a client, scope or tenant reaches the other instances within
+    `ReferenceCacheSeconds`; set `0` to read the database every time. The audit table now receives
+    the error rows it was missing, and with `EnableLogTrace` on a busy server writes several rows
+    per sign-in; `Oidc:AuditRetentionDays` (0 = keep all) trims it. Nobody is turned away by the hashing limit unless `Oidc:MaxPasswordHashWaitSeconds` is set;
+    then a sign-in that waits longer gets "the server is busy" (token endpoint: 503
+    `temporarily_unavailable`) and is not counted as a failed attempt.
+  - Settings and sizing: README → "Running at scale".
 - **2.3.0 — .NET 10 and EF Core 10; no behaviour change.** Target framework `net9.0` → `net10.0`;
   EF Core / Sqlite `9.0.19` → `10.0.15`; `Npgsql.EntityFrameworkCore.PostgreSQL` `9.0.4` → `10.0.4`;
   `MySql.EntityFrameworkCore` `9.0.17` → `10.0.12` (MySql.Data 26.10.0, which no longer pulls

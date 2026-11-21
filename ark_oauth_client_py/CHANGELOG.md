@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.4.0
+
+No change to this package. It has the same code, API and dependencies as 2.3.0 and is published at
+the family's version. In this release the provider, `Ark.oAuth.Oidc`, is built to hold 30,000
+signed-in users and to run on more than one instance: its lookups use indexes, it keeps clients,
+scopes and signing keys in memory for a short time, and its instances share one data-protection key
+ring through the database.
+
+There is nothing to do when you upgrade. The provider's endpoints, tokens and discovery document are
+the same in 2.4.0 as in 2.3.0. This client therefore behaves the same against a 2.3.0 provider and a
+2.4.0 one, and you can upgrade the two in either order. The requirements are unchanged: Python
+`>=3.9` and `cryptography>=49.0.0` (`>=46.0.6` on Python 3.9.0/3.9.1). The built-in access-denied
+page names `ark-oauth-client 2.4.0` in its footer.
+
 ## 2.3.0
 
 No change to this package. It has the same code, API and dependencies as 2.2.1 and is published at

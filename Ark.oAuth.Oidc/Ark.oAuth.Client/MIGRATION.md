@@ -7,10 +7,12 @@
 
 ## Current version
 
-- **`2.3.0`** (`<Version>` in `Ark.oAuth.Client.csproj`), `net10.0`.
-- Ships in lockstep with **`Ark.oAuth.Oidc 2.3.0`** — the client and server packages deliberately
+- **`2.4.0`** (`<Version>` in `Ark.oAuth.Client.csproj`), `net10.0`.
+- Ships in lockstep with **`Ark.oAuth.Oidc 2.4.0`** — the client and server packages deliberately
   carry the **same version number**. Upgrade both together.
-- **2.3.0 moves to .NET 10 (LTS); no API, option or behaviour change.** 2.2.1 is the last `net9.0`
+- **2.4.0 changes nothing in this package.** It is 2.3.0 published at the family's version,
+  alongside the provider's scale release, which changes nothing on the wire.
+- **2.3.0 moved to .NET 10 (LTS); no API, option or behaviour change.** 2.2.1 is the last `net9.0`
   release (it is 2.2.0 republished, no code change), and .NET 9 left support on 2026-11-10.
   Retarget a `net9.0` app to `net10.0` before upgrading (restore fails with NU1202 otherwise). If
   the app pins `Microsoft.IdentityModel.*` itself, raise those pins to `8.23.0` or remove them.
@@ -41,6 +43,9 @@ downward.
 
 ## Changelog (from the .csproj, newest first)
 
+- **2.4.0**: no change to this package; the same code, API, options and dependencies as 2.3.0,
+  published alongside `Ark.oAuth.Oidc` 2.4.0 (the provider's scale release). App and provider
+  upgrade in either order.
 - **2.3.0 — .NET 10, alongside `Ark.oAuth.Oidc` 2.3.0.** Target framework `net9.0` → `net10.0`;
   `Microsoft.AspNetCore.Authentication.OpenIdConnect` / `JwtBearer` `8.0.15` → `10.0.15`;
   `Microsoft.IdentityModel.*` `8.8.0` → `8.23.0`. No API, option or behaviour change: ASP.NET Core

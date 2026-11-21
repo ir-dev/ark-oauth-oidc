@@ -26,9 +26,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.3.0</Version>
-		<AssemblyVersion>2.3.0.0</AssemblyVersion>
-		<FileVersion>2.3.0.0</FileVersion>
+		<Version>2.4.0</Version>
+		<AssemblyVersion>2.4.0.0</AssemblyVersion>
+		<FileVersion>2.4.0.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -50,6 +50,13 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.4.0 — published alongside Ark.oAuth.Oidc 2.4.0. No change to this package.
+
+The code, API, options, defaults and dependencies are those of 2.3.0. The provider's 2.4.0 is built
+to hold 30,000 signed-in users and to run on more than one instance, and changes nothing on the
+wire, so the app and the provider can be upgraded in either order. There is nothing to do when you
+upgrade.
+
 2.3.0 — .NET 10, alongside Ark.oAuth.Oidc 2.3.0. No API change.
 
 .NET 9 left support on 2026-11-10; .NET 10 is the long-term support release. The package moves onto

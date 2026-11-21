@@ -7,9 +7,9 @@
 
 ## Current version
 
-- **`2.3.0`** — the `version` in `pyproject.toml`, which is what the built wheel/sdist and PyPI carry.
-- Ships in lockstep with **`Ark.oAuth.Client 2.3.0`** (NuGet), **`ark-oauth-client-node 2.3.0`** (npm;
-  `ark-oauth-client` up to 2.1.8) and **`ark-oauth-client-js 2.3.0`** (npm, browser).
+- **`2.4.0`** — the `version` in `pyproject.toml`, which is what the built wheel/sdist and PyPI carry.
+- Ships in lockstep with **`Ark.oAuth.Client 2.4.0`** (NuGet), **`ark-oauth-client-node 2.4.0`** (npm;
+  `ark-oauth-client` up to 2.1.8) and **`ark-oauth-client-js 2.4.0`** (npm, browser).
   The three ports deliberately carry the **same version number**; an integration written in one
   translates almost line-for-line into another.
 
@@ -64,6 +64,8 @@ authorization requests (RFC 9126), introspection (RFC 7662), revocation (RFC 700
 
 ## Changelog (from CHANGELOG.md)
 
+- **2.4.0** — no change to this package; published at the family's version alongside the provider's
+  scale release (`Ark.oAuth.Oidc` 2.4.0). Works the same against a 2.3.0 or a 2.4.0 provider.
 - **2.3.0** — no change to this package; published at the family's version as the .NET packages
   move to .NET 10. Works the same against a 2.2.x or a 2.3.0 provider.
 - **2.2.1** — 2.2.0 republished through the release workflow; the files differ only in the version.

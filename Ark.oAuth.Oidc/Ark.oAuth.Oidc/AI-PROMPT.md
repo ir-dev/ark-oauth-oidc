@@ -16,7 +16,7 @@ failures in [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md); upgrades in [`MIGRATION.
 | | |
 |---|---|
 | **Package** | `Ark.oAuth.Oidc` (nuget.org) |
-| **Current version** | `2.3.0` (moves in lockstep with `Ark.oAuth.Client`) |
+| **Current version** | `2.4.0` (moves in lockstep with `Ark.oAuth.Client`) |
 | **Root namespace** | `Ark.oAuth.Oidc`. Host also uses `Ark.oAuth` for the client extension. |
 | **Target framework** | `net10.0` (`net9.0` up to 2.2.1) |
 | **Purpose** | A self-contained OAuth 2.1 / OpenID Connect **provider** (IdP) for ASP.NET Core. Add two lines to `Program.cs`; standard OIDC clients configure themselves from discovery. |
@@ -201,7 +201,7 @@ DO NOT:
 ## 6. Version & compatibility
 
 - Target framework `net10.0`; EF Core `10.0.x` (`net9.0` and EF Core `9.0.x` up to 2.2.1).
-- Current version **2.3.0**; ships with `Ark.oAuth.Client 2.3.0`. 2.3.0 is 2.2.1 moved to .NET 10 / EF Core 10, with no behaviour change.
+- Current version **2.4.0**; ships with `Ark.oAuth.Client 2.4.0`. 2.4.0 is the scale release (indexed lookups, the reference and client-secret caches, the key ring in the database, bounded password hashing) and changes nothing on the wire; 2.3.0 was 2.2.1 moved to .NET 10 / EF Core 10, with no behaviour change.
 - **Unsupported by design:** implicit grant, hybrid flow, ROPC, plain PKCE, SQL Server.
 - Schema history is tracked in `ark_schema_history`; scripts `00003` (2.0.0), `00004` (2.0.2),
   `00005` (2.0.3). Full detail: [`MIGRATION.md`](MIGRATION.md).

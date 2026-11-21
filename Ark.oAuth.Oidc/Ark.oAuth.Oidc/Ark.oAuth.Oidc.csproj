@@ -30,9 +30,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.3.0</Version>
-		<AssemblyVersion>2.3.0.0</AssemblyVersion>
-		<FileVersion>2.3.0.0</FileVersion>
+		<Version>2.4.0</Version>
+		<AssemblyVersion>2.4.0.0</AssemblyVersion>
+		<FileVersion>2.4.0.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -54,7 +54,7 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
-Next release — built to hold 30,000 signed-in users, and to run on more than one instance.
+2.4.0 — built to hold 30,000 signed-in users, and to run on more than one instance.
 
 Measured, not estimated: with 30,000 accounts in PostgreSQL the same test went from 78 to 159
 sign-ins a second and from 352 to 2,308 requests a second on one instance, and two instances behind
@@ -82,7 +82,7 @@ has the settings.
   sign-in storm no longer starves people who are already signed in. Nobody is turned away unless
   `Oidc:MaxPasswordHashWaitSeconds` is set.
 * **More than one instance works without configuration.** The data-protection key ring is kept in
-  the server's database on PostgreSQL, MySQL and SQL Server (`DataProtectionKeys: auto`); it used to
+  the server's database on PostgreSQL and MySQL (`DataProtectionKeys: auto`); it used to
   sit in a folder per machine, so the sign-in form drawn by one instance was refused by the next.
   A host that configures its own key storage keeps it. The keys already on the machine are copied
   into the database the first time, so the upgrade signs nobody out.

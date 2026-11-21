@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.4.0
+
+No change to this package. It has the same code, API and adapters as 2.3.0 and is published at the
+family's version. In this release the provider, `Ark.oAuth.Oidc`, is built to hold 30,000
+signed-in users and to run on more than one instance: its lookups use indexes, it keeps clients,
+scopes and signing keys in memory for a short time, and its instances share one data-protection key
+ring through the database.
+
+There is nothing to do when you upgrade. The provider's endpoints, CORS behaviour, tokens and
+discovery document are the same in 2.4.0 as in 2.3.0. This client therefore behaves the same against
+a 2.3.0 provider and a 2.4.0 one, and you can upgrade the two in either order. There are still no
+runtime dependencies, and the framework adapters keep the same peer ranges. `VERSION` reads
+`2.4.0`. The CDN `<script>` example in the README now pins `@2.4.0`.
+
 ## 2.3.0
 
 No change to this package. It has the same code, API and adapters as 2.2.1 and is published at the
