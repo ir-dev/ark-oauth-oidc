@@ -1,6 +1,6 @@
 # ARK Identity Server
 
-> Self-hosted OAuth 2.1 / OpenID Connect identity provider for ASP.NET Core (NuGet Ark.oAuth.Oidc), with client libraries for .NET (NuGet Ark.oAuth.Client), Python (PyPI ark-oauth-client) and Node (npm ark-oauth-client-node). The clients are ports of each other and share one version number. Multi-tenant at the protocol layer; administered by one operator tenant. Runs on SQLite, MySQL or PostgreSQL. MIT. Repository: https://github.com/ir-dev/ark-oauth-oidc
+> Self-hosted OAuth 2.1 / OpenID Connect identity provider for ASP.NET Core (NuGet Ark.oAuth.Oidc), with client libraries for .NET (NuGet Ark.oAuth.Client), Python (PyPI ark-oauth-client), Node (npm ark-oauth-client-node) and the browser (npm ark-oauth-client-js, for single-page apps). The clients are ports of each other and share one version number. Multi-tenant at the protocol layer; administered by one operator tenant. Runs on SQLite, MySQL or PostgreSQL. MIT. Repository: https://github.com/ir-dev/ark-oauth-oidc
 
 Source of truth is the code. Where a document and the source disagree, follow the source and say so.
 
@@ -11,6 +11,7 @@ Only two settings are required: `authority` (the issuer, `{BaseUrl}/{TenantId}`,
 - .NET: `builder.Services.AddArkOidcClient(builder.Configuration);` (section `ark_oauth_client`), then `app.UseRouting(); app.UseAuthentication(); app.UseAuthorization();` in that order. Root namespace `Ark.oAuth`.
 - Python: `auth = add_ark_oidc_client(app, {"authority": A, "client_id": C})`; protect with `@auth.require_claims("x")`; user via `current_ark.user`.
 - Node: `const auth = arkExpress({ authority, clientId, redirectUri, secret }); app.use(auth); app.get('/x', auth.requireClaims('x'), h)`.
+- Browser / SPA: `const ark = new ArkBrowserClient({ authority, clientId }); await ark.init();` then `ark.signinRedirect()`, `ark.signoutRedirect()`, `ark.fetch(url)`. A public client: register it with auth method `none` (PKCE, no secret) and add the app's exact origin to the provider's `ark_oauth_server:Oidc:CorsOrigins`, or every token request fails as `Failed to fetch`. `ark.fetch` sends the token only to the page's origin and `apiOrigins`. Adapters: `ark-oauth-client-js/react` (`<ArkProvider>`, `<RequireArk claims>`, `<ArkCallback>` on the `/signin-oidc` route), `/next`, `/vue`, `/angular`. `await ark.checkSetup()` reports CORS and discovery problems.
 - APIs (bearer): .NET `AddArkOidcApi`, Python `add_ark_oidc_api`, Node `arkBearer`.
 
 ## Run the identity provider
@@ -39,7 +40,7 @@ Caller: the operator's console session, or a `client_credentials` token issued t
 - Scopes on a client are a whitelist; an unregistered scope is rejected. `offline_access` yields a refresh token.
 - Authorize on `ark_claims`, not scopes. Read the access token per request; never cache it.
 - Never add a route at the callback path. Sign out of the local session and the provider.
-- Shared browsers: enable the account switch with required claims: .NET `AccountSwitch:RequireArkClaims` + `RequiredClaims`; Python `account_switch.require_ark_claims` + `required_claims`; Node `accountSwitch.requireArkClaims` + `requiredClaims`.
+- Shared browsers: enable the account switch with required claims: .NET `AccountSwitch:RequireArkClaims` + `RequiredClaims`; Python `account_switch.require_ark_claims` + `required_claims`; Node and browser `accountSwitch.requireArkClaims` + `requiredClaims`.
 - Never hand-roll OAuth; never recreate the v1 shape (pasted `rsaPublic`, custom callback route, no state/nonce).
 - .NET: both packages target `net10.0` from 2.3.0 (`net9.0` up to 2.2.1); keep `Microsoft.IdentityModel.*` on one version (8.23.0 from 2.3.0). No implicit, hybrid, ROPC, plain PKCE or SQL Server.
 - The repository is public: never write a secret into a tracked file. Do not commit or publish unless asked.
@@ -53,6 +54,7 @@ Caller: the operator's console session, or a `client_credentials` token issued t
 - [.NET client AI-PROMPT](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Client/AI-PROMPT.md)
 - [Python client AI-PROMPT](https://github.com/ir-dev/ark-oauth-oidc/blob/main/ark_oauth_client_py/AI-PROMPT.md)
 - [Node client README](https://github.com/ir-dev/ark-oauth-oidc/blob/main/ark_oauth_client_nodejs/README.md)
+- [Browser client README](https://github.com/ir-dev/ark-oauth-oidc/blob/main/ark_oauth_client_js/README.md): plain JS, React, Next.js, Vue, Angular, a `<script>` tag
 - [Reference client app](https://github.com/ir-dev/ark-oauth-oidc/tree/main/Ark.oAuth.Oidc/Ark.Client.Web)
 - [Getting started](https://github.com/ir-dev/ark-oauth-oidc/blob/main/GETTINGSTARTED.md)
 

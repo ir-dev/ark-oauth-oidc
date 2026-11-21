@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ARK Identity Server</title>
-<meta name="description" content="A self-hosted OAuth 2.1 / OpenID Connect identity provider for ASP.NET Core. Two lines and a setup wizard make it your IdP; one call onboards an app; one console governs every tenant. Clients for .NET, Python and Node.">
+<meta name="description" content="A self-hosted OAuth 2.1 / OpenID Connect identity provider for ASP.NET Core. Two lines and a setup wizard make it your IdP; one call onboards an app; one console governs every tenant. Clients for .NET, Python, Node and the browser.">
 <meta property="og:title" content="ARK Identity Server">
 <meta property="og:description" content="Your own OAuth 2.1 / OpenID Connect provider in two lines of C#. Sign-in for any app with two settings. Every tenant governed from one console.">
 <meta property="og:type" content="website">
@@ -377,8 +377,16 @@
 
   /* packages */
   .pkgs { display: grid; gap: 16px; }
-  @media (min-width: 720px) { .pkgs { grid-template-columns: repeat(2, 1fr); } }
-  @media (min-width: 1040px) { .pkgs { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  /* five cards: the provider, then the four clients (2 x 2 on tablets; 2 + 3 on desktop) */
+  @media (min-width: 720px) {
+    .pkgs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .pkgs .pkg:first-child { grid-column: 1 / -1; }
+  }
+  @media (min-width: 1040px) {
+    .pkgs { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .pkgs .pkg { grid-column: span 2; }
+    .pkgs .pkg:nth-child(-n + 2) { grid-column: span 3; }
+  }
   .pkg { padding: 20px; display: flex; flex-direction: column; gap: 10px; }
   .pkg .reg { font-size: .74rem; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); display: flex; justify-content: space-between; }
   .pkg .ver { font-family: "JetBrains Mono", monospace; color: var(--brand); text-transform: none; letter-spacing: 0; }
@@ -539,7 +547,7 @@
         <p class="lede">
           ARK is a self-hosted OAuth 2.1 / OpenID Connect provider for ASP.NET Core. Add two lines, open a
           browser and answer the setup wizard: the same process is now your IdP. Apps sign in with two
-          settings in .NET, Python or Node, and one console governs every tenant.
+          settings in .NET, Python, Node or the browser, and one console governs every tenant.
         </p>
         <div class="cta">
           <a class="btn btn-primary" href="#setup">Set up an IdP →</a>
@@ -597,7 +605,7 @@ app.Run();</pre>
         <article class="card step">
           <div class="num"><b>3</b>Sign users in</div>
           <div class="big"><span>2</span> settings</div>
-          <p><code>authority</code> and <code>client_id</code>. Endpoints, keys and capabilities come from discovery, in .NET, Python or Node.</p>
+          <p><code>authority</code> and <code>client_id</code>. Endpoints, keys and capabilities come from discovery, in .NET, Python, Node or the browser.</p>
           <div class="code"><pre>pip install "ark-oauth-client[flask]"</pre></div>
           <a class="more" href="#quickstart">Quickstart →</a>
         </article>
@@ -1065,8 +1073,8 @@ signOut.onclick = () =&gt; ark.signoutRedirect(); <span class="c">// app + provi
     <div class="wrap">
       <div class="section-head">
         <div class="kicker">Packages</div>
-        <h2>One version number, four packages.</h2>
-        <p>Every release ships all four together from one workflow, using Trusted Publishing on every registry. No tokens are involved.</p>
+        <h2>One version number, five packages.</h2>
+        <p>Every release ships all five together from one workflow, using Trusted Publishing on every registry. No tokens are involved.</p>
       </div>
       <div class="pkgs">
         <article class="card pkg">
@@ -1096,6 +1104,13 @@ signOut.onclick = () =&gt; ark.signoutRedirect(); <span class="c">// app + provi
           <p>A Node client: Express/Connect middleware, bearer protection and sessions that interoperate with the Python client.</p>
           <div class="install">npm install ark-oauth-client-node</div>
           <div class="links"><a href="https://www.npmjs.com/package/ark-oauth-client-node">npmjs.com</a><a href="https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_nodejs">README</a></div>
+        </article>
+        <article class="card pkg">
+          <div class="reg">npm <span class="ver" data-reg="npm" data-id="ark-oauth-client-js">·</span></div>
+          <h3>ark-oauth-client-js</h3>
+          <p>A browser client for single-page apps: PKCE as a public client, ID tokens verified in the browser, and adapters for React, Next.js, Vue and Angular.</p>
+          <div class="install">npm install ark-oauth-client-js</div>
+          <div class="links"><a href="https://www.npmjs.com/package/ark-oauth-client-js">npmjs.com</a><a href="https://github.com/ir-dev/ark-oauth-oidc/tree/main/ark_oauth_client_js">README</a></div>
         </article>
       </div>
     </div>
