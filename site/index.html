@@ -898,14 +898,15 @@ curl -s -X POST https://idp.example.com/api/oauth/v1/activation/user \
     <div class="wrap">
       <div class="section-head">
         <div class="kicker">Quickstart</div>
-        <h2>Sign an app in, in any of three languages.</h2>
-        <p>The three clients are ports of each other and share one version number, so an integration in one translates almost line for line into the others.</p>
+        <h2>Sign an app in, on the server or in the browser.</h2>
+        <p>The four clients are ports of each other and share one version number, so an integration in one translates almost line for line into the others.</p>
       </div>
 
       <div class="tabs" role="tablist" aria-label="Client language">
         <button class="tab" role="tab" id="tab-dotnet" aria-controls="p-dotnet" aria-selected="true">.NET / ASP.NET Core</button>
         <button class="tab" role="tab" id="tab-py" aria-controls="p-py" aria-selected="false" tabindex="-1">Python / Flask</button>
         <button class="tab" role="tab" id="tab-node" aria-controls="p-node" aria-selected="false" tabindex="-1">Node / Express</button>
+        <button class="tab" role="tab" id="tab-js" aria-controls="p-js" aria-selected="false" tabindex="-1">Browser / SPA</button>
       </div>
 
       <div class="panel" id="p-dotnet" role="tabpanel" aria-labelledby="tab-dotnet">
@@ -1009,6 +1010,50 @@ auth = add_ark_oidc_client(app, {
 app.use(auth);                                      <span class="c">// /login, callback, /logout</span>
 app.get(<span class="s">'/billing'</span>, auth.requireClaims(<span class="s">'billing.admin'</span>),
   (req, res) =&gt; res.send(req.ark.user.name));</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="p-js" role="tabpanel" aria-labelledby="tab-js" hidden>
+        <div class="explain">
+          <p>One client runs the protocol in the browser, as a public client with PKCE and no secret. Thin adapters bind it to React, Next.js, Vue and Angular.</p>
+          <ul>
+            <li>Register the client with auth method <code>none</code>, and add the app's origin to the provider's <code>CorsOrigins</code>. Without it, every token request fails as <code>Failed to fetch</code>.</li>
+            <li><code>ark.fetch()</code> attaches the token only to the app's own origin and to <code>apiOrigins</code>.</li>
+            <li>Shared PCs: <code>accountSwitch: { requireArkClaims: true }</code>, the same as the other three clients.</li>
+            <li><code>await ark.checkSetup()</code> checks discovery, the signing keys and CORS, and lists any problems in plain sentences.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <div class="code">
+            <div class="code-head">terminal<button class="copy" type="button">Copy</button></div>
+<pre>npm install ark-oauth-client-js</pre>
+          </div>
+          <div class="code">
+            <div class="code-head">app.js<button class="copy" type="button">Copy</button></div>
+<pre><span class="k">import</span> { ArkBrowserClient } <span class="k">from</span> <span class="s">'ark-oauth-client-js'</span>;
+
+<span class="k">const</span> ark = <span class="k">new</span> ArkBrowserClient({
+  authority: <span class="s">'https://idp.example.com/my_idp'</span>,
+  clientId: <span class="s">'my-spa'</span>                   <span class="c">// public client: no secret</span>
+});
+
+ark.subscribe(s =&gt; {                   <span class="c">// on every state change</span>
+  who.textContent = s.isAuthenticated ? s.user.email : <span class="s">'signed out'</span>;
+});
+signIn.onclick  = () =&gt; ark.signinRedirect();
+signOut.onclick = () =&gt; ark.signoutRedirect(); <span class="c">// app + provider</span>
+
+<span class="k">await</span> ark.init();                      <span class="c">// callback, or restore session</span>
+<span class="k">const</span> orders = <span class="k">await</span> (<span class="k">await</span> ark.fetch(<span class="s">'/api/orders'</span>)).json();</pre>
+          </div>
+          <div class="code">
+            <div class="code-head">React<button class="copy" type="button">Copy</button></div>
+<pre><span class="k">import</span> { ArkProvider, RequireArk } <span class="k">from</span> <span class="s">'ark-oauth-client-js/react'</span>;
+
+&lt;ArkProvider client={ark}&gt;
+  &lt;RequireArk claims={[<span class="s">'billing.admin'</span>]}&gt;&lt;Billing /&gt;&lt;/RequireArk&gt;
+&lt;/ArkProvider&gt;</pre>
           </div>
         </div>
       </div>
@@ -1178,7 +1223,7 @@ app.get(<span class="s">'/billing'</span>, auth.requireClaims(<span class="s">'b
         <div class="card pitfall">
           <div class="symptom">Symptom: stuck on “no access”</div>
           <h3>Shared browsers need an account switch</h3>
-          <p>SSO signs the next person in as the previous one. All three clients ship the fix: turn on <code>RequireArkClaims</code> with <code>RequiredClaims</code>, and the app offers <code>prompt=login</code> instead of a dead end.</p>
+          <p>SSO signs the next person in as the previous one. All four clients ship the fix: turn on <code>RequireArkClaims</code> with <code>RequiredClaims</code>, and the app offers <code>prompt=login</code> instead of a dead end.</p>
         </div>
       </div>
     </div>
