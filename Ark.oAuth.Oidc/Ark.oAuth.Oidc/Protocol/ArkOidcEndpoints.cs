@@ -67,6 +67,14 @@ namespace Ark.oAuth.Oidc.Protocol
         /// </summary>
         public int MaxConcurrentPasswordHashes { get; set; } = 0;
 
+        /// <summary>
+        /// The longest a sign-in may wait for a hashing slot before it is answered "the server is
+        /// busy, try again" (HTTP 503 at the token endpoint). 0, the default, never refuses: a
+        /// sign-in waits its turn however long that is, as it always has. Set it — 20 is
+        /// reasonable — to shed load during an attack or a storm rather than let the queue grow.
+        /// </summary>
+        public int MaxPasswordHashWaitSeconds { get; set; } = 0;
+
         /// <summary>Lock an account after this many consecutive failed sign-ins. 0 disables lockout.</summary>
         public int MaxFailedSignIns { get; set; } = 10;
         public int LockoutMinutes { get; set; } = 15;

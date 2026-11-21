@@ -135,7 +135,8 @@ endpoint the authorization middleware cannot see the `[Authorize]` metadata it i
       "AuditRetentionDays": 0,         // 0 keeps the audit trail for ever
       "ReferenceCacheSeconds": 30,     // see "Running at scale"
       "ClientSecretCacheSeconds": 300,
-      "MaxConcurrentPasswordHashes": 0 // 0 = half the cores
+      "MaxConcurrentPasswordHashes": 0, // 0 = half the cores
+      "MaxPasswordHashWaitSeconds": 0   // 0 = a sign-in waits its turn however long; set to shed load instead
     }
   },
   "ConnectionStrings": {
@@ -626,7 +627,10 @@ unless `ark_oauth_server:Management:AllowMigrationEndpoint` is `true`, and opera
 
 Measured with 30,000 accounts on PostgreSQL: all 30,000 signed in with no errors, and with their
 30,000 sessions live a single instance answered a refresh in 5 ms and a single-sign-on hop in 7 ms at
-the median. The dated report, with the method and every number, is on the project site:
+the median. As two instances behind a TLS-terminating load balancer, with the database a network hop
+away, the same 30,000 people were carried through 804,332 requests of every kind in 25 minutes without
+an error. Sign-in under step load, from 100 to 10,000 people at once, completed 204,254 sign-ins
+without one being refused. The dated report, with the method and every number, is on the project site:
 <https://ir-dev.github.io/ark-oauth-oidc/#reviews>.
 
 What decides whether a deployment holds up, in the order it matters:
@@ -643,7 +647,9 @@ What decides whether a deployment holds up, in the order it matters:
    key ring, which lives in a folder on each machine by default — so a form drawn by one instance is
    refused by the next. `DataProtectionKeys: auto` keeps the ring in the server's database on every
    provider except SQLite, so all instances share it. `database` does so on SQLite too; `off` leaves
-   it to the host. A host that calls `PersistKeysTo…` itself always wins. Set `BaseUrl` to the public
+   it to the host. A host that calls `PersistKeysTo…` itself always wins. The keys the machine was
+   already using are copied into the database the first time, so the move signs nobody out and a
+   sign-in form already open still posts. Set `BaseUrl` to the public
    address, and no session affinity is required. On a brand-new database, bring one instance up and
    let it answer a request before starting the others, so the schema and the first key are created
    once.
@@ -654,15 +660,16 @@ What decides whether a deployment holds up, in the order it matters:
    people who are already signed in alone. Budget roughly 25 sign-ins a second per hashing core;
    30,000 people arriving over fifteen minutes is 33 a second, so plan for at least two hashing
    cores across the deployment — four cores in total at the default — and more for a sharper peak.
-   A sign-in that has waited 20 seconds for a slot is answered "the server is busy, try again"
-   rather than left hanging, and is not counted as a failed attempt. That message means the
-   deployment is undersized for the rate people are arriving at, not that anything is broken.
+   By default nobody is turned away: a sign-in waits its turn however long that takes, as it always
+   has. Set `MaxPasswordHashWaitSeconds` (20 is reasonable) to answer "the server is busy, try
+   again" after that long instead, which sheds load in an attack; such an attempt is not counted
+   as a failed one.
 
 Three things this version keeps in memory, and what that means when an operator changes something:
 
 | Kept | For | A change is seen |
 |---|---|---|
-| Tenants, clients, scopes, the signing key | `ReferenceCacheSeconds` (30) | At once on the instance that made it; within that time on the others. `0` turns it off. |
+| Tenants, clients, scopes, the signing key | `ReferenceCacheSeconds` (30) | At once on the instance that made it. On the others: a change that allows something — a new secret, redirect URI, scope or grant, a reactivated client — at once too, because nothing is refused without reading the database first; a change that takes something away, within that time. `0` turns it off. |
 | A client secret that verified | `ClientSecretCacheSeconds` (300) | At once: replacing the secret retires the entry. A wrong secret is never remembered. |
 | The `ark_oauth_server` configuration | Until configuration reloads | On reload, as before. |
 

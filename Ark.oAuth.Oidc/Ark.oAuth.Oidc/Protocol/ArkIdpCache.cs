@@ -145,6 +145,46 @@ namespace Ark.oAuth.Oidc.Protocol
                 () => ArkLookup.ClientAsync(ctx, tenant, client));
         }
 
+        /// <summary>
+        /// The client as the database has it now, when that differs from <paramref name="held"/>;
+        /// otherwise <paramref name="held"/> itself.
+        ///
+        /// Call this before refusing a request because of something a client record says — a wrong
+        /// secret, an unregistered redirect URI, a scope or grant it may not use, a deactivated
+        /// client. The copy held here can be up to <see cref="ArkOidcOptions.ReferenceCacheSeconds"/>
+        /// old when the change was made through another instance or another process, and an
+        /// operator who has just issued a secret or added a redirect URI expects it to work on the
+        /// next request, wherever that lands. Checking before every refusal is what makes the cache
+        /// invisible in that direction: nothing is ever refused on stale data. (A change that takes
+        /// something <i>away</i> still reaches other instances within the time-to-live.)
+        ///
+        /// It costs one indexed read, and only on a request that is about to be refused — which is
+        /// what every request cost before there was a cache. It is deliberately not rate-limited: a
+        /// limit would be a window in which a change just made is still refused.
+        /// </summary>
+        public static async Task<ArkClient> ClientIfChangedAsync(ArkDataContext ctx, ArkClient held)
+        {
+            if (TtlSeconds(ctx) == 0) return held;
+            var id = $"{(held.tenant_id ?? "").ToLowerInvariant()}\n{(held.client_id ?? "").ToLowerInvariant()}";
+            var key = Key(ctx, "client", id);
+            var now = Environment.TickCount64;
+            var generation = Interlocked.Read(ref _generation);
+            var fresh = await ArkLookup.ClientAsync(ctx, held.tenant_id ?? "", held.client_id ?? "");
+            if (fresh == null) return held; // deleted meanwhile: the refusal stands
+            if (generation == Interlocked.Read(ref _generation))
+                Items[key] = new Entry(fresh, now + TtlSeconds(ctx) * 1000L);
+            return SameRegistration(held, fresh) ? held : fresh;
+        }
+
+        private static bool SameRegistration(ArkClient a, ArkClient b) =>
+            a.at == b.at && a.is_active == b.is_active
+            && a.client_secret_hash == b.client_secret_hash && a.client_secret_expires_at == b.client_secret_expires_at
+            && a.token_endpoint_auth_method == b.token_endpoint_auth_method
+            && a.redirect_uris_ == b.redirect_uris_ && a.redirect_url == b.redirect_url
+            && a.post_logout_redirect_uris_ == b.post_logout_redirect_uris_ && a.logout_url == b.logout_url
+            && a.scopes_ == b.scopes_ && a.grant_types_ == b.grant_types_
+            && a.require_pkce == b.require_pkce && a.require_par == b.require_par && a.jwks_uri == b.jwks_uri;
+
         /// <summary>The scope catalogue. Shared: do not add to or reorder the list.</summary>
         public static async Task<IReadOnlyList<ArkScope>> ScopesAsync(ArkDataContext ctx) =>
             await GetOrLoadAsync<List<ArkScope>>(ctx, "scopes", "*",
@@ -277,9 +317,15 @@ namespace Ark.oAuth.Oidc.Protocol
         /// <summary>Half the cores hash; the other half is left for everything else.</summary>
         public static int DefaultSlots => Math.Max(1, Environment.ProcessorCount / 2);
 
-        /// <summary>Applies <see cref="ArkOidcOptions.MaxConcurrentPasswordHashes"/>; 0 or less means <see cref="DefaultSlots"/>.</summary>
-        public static void Configure(int slots)
+        private static int _maxWaitSeconds;
+
+        /// <summary>
+        /// Applies <see cref="ArkOidcOptions.MaxConcurrentPasswordHashes"/> (0 or less means
+        /// <see cref="DefaultSlots"/>) and <see cref="ArkOidcOptions.MaxPasswordHashWaitSeconds"/>.
+        /// </summary>
+        public static void Configure(int slots, int maxWaitSeconds = 0)
         {
+            Volatile.Write(ref _maxWaitSeconds, Math.Max(0, maxWaitSeconds));
             if (slots <= 0) slots = DefaultSlots;
             if (slots == Volatile.Read(ref _slots)) return;
             // Hashes already running finish against the gate they entered.
@@ -287,18 +333,17 @@ namespace Ark.oAuth.Oidc.Protocol
             Volatile.Write(ref _slots, slots);
         }
 
-        /// <summary>
-        /// The longest a hash waits for its turn. Past this the queue is longer than anyone will
-        /// sit in front of a sign-in page for, and saying so at once is kinder than a page that
-        /// hangs — and it is what stops a flood of sign-in attempts from queueing without limit.
-        /// </summary>
-        public static readonly TimeSpan MaxWait = TimeSpan.FromSeconds(20);
-
-        /// <exception cref="ArkBusyException">No slot came free within <see cref="MaxWait"/>.</exception>
+        /// <exception cref="ArkBusyException">
+        /// A wait limit is configured (<see cref="ArkOidcOptions.MaxPasswordHashWaitSeconds"/>) and
+        /// no slot came free within it. With no limit, the default, a sign-in waits for as long as
+        /// it takes — slower under a storm, never refused, which is how the server always behaved.
+        /// </exception>
         public static async Task<T> RunAsync<T>(Func<T> hash, CancellationToken cancellation = default)
         {
             var gate = Volatile.Read(ref _gate);
-            if (!await gate.WaitAsync(MaxWait, cancellation)) throw new ArkBusyException();
+            var limit = Volatile.Read(ref _maxWaitSeconds);
+            if (limit <= 0) await gate.WaitAsync(cancellation);
+            else if (!await gate.WaitAsync(TimeSpan.FromSeconds(limit), cancellation)) throw new ArkBusyException();
             try
             {
                 return hash();
@@ -311,8 +356,9 @@ namespace Ark.oAuth.Oidc.Protocol
     }
 
     /// <summary>
-    /// The server has more sign-ins queued than it can verify in a reasonable time
-    /// (<see cref="ArkHashGate"/>). Not a credentials failure: nothing was checked, so it is not
+    /// The server has more sign-ins queued than it can verify within the configured wait
+    /// (<see cref="ArkOidcOptions.MaxPasswordHashWaitSeconds"/>; off by default, so this is only
+    /// ever thrown where an operator asked for it). Not a credentials failure: nothing was checked, so it is not
     /// counted against the account and the person is told to try again, not that they mistyped.
     /// </summary>
     public class ArkBusyException : ApplicationException

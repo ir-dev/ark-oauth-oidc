@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scale test · 21 Nov 2026 · ARK Identity</title>
-<meta name="description" content="Load test of the ARK identity provider with 30,000 signed-in users, 21 November 2026: method, every measurement before and after the scale work, and what operators should configure.">
+<meta name="description" content="Load tests of the ARK identity provider with 30,000 users, 21 November 2026: the exact hardware, software, network and settings, every measurement before and after the scale work, a step-load sign-in test, and what the numbers mean for choosing a database, sizing and topology.">
 <meta name="theme-color" content="#0b1533">
 <meta name="robots" content="index, follow">
 <link rel="icon" type="image/png" href="../assets/favicon.png">
@@ -113,6 +113,8 @@
 
   footer { margin-top: 56px; border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--muted); font-size: .88rem; }
 
+  table th[scope="row"] { min-width: 150px; }
+  section table td { overflow-wrap: anywhere; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   th[scope="row"] { text-transform: none; letter-spacing: 0; font-size: .92rem; font-weight: 500; color: var(--text); }
   table.matrix th:nth-child(2), table.matrix th:nth-child(3) { text-align: right; }
@@ -143,9 +145,10 @@
       ARK Identity
     </a>
     <nav class="nav-links" aria-label="Report sections">
+      <a class="hide-sm" href="#environment">Environment</a>
       <a class="hide-sm" href="#results">Results</a>
-      <a class="hide-sm" href="#changes">What changed</a>
-      <a class="hide-sm" href="#operators">For operators</a>
+      <a class="hide-sm" href="#step-load">Step load</a>
+      <a class="hide-sm" href="#decide">Choosing</a>
       <a class="hide-sm" href="#limits">Limits</a>
       <a href="../index.html#reviews">All reports</a>
       <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle colour theme">
@@ -173,8 +176,8 @@
       <div class="tile ok" role="listitem"><div class="n">30,000</div><div class="l">of 30,000 users signed in, 0 errors</div></div>
       <div class="tile ok" role="listitem"><div class="n">6.6×</div><div class="l">requests per second, one instance</div></div>
       <div class="tile ok" role="listitem"><div class="n">4.7 ms</div><div class="l">median refresh with 30,000 live sessions</div></div>
-      <div class="tile ok" role="listitem"><div class="n">0</div><div class="l">failed sign-ins across two instances (was 303 of 400)</div></div>
-      <div class="tile" role="listitem"><div class="n">48</div><div class="l">behaviour checks passing, on PostgreSQL and MySQL</div></div>
+      <div class="tile ok" role="listitem"><div class="n">0</div><div class="l">errors in 804,332 requests: 30,000 users, two instances behind a load balancer</div></div>
+      <div class="tile" role="listitem"><div class="n">68</div><div class="l">behaviour checks passing, across PostgreSQL, MySQL and SQLite</div></div>
     </div>
   </div>
 </div>
@@ -203,38 +206,100 @@
         <ul>
           <li>The same lookups use indexes: 0.5 million rows read that way over the same test.</li>
           <li>6.6× the requests per second and 2.0× the sign-ins per second on one instance.</li>
-          <li>Two instances share one key ring through the database; none of 3,000 sign-ins failed.</li>
+          <li>Two instances behind a load balancer carried all 30,000 users through 804,332 requests in 25 minutes with 0 errors (before: 303 of 400 sign-ins refused with two instances).</li>
           <li>During a storm, a refresh for a signed-in user takes 12.2 ms at the median, not 474 ms.</li>
         </ul>
       </div>
     </div>
   </section>
 
-  <section id="method">
+
+  <section id="environment">
     <div class="section-head">
-      <h2>How it was tested</h2>
+      <h2>Test environment</h2>
+      <p>Every number in this report belongs to this environment. Read them as ratios and shapes that carry over, and as
+        absolute figures only for hardware like it.</p>
     </div>
+    <h3 class="sub">Hardware and operating system</h3>
+    <div class="tablewrap card">
+      <table>
+        <tbody>
+          <tr><th scope="row">Machine</th><td>Apple MacBook Pro (model Mac17,2), one machine for everything</td></tr>
+          <tr><th scope="row">Processor</th><td>Apple M5: 10 cores, 4 performance and 6 efficiency. The efficiency cores are markedly slower, so work that lands on them (including password hashing) takes longer than on a performance core. Cloud virtual CPUs are uniform; expect a different, steadier per-core figure there.</td></tr>
+          <tr><th scope="row">Memory</th><td>16 GB</td></tr>
+          <tr><th scope="row">Storage</th><td>Internal SSD, APFS. The databases write through the Docker Desktop virtual disk, whose synchronous writes are slower than a server's disk.</td></tr>
+          <tr><th scope="row">Operating system</th><td>macOS 27.2.1 (build 26B131). Low Power Mode off.</td></tr>
+          <tr><th scope="row">Power</th><td>Sections 1 to 7: on battery, 49% falling to about 40%. Section 8, one-third-scale run: on battery at 12 to 14%. Section 8, full run, and section 9: on mains power. Sleep was prevented for every reported run (an earlier run that the laptop slept through was discarded).</td></tr>
+          <tr><th scope="row">Other load</th><td>A code editor and its tooling were open throughout. No other test ran at the same time as a reported one.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 class="sub">Software</h3>
+    <div class="tablewrap card">
+      <table>
+        <tbody>
+          <tr><th scope="row">Provider</th><td><code>Ark.oAuth.Oidc.Host</code> from this repository, Release build, run as a published application. "Before" is commit <code>e598f81</code> (version 2.3.0); "after" is the working tree of 21 November 2026.</td></tr>
+          <tr><th scope="row">Runtime</th><td>.NET 10.0.1 with ASP.NET Core 10.0.1 (SDK 10.0.101), server garbage collector, Kestrel, HTTP/1.1</td></tr>
+          <tr><th scope="row">Data access</th><td>EF Core 10.0.15; Npgsql provider 10.0.4; MySql.EntityFrameworkCore 10.0.12; Microsoft.Data.Sqlite 10.0.15. Connection pool: 100 per instance (the drivers' default).</td></tr>
+          <tr><th scope="row">Tokens</th><td>Microsoft.IdentityModel 8.23.0; RS256 with a 2048-bit key; passwords and client secrets PBKDF2-SHA256 at 210,000 iterations</td></tr>
+          <tr><th scope="row">PostgreSQL</th><td>16.16 (Alpine, arm64) in Docker Engine 29.2.1. <code>max_connections</code> 400, <code>shared_buffers</code> 512 MB, <code>fsync</code> on, <code>synchronous_commit</code> on, <code>checkpoint_timeout</code> 5 min, <code>max_wal_size</code> 1 GB, autovacuum on; everything else default.</td></tr>
+          <tr><th scope="row">MySQL</th><td>8.4.11 in Docker, default configuration</td></tr>
+          <tr><th scope="row">SQLite</th><td>The library bundled with Microsoft.Data.Sqlite, database file on the internal SSD, write-ahead log mode</td></tr>
+          <tr><th scope="row">Docker Desktop VM</th><td>Linux 6.12.72 (linuxkit), 10 virtual CPUs, 7.65 GB memory, shared with the host's cores</td></tr>
+          <tr><th scope="row">Load balancer (section 8)</th><td>nginx 1.31.9 in Docker; self-signed RSA-2048 certificate</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 class="sub">Network</h3>
+    <div class="tablewrap card">
+      <table>
+        <tbody>
+          <tr><th scope="row">Client to provider</th><td>Loopback (<code>127.0.0.1</code>), plain HTTP/1.1 with keep-alive, in sections 1 to 7 and 9. No TLS, no proxy, no latency to speak of.</td></tr>
+          <tr><th scope="row">Provider to database</th><td>Loopback to Docker Desktop's port forwarding, then into the VM. Unloaded, a request that makes one database round trip (UserInfo) completes in 0.6 ms end to end, so a round trip costs well under a millisecond here. A database in another availability zone or region costs more per round trip; the table under "Cost of each operation" turns that into response time.</td></tr>
+          <tr><th scope="row">Section 8 only</th><td>Client to nginx over TLS; nginx to two provider instances; 1 ms of delay added to every database response (Linux <code>netem</code>). The full run: nginx terminates TLS and proxies HTTP/1.1 to the instances, request by request, with keep-alive. The earlier attempts: nginx passes TLS through to instances that terminate it themselves.</td></tr>
+          <tr><th scope="row">Not present anywhere</th><td>Internet latency, packet loss, a firewall or web application firewall, a managed load balancer, cross-zone traffic</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 class="sub">Provider settings</h3>
+    <div class="tablewrap card">
+      <table>
+        <thead><tr><th>Setting</th><th>Value in the tests</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td><code>Provider</code></td><td>postgres, mysql or sqlite as stated</td><td></td></tr>
+          <tr><td><code>EnableLogTrace</code></td><td>off; on in sections 7 and 8</td><td>The audit trace adds several rows per sign-in.</td></tr>
+          <tr><td><code>Oidc:MaxFailedSignIns</code></td><td>0 (lockout off)</td><td>So that no test account could lock. With the default of 10, a sign-in makes one more database round trip.</td></tr>
+          <tr><td><code>Oidc:MaxConcurrentPasswordHashes</code></td><td>default: 5 on this machine; 3 per instance in section 8; 9, 5 and 3 compared in section 4</td><td>Half the cores by default.</td></tr>
+          <tr><td><code>Oidc:MaxPasswordHashWaitSeconds</code></td><td>20 in sections 1 to 7 and the one-third-scale run (never reached in a reported run); default 0 in the full run of section 8 and in section 9</td><td>The default is now to never refuse.</td></tr>
+          <tr><td><code>Oidc:ReferenceCacheSeconds</code>, <code>ClientSecretCacheSeconds</code></td><td>defaults: 30 and 300</td><td></td></tr>
+          <tr><td><code>Oidc:SessionLifetimeMinutes</code></td><td>default 480; 20 in the full run of section 8, 4 in the one-third-scale run</td><td>Shortened there so sessions expire within the run.</td></tr>
+          <tr><td><code>Oidc:CleanupIntervalMinutes</code></td><td>default 60; 1 in section 8</td><td></td></tr>
+          <tr><td>Client used</td><td>Confidential web client (<code>client_secret_post</code>, PKCE, refresh-token rotation, scopes <code>openid profile email offline_access</code>)</td><td>A public client skips the secret check.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 class="sub">Data, load generator and method</h3>
     <div class="prose">
-      <p><b>Data.</b> 30,000 user accounts, each mapped to two applications (60,000 access mappings): one
-        confidential web client authenticating with a client secret, one public client using PKCE alone.
-        Passwords and the client secret are stored as the provider stores them, PBKDF2-SHA256 at 210,000 iterations.</p>
-      <p><b>Load.</b> A purpose-built generator drove the provider over HTTP the way a browser and an
-        application do: fetch the sign-in page, post the form with its anti-forgery token, grant consent on
-        first use, exchange the code with PKCE, then read UserInfo. After sign-in, a steady mix of 40%
-        single sign-on hops with the session cookie, 30% refresh-token rotations and 30% UserInfo calls.
-        Each virtual user kept its own cookies and tokens.</p>
-      <p><b>Two kinds of run.</b> <i>Saturation</i> runs push as hard as the server will take and report
-        throughput. <i>Paced</i> runs hold a fixed rate, 400 operations a second, and report response
-        times as a user would see them; 30,000 people refreshing hourly across a few applications and
-        moving between them produce well under that.</p>
-      <p><b>One combined run.</b> The last test in the results puts the pieces together, at one-third scale: two
-        instances behind a load balancer over HTTPS, a database with network delay, people arriving while others
-        work, every protocol flow in the mix, and sessions short enough to expire during the run.</p>
-      <p><b>Machine.</b> One Apple M5 laptop (10 cores, 16 GB) ran everything: the provider on .NET 10, the
-        database in Docker (PostgreSQL 16, MySQL 8.4) and the load generator. They compete for the same
-        cores, so the absolute numbers are lower than a server with its own database would give. The
-        comparison is like for like: same machine, same data, same test, restored to the same starting
-        state before each run.</p>
+      <p><b>Data.</b> 30,000 user accounts, each mapped to the test applications, in the provider's own schema; on PostgreSQL
+        the accounts and their mappings occupy about 52 MB. Passwords and the client secret are stored as the provider stores
+        them. Before each run the database was restored to the same starting state.</p>
+      <p><b>Load generator.</b> A .NET 10 console program in this repository (<code>scripts/loadtest</code>), on the same machine.
+        It drives the provider over HTTP exactly as a browser and an application do: fetch the sign-in page, post the form
+        with its anti-forgery token, grant consent on first use, exchange the code with PKCE, read UserInfo, rotate
+        refresh tokens, and so on. Each virtual user keeps its own cookies and tokens. There is no think time: a
+        "concurrent user" here is a user with a request always in flight, which is far busier than a person.</p>
+      <p><b>Kinds of run.</b> <i>Saturation</i>: a fixed number of users, each sending the next request as soon as the last
+        returns; reports throughput. <i>Paced</i>: a fixed number of operations a second regardless of how the provider
+        responds; reports response times as a user would see them. <i>Step load</i>: a number of users signing in at
+        once, raised in steps.</p>
+      <p><b>Measurement.</b> Response time is measured in the generator, from sending a request to having read the whole
+        response. Percentiles are nearest-rank over every sample in the phase. A rate is completed operations divided by
+        elapsed time. An error is any response other than the one the flow expects. Provider processor time and memory
+        come from the operating system; database figures from PostgreSQL's own statistics.</p>
+      <p><b>Which build.</b> Sections 1 to 7, and the one-third-scale run in section 8, were measured before three late changes that make the upgrade invisible
+        to people using the provider (existing keys carried into the shared key ring, client records re-read before any
+        refusal, and no sign-in turned away unless an operator asks for that). None of the three is on a path those
+        sections measure. The behaviour checks, the full run in section 8, section 9 and the unit costs ran on the final build.</p>
     </div>
   </section>
 
@@ -358,22 +423,128 @@
     <p class="note">The audit trail used to be written one row at a time on the request's own thread. It is now written in
       batches in the background; the row counts differ only because the faster build did more work in the same time.</p>
 
-    <h3 class="sub">8. Everything together, at one-third scale: TLS, a load balancer, two instances and a database a network hop away</h3>
-    <p class="note">The tests above isolate one thing each. This one puts everything together. Two provider instances serve HTTPS
-      behind an nginx load balancer; the database answers with 1&nbsp;ms of added network delay each way; the audit trace is on.
-      10,000 people arrive at 50 a second while those already in keep working, each as busy as in the 30,000-user
-      tests (133 operations a second with everyone in). The work now includes pushed authorization requests, the device flow,
-      sign-out with back-channel logout to the application, and the legacy v1 flow. Sessions last four minutes, so the first
+    <h3 class="sub">8. Everything together: TLS, a load balancer, two instances and a database a network hop away</h3>
+    <p class="note">The tests above isolate one thing each. This one puts everything together, in the shape a production
+      deployment has, and runs it at the full 30,000 users.</p>
+
+    <h3 class="sub">The production shape, all 30,000 users, start to finish</h3>
+    <p class="note">Two instances on plain HTTP behind an nginx that terminates TLS; the same delayed database; the audit trace on; the
+      same mix of work, including pushed authorization requests, the device flow, sign-out with back-channel logout and the
+      legacy v1 flow. All 30,000 people arrive at 33 a second, which is 30,000 over a quarter of an hour, while
+      those already in keep working at a rate that reaches 400 operations a second. Sessions last 20 minutes, so the first
       arrivals' sessions run out before the end and those people sign in again; the purge runs every minute. Each instance
-      may hash three passwords at once.</p>
-    <p class="note"><b>Why one-third scale.</b> This topology was first run with all 30,000 users. That run is not reported:
-      the load balancer in the test rig began refusing connections in the third minute (its upstream list included an
-      address nothing listened on, and it takes an instance out of rotation after one failed connection), and the
-      laptop, hosting two instances, the database, the load balancer and a TLS load generator on ten cores, did not
-      recover its footing afterwards. 29,056 of the 30,000 people had still signed in by the fifth minute, the 1,155
-      failed requests were refused by the load balancer, and the provider logged no errors. The laptop was on battery
-      with too little left to repeat it at full size, so the corrected rig was run at a size the machine can host. The full-size evidence is in sections 1 to 4; this section
-      shows the same build behaving correctly in a production-shaped deployment.</p>
+      may hash three passwords at once. The run lasts 25 minutes. Independent probes called both instances and the
+      load balancer once a second, and a watcher stood ready to dump thread stacks if either instance stopped answering.</p>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Outcome</th><th>Measured</th><th></th><th></th></tr></thead>
+        <tbody>
+          <tr><th scope="row">People signed in</th><td class="num">30,000 of 30,000</td><td></td><td></td></tr>
+          <tr><th scope="row">Requests served</th><td class="num">804,332</td><td></td><td></td></tr>
+          <tr><th scope="row">Requests that failed</th><td class="num">0</td><td></td><td></td></tr>
+          <tr><th scope="row">Operations the generator had to drop for lack of capacity</th><td class="num">0</td><td></td><td></td></tr>
+          <tr><th scope="row">Sign-ins repeated after a session ran out</th><td class="num">4,888</td><td></td><td></td></tr>
+          <tr><th scope="row">Back-channel logout tokens delivered to the application</th><td class="num">8,213</td><td></td><td></td></tr>
+          <tr><th scope="row">Probe calls slower than one second, of about 7,500</th><td class="num">0</td><td></td><td></td></tr>
+          <tr><th scope="row">Expired sessions still in the database at the end</th><td class="num">941</td><td></td><td></td></tr>
+          <tr><th scope="row">Refresh tokens left behind by purged sessions</th><td class="num">0</td><td></td><td></td></tr>
+          <tr><th scope="row">Audit rows written, of which errors</th><td class="num">511,799, 0</td><td></td><td></td></tr>
+          <tr><th scope="row">Keys in the shared key ring</th><td class="num">1</td><td></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Operation, over the whole run</th><th>Count</th><th>Median</th><th>95th percentile</th><th>99th percentile</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">First sign-in (page, form, consent, token)</th><td class="num">30,000</td><td class="num">76.1 ms</td><td class="num">96.8 ms</td><td class="num">172 ms</td></tr>
+<tr><th scope="row">Sign-in again after a session ended</th><td class="num">13,228</td><td class="num">63.8 ms</td><td class="num">84.8 ms</td><td class="num">135 ms</td></tr>
+<tr><th scope="row">Token refresh</th><td class="num">125,584</td><td class="num">19.2 ms</td><td class="num">28.2 ms</td><td class="num">66.4 ms</td></tr>
+<tr><th scope="row">Single sign-on hop</th><td class="num">139,312</td><td class="num">28.6 ms</td><td class="num">42.1 ms</td><td class="num">101 ms</td></tr>
+<tr><th scope="row">UserInfo</th><td class="num">105,039</td><td class="num">3.3 ms</td><td class="num">7.4 ms</td><td class="num">23.6 ms</td></tr>
+<tr><th scope="row">Pushed authorization request, end to end</th><td class="num">20,555</td><td class="num">40.4 ms</td><td class="num">58.5 ms</td><td class="num">132 ms</td></tr>
+<tr><th scope="row">Device flow, end to end</th><td class="num">12,363</td><td class="num">41.9 ms</td><td class="num">61.1 ms</td><td class="num">148 ms</td></tr>
+<tr><th scope="row">Sign-out, back-channel logout delivered</th><td class="num">8,340</td><td class="num">19.6 ms</td><td class="num">30.1 ms</td><td class="num">79.6 ms</td></tr>
+<tr><th scope="row">Legacy v1 sign-in, end to end</th><td class="num">4,116</td><td class="num">70.1 ms</td><td class="num">90.8 ms</td><td class="num">161 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 class="sub">Minute by minute, the full run</h3>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Minute</th><th>Signed in</th><th>Operations/s</th><th>Refresh, median</th><th>Refresh, 95th</th><th>Sign-on hop, median</th><th>Sign-on hop, 95th</th><th>UserInfo, 95th</th><th>Errors</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">1</th><td class="num">1,977</td><td class="num">13</td><td class="num">19.7 ms</td><td class="num">25.7 ms</td><td class="num">29.1 ms</td><td class="num">37.2 ms</td><td class="num">5.0 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">2</th><td class="num">3,957</td><td class="num">40</td><td class="num">18.8 ms</td><td class="num">25.1 ms</td><td class="num">28.3 ms</td><td class="num">36.3 ms</td><td class="num">5.1 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">3</th><td class="num">5,937</td><td class="num">66</td><td class="num">18.5 ms</td><td class="num">23.2 ms</td><td class="num">27.7 ms</td><td class="num">33.1 ms</td><td class="num">4.5 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">4</th><td class="num">7,917</td><td class="num">92</td><td class="num">18.3 ms</td><td class="num">23.0 ms</td><td class="num">27.3 ms</td><td class="num">33.9 ms</td><td class="num">4.6 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">5</th><td class="num">9,897</td><td class="num">119</td><td class="num">18.3 ms</td><td class="num">23.5 ms</td><td class="num">27.3 ms</td><td class="num">34.5 ms</td><td class="num">4.7 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">6</th><td class="num">11,877</td><td class="num">145</td><td class="num">18.7 ms</td><td class="num">23.6 ms</td><td class="num">28.0 ms</td><td class="num">34.5 ms</td><td class="num">4.8 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">7</th><td class="num">13,857</td><td class="num">172</td><td class="num">18.2 ms</td><td class="num">22.5 ms</td><td class="num">27.3 ms</td><td class="num">33.1 ms</td><td class="num">4.7 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">8</th><td class="num">15,838</td><td class="num">198</td><td class="num">18.6 ms</td><td class="num">23.4 ms</td><td class="num">27.8 ms</td><td class="num">34.7 ms</td><td class="num">4.9 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">9</th><td class="num">17,817</td><td class="num">224</td><td class="num">18.9 ms</td><td class="num">87.6 ms</td><td class="num">28.1 ms</td><td class="num">128 ms</td><td class="num">20.8 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">10</th><td class="num">19,762</td><td class="num">250</td><td class="num">19.5 ms</td><td class="num">44.8 ms</td><td class="num">29.3 ms</td><td class="num">64.4 ms</td><td class="num">20.1 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">11</th><td class="num">21,777</td><td class="num">278</td><td class="num">19.5 ms</td><td class="num">29.4 ms</td><td class="num">29.2 ms</td><td class="num">43.3 ms</td><td class="num">6.9 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">12</th><td class="num">23,757</td><td class="num">304</td><td class="num">20.1 ms</td><td class="num">30.1 ms</td><td class="num">29.8 ms</td><td class="num">43.4 ms</td><td class="num">7.9 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">13</th><td class="num">25,738</td><td class="num">330</td><td class="num">20.1 ms</td><td class="num">29.6 ms</td><td class="num">29.9 ms</td><td class="num">43.7 ms</td><td class="num">7.8 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">14</th><td class="num">27,717</td><td class="num">356</td><td class="num">19.9 ms</td><td class="num">31.5 ms</td><td class="num">29.6 ms</td><td class="num">48.9 ms</td><td class="num">9.1 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">15</th><td class="num">29,698</td><td class="num">383</td><td class="num">19.8 ms</td><td class="num">33.0 ms</td><td class="num">29.5 ms</td><td class="num">50.7 ms</td><td class="num">9.1 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">16</th><td class="num">30,000</td><td class="num">400</td><td class="num">18.9 ms</td><td class="num">25.3 ms</td><td class="num">28.2 ms</td><td class="num">37.7 ms</td><td class="num">5.7 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">17</th><td class="num">30,000</td><td class="num">400</td><td class="num">18.8 ms</td><td class="num">23.6 ms</td><td class="num">27.9 ms</td><td class="num">34.6 ms</td><td class="num">5.2 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">18</th><td class="num">30,000</td><td class="num">400</td><td class="num">18.9 ms</td><td class="num">25.8 ms</td><td class="num">28.2 ms</td><td class="num">37.3 ms</td><td class="num">6.1 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">19</th><td class="num">30,000</td><td class="num">400</td><td class="num">19.0 ms</td><td class="num">25.8 ms</td><td class="num">28.1 ms</td><td class="num">37.6 ms</td><td class="num">6.3 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">20</th><td class="num">30,000</td><td class="num">395</td><td class="num">19.0 ms</td><td class="num">35.1 ms</td><td class="num">28.2 ms</td><td class="num">43.6 ms</td><td class="num">10.2 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">21</th><td class="num">30,000</td><td class="num">406</td><td class="num">19.1 ms</td><td class="num">31.1 ms</td><td class="num">28.7 ms</td><td class="num">61.0 ms</td><td class="num">10.4 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">22</th><td class="num">30,000</td><td class="num">400</td><td class="num">19.1 ms</td><td class="num">26.1 ms</td><td class="num">28.5 ms</td><td class="num">39.2 ms</td><td class="num">7.0 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">23</th><td class="num">30,000</td><td class="num">400</td><td class="num">19.2 ms</td><td class="num">28.4 ms</td><td class="num">28.8 ms</td><td class="num">43.9 ms</td><td class="num">7.8 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">24</th><td class="num">30,000</td><td class="num">400</td><td class="num">19.3 ms</td><td class="num">31.1 ms</td><td class="num">29.2 ms</td><td class="num">47.1 ms</td><td class="num">8.7 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">25</th><td class="num">30,000</td><td class="num">400</td><td class="num">19.4 ms</td><td class="num">31.6 ms</td><td class="num">29.3 ms</td><td class="num">47.9 ms</td><td class="num">8.7 ms</td><td class="num">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Minute</th><th>Instance 1 memory</th><th>Instance 2 memory</th><th>Session rows</th><th>Live sessions</th><th>Refresh-token rows</th><th>Audit rows</th><th>Database connections</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">0</th><td class="num">64 MB</td><td class="num">64 MB</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">1</td><td class="num">5</td></tr>
+<tr><th scope="row">1</th><td class="num">244 MB</td><td class="num">242 MB</td><td class="num">2,002</td><td class="num">1,985</td><td class="num">2,541</td><td class="num">6,748</td><td class="num">18</td></tr>
+<tr><th scope="row">2</th><td class="num">219 MB</td><td class="num">214 MB</td><td class="num">4,061</td><td class="num">3,997</td><td class="num">6,247</td><td class="num">15,095</td><td class="num">18</td></tr>
+<tr><th scope="row">3</th><td class="num">228 MB</td><td class="num">195 MB</td><td class="num">6,157</td><td class="num">6,021</td><td class="num">11,071</td><td class="num">25,009</td><td class="num">18</td></tr>
+<tr><th scope="row">4</th><td class="num">182 MB</td><td class="num">185 MB</td><td class="num">8,312</td><td class="num">8,065</td><td class="num">17,063</td><td class="num">36,469</td><td class="num">18</td></tr>
+<tr><th scope="row">5</th><td class="num">166 MB</td><td class="num">197 MB</td><td class="num">10,499</td><td class="num">10,116</td><td class="num">24,181</td><td class="num">49,307</td><td class="num">18</td></tr>
+<tr><th scope="row">6</th><td class="num">197 MB</td><td class="num">193 MB</td><td class="num">12,740</td><td class="num">12,183</td><td class="num">32,417</td><td class="num">63,817</td><td class="num">45</td></tr>
+<tr><th scope="row">7</th><td class="num">199 MB</td><td class="num">200 MB</td><td class="num">15,043</td><td class="num">14,268</td><td class="num">41,786</td><td class="num">80,205</td><td class="num">45</td></tr>
+<tr><th scope="row">8</th><td class="num">188 MB</td><td class="num">184 MB</td><td class="num">17,367</td><td class="num">16,374</td><td class="num">52,436</td><td class="num">97,777</td><td class="num">45</td></tr>
+<tr><th scope="row">9</th><td class="num">190 MB</td><td class="num">193 MB</td><td class="num">19,739</td><td class="num">18,491</td><td class="num">64,180</td><td class="num">117,065</td><td class="num">155</td></tr>
+<tr><th scope="row">10</th><td class="num">184 MB</td><td class="num">192 MB</td><td class="num">22,172</td><td class="num">20,632</td><td class="num">77,181</td><td class="num">138,169</td><td class="num">142</td></tr>
+<tr><th scope="row">11</th><td class="num">187 MB</td><td class="num">183 MB</td><td class="num">24,681</td><td class="num">22,784</td><td class="num">91,175</td><td class="num">160,642</td><td class="num">142</td></tr>
+<tr><th scope="row">12</th><td class="num">185 MB</td><td class="num">184 MB</td><td class="num">27,184</td><td class="num">24,937</td><td class="num">106,314</td><td class="num">184,822</td><td class="num">142</td></tr>
+<tr><th scope="row">13</th><td class="num">188 MB</td><td class="num">185 MB</td><td class="num">29,748</td><td class="num">27,120</td><td class="num">122,622</td><td class="num">210,334</td><td class="num">142</td></tr>
+<tr><th scope="row">14</th><td class="num">184 MB</td><td class="num">180 MB</td><td class="num">32,388</td><td class="num">29,326</td><td class="num">140,138</td><td class="num">237,810</td><td class="num">142</td></tr>
+<tr><th scope="row">15</th><td class="num">185 MB</td><td class="num">182 MB</td><td class="num">35,112</td><td class="num">31,580</td><td class="num">158,805</td><td class="num">266,473</td><td class="num">66</td></tr>
+<tr><th scope="row">16</th><td class="num">179 MB</td><td class="num">176 MB</td><td class="num">36,043</td><td class="num">32,018</td><td class="num">176,404</td><td class="num">291,021</td><td class="num">66</td></tr>
+<tr><th scope="row">17</th><td class="num">180 MB</td><td class="num">178 MB</td><td class="num">36,744</td><td class="num">32,244</td><td class="num">193,694</td><td class="num">314,911</td><td class="num">66</td></tr>
+<tr><th scope="row">18</th><td class="num">182 MB</td><td class="num">180 MB</td><td class="num">37,440</td><td class="num">32,457</td><td class="num">211,108</td><td class="num">338,590</td><td class="num">75</td></tr>
+<tr><th scope="row">19</th><td class="num">167 MB</td><td class="num">169 MB</td><td class="num">38,185</td><td class="num">32,713</td><td class="num">228,334</td><td class="num">362,286</td><td class="num">75</td></tr>
+<tr><th scope="row">20</th><td class="num">182 MB</td><td class="num">180 MB</td><td class="num">38,911</td><td class="num">32,856</td><td class="num">245,662</td><td class="num">386,075</td><td class="num">141</td></tr>
+<tr><th scope="row">21</th><td class="num">184 MB</td><td class="num">176 MB</td><td class="num">38,012</td><td class="num">31,992</td><td class="num">242,265</td><td class="num">410,652</td><td class="num">141</td></tr>
+<tr><th scope="row">22</th><td class="num">175 MB</td><td class="num">175 MB</td><td class="num">37,563</td><td class="num">31,644</td><td class="num">238,481</td><td class="num">435,809</td><td class="num">141</td></tr>
+<tr><th scope="row">23</th><td class="num">174 MB</td><td class="num">172 MB</td><td class="num">37,349</td><td class="num">31,501</td><td class="num">234,562</td><td class="num">462,048</td><td class="num">141</td></tr>
+<tr><th scope="row">24</th><td class="num">179 MB</td><td class="num">179 MB</td><td class="num">37,137</td><td class="num">31,392</td><td class="num">229,928</td><td class="num">487,945</td><td class="num">141</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub">Getting there: the first attempts on this topology</h3>
+    <p class="note">The run above was the third attempt at this topology, and what the first two showed is worth keeping. In them
+      the instances terminated TLS themselves, with nginx passing the encrypted connection straight through. The first,
+      at full size, was spoiled by a load-balancer misconfiguration in the rig. The second, below, ran at one-third scale:
+      10,000 people arriving at 50 a second, each as busy as in the 30,000-user tests, sessions lasting four minutes so
+      that they expire within the run, the purge running every minute.</p>
+    <p class="note"><b>Why one-third scale.</b> A laptop has to host everything here: two instances, the database in a
+      virtual machine, the load balancer, and a load generator. At the full 30,000 with arrivals compressed to 100 a second
+      it runs out of processor, and the numbers stop describing the provider (the generator's own timers ran up to 0.7 s
+      late). At one-third scale, with each person as busy as in the 30,000-user tests, it does not.</p>
     <div class="tablewrap card">
       <table class="matrix">
         <thead><tr><th>Outcome</th><th>Measured</th><th></th><th></th></tr></thead>
@@ -408,15 +579,15 @@
     </div>
     <p class="note">Response times are higher than in the earlier sections because every database round trip now costs about
       2&nbsp;ms on the wire and every request crosses the load balancer. That is the shape to expect in production.</p>
-    <p class="note"><b>One thing in this run is not explained.</b> The medians and 95th percentiles above are what a user
-      would see almost all the time, but the 99th percentiles are seconds, and they come from a single pause of about six
-      seconds in the third minute, while people were still arriving. It hit every kind of request at once, including pages
-      that never touch the database, produced no errors, and did not recur in the four minutes that followed. Nothing like
-      it appears in sections 1 to 4, where one instance carried more load over plain HTTP: there the slowest refresh of the
-      whole 30,000-user run took 30.6 ms. That points at something this rig adds — TLS
-      connection set-up on macOS, Docker's port forwarding, or the laptop itself at 12% battery — but it was not
-      established which, and until it is reproduced or ruled out on real hardware it should be treated as open.</p>
-    <h3 class="sub">Minute by minute</h3>
+    <p class="note"><b>The pause in minute 3, and its cause.</b> The medians and 95th percentiles above are what a user sees
+      almost all the time, but the 99th percentiles are seconds. They come from one pause of about six seconds in the third
+      minute, which hit every kind of request at once and produced no errors. It was traced. During such a pause the
+      database logged no slow statement, and a dump of the provider's threads showed every worker thread inside the TLS
+      handshake that .NET performs through macOS's security framework, which blocks the thread it runs on. A burst of new
+      TLS connections therefore stalls a provider that terminates TLS itself <em>on macOS</em>. Providers are deployed on
+      Linux, normally behind a load balancer or an App Service front end that terminates TLS, so the rig was rebuilt that
+      way and the test run at the full 30,000: the result at the top of this section, with no pause.</p>
+    <h3 class="sub">Minute by minute, the one-third-scale run</h3>
     <p class="note">What matters over time is that nothing drifts: response times in the last minute should look like those in the
       first. The pause shows in minute 3; the purge starts removing expired sessions from minute 5.</p>
     <div class="tablewrap card">
@@ -448,6 +619,73 @@
       </table>
     </div>
 
+
+    <h3 class="sub" id="step-load">9. Step load: sign-ins from 100 to 10,000 at once</h3>
+    <p class="note">How does sign-in behave as more and more people try at the same moment? One instance of the current
+      build with default settings, PostgreSQL, the 30,000 accounts. 100 people sign in at once and keep
+      doing so for 30 seconds, each as a new browser going through the whole flow (sign-in page, form with its
+      anti-forgery token, code, token exchange with PKCE and the client secret); then 100
+      more join, and so on in steps of 100 up to 2,000, then in steps of 1,000 up to 10,000. Consent had been granted
+      beforehand, as it has for a returning user. From 3,000 upwards each level's newcomers join over ten seconds instead of in
+      the same instant, because an operating system queues only so many new connections at once, and the generator waits up to
+      five minutes for a response.</p>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>People signing in at once</th><th>Sign-ins completed</th><th>Per second</th><th>Median</th><th>95th percentile</th><th>99th percentile</th><th>Slowest</th><th>Errors</th><th>Sign-in page alone, median</th><th>Token exchange alone, median</th><th>Provider cores busy</th><th>Provider memory</th><th>Generator lag</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">100</th><td class="num">4,857</td><td class="num">159</td><td class="num">595 ms</td><td class="num">775 ms</td><td class="num">1.23 s</td><td class="num">1.76 s</td><td class="num">0</td><td class="num">1.0 ms</td><td class="num">8.3 ms</td><td class="num">5.3</td><td class="num">564 MB</td><td class="num">14 ms</td></tr>
+<tr><th scope="row">200</th><td class="num">5,162</td><td class="num">166</td><td class="num">1.18 s</td><td class="num">1.36 s</td><td class="num">1.39 s</td><td class="num">1.44 s</td><td class="num">0</td><td class="num">0.8 ms</td><td class="num">7.7 ms</td><td class="num">5.6</td><td class="num">500 MB</td><td class="num">72 ms</td></tr>
+<tr><th scope="row">300</th><td class="num">5,289</td><td class="num">166</td><td class="num">1.78 s</td><td class="num">1.91 s</td><td class="num">1.94 s</td><td class="num">1.96 s</td><td class="num">0</td><td class="num">0.8 ms</td><td class="num">7.6 ms</td><td class="num">5.9</td><td class="num">546 MB</td><td class="num">12 ms</td></tr>
+<tr><th scope="row">400</th><td class="num">5,359</td><td class="num">164</td><td class="num">2.40 s</td><td class="num">2.62 s</td><td class="num">2.71 s</td><td class="num">2.76 s</td><td class="num">0</td><td class="num">0.8 ms</td><td class="num">7.8 ms</td><td class="num">5.9</td><td class="num">491 MB</td><td class="num">86 ms</td></tr>
+<tr><th scope="row">500</th><td class="num">5,466</td><td class="num">166</td><td class="num">2.91 s</td><td class="num">3.36 s</td><td class="num">3.58 s</td><td class="num">3.63 s</td><td class="num">0</td><td class="num">0.8 ms</td><td class="num">7.5 ms</td><td class="num">5.8</td><td class="num">651 MB</td><td class="num">20 ms</td></tr>
+<tr><th scope="row">600</th><td class="num">5,565</td><td class="num">166</td><td class="num">3.56 s</td><td class="num">3.84 s</td><td class="num">3.92 s</td><td class="num">3.96 s</td><td class="num">0</td><td class="num">0.8 ms</td><td class="num">7.7 ms</td><td class="num">5.7</td><td class="num">592 MB</td><td class="num">49 ms</td></tr>
+<tr><th scope="row">700</th><td class="num">5,788</td><td class="num">170</td><td class="num">4.08 s</td><td class="num">4.24 s</td><td class="num">4.25 s</td><td class="num">4.28 s</td><td class="num">0</td><td class="num">0.8 ms</td><td class="num">7.6 ms</td><td class="num">6.0</td><td class="num">659 MB</td><td class="num">8 ms</td></tr>
+<tr><th scope="row">800</th><td class="num">5,350</td><td class="num">151</td><td class="num">5.22 s</td><td class="num">5.67 s</td><td class="num">5.86 s</td><td class="num">5.92 s</td><td class="num">0</td><td class="num">1.1 ms</td><td class="num">8.3 ms</td><td class="num">5.5</td><td class="num">631 MB</td><td class="num">131 ms</td></tr>
+<tr><th scope="row">900</th><td class="num">5,427</td><td class="num">152</td><td class="num">5.74 s</td><td class="num">6.35 s</td><td class="num">6.39 s</td><td class="num">6.44 s</td><td class="num">0</td><td class="num">1.1 ms</td><td class="num">8.2 ms</td><td class="num">5.6</td><td class="num">510 MB</td><td class="num">42 ms</td></tr>
+<tr><th scope="row">1,000</th><td class="num">4,896</td><td class="num">137</td><td class="num">5.87 s</td><td class="num">12.51 s</td><td class="num">12.62 s</td><td class="num">12.69 s</td><td class="num">0</td><td class="num">1.0 ms</td><td class="num">8.3 ms</td><td class="num">5.8</td><td class="num">483 MB</td><td class="num">41 ms</td></tr>
+<tr><th scope="row">1,100</th><td class="num">5,960</td><td class="num">164</td><td class="num">6.48 s</td><td class="num">7.46 s</td><td class="num">7.49 s</td><td class="num">7.57 s</td><td class="num">0</td><td class="num">0.9 ms</td><td class="num">7.9 ms</td><td class="num">6.0</td><td class="num">808 MB</td><td class="num">71 ms</td></tr>
+<tr><th scope="row">1,200</th><td class="num">6,171</td><td class="num">165</td><td class="num">7.11 s</td><td class="num">7.69 s</td><td class="num">7.71 s</td><td class="num">7.76 s</td><td class="num">0</td><td class="num">0.9 ms</td><td class="num">7.7 ms</td><td class="num">5.7</td><td class="num">535 MB</td><td class="num">12 ms</td></tr>
+<tr><th scope="row">1,300</th><td class="num">6,326</td><td class="num">168</td><td class="num">7.63 s</td><td class="num">8.04 s</td><td class="num">8.17 s</td><td class="num">8.22 s</td><td class="num">0</td><td class="num">0.9 ms</td><td class="num">7.7 ms</td><td class="num">6.0</td><td class="num">632 MB</td><td class="num">57 ms</td></tr>
+<tr><th scope="row">1,400</th><td class="num">6,431</td><td class="num">169</td><td class="num">8.13 s</td><td class="num">8.71 s</td><td class="num">8.78 s</td><td class="num">8.80 s</td><td class="num">0</td><td class="num">0.9 ms</td><td class="num">7.7 ms</td><td class="num">6.0</td><td class="num">773 MB</td><td class="num">71 ms</td></tr>
+<tr><th scope="row">1,500</th><td class="num">6,596</td><td class="num">171</td><td class="num">8.73 s</td><td class="num">8.95 s</td><td class="num">8.99 s</td><td class="num">9.03 s</td><td class="num">0</td><td class="num">1.0 ms</td><td class="num">7.7 ms</td><td class="num">6.0</td><td class="num">621 MB</td><td class="num">13 ms</td></tr>
+<tr><th scope="row">1,600</th><td class="num">6,598</td><td class="num">169</td><td class="num">9.23 s</td><td class="num">10.16 s</td><td class="num">10.18 s</td><td class="num">10.23 s</td><td class="num">0</td><td class="num">1.0 ms</td><td class="num">7.7 ms</td><td class="num">5.9</td><td class="num">700 MB</td><td class="num">27 ms</td></tr>
+<tr><th scope="row">1,700</th><td class="num">6,483</td><td class="num">162</td><td class="num">10.05 s</td><td class="num">11.26 s</td><td class="num">11.31 s</td><td class="num">11.34 s</td><td class="num">0</td><td class="num">1.1 ms</td><td class="num">7.8 ms</td><td class="num">5.6</td><td class="num">713 MB</td><td class="num">62 ms</td></tr>
+<tr><th scope="row">1,800</th><td class="num">5,083</td><td class="num">125</td><td class="num">10.71 s</td><td class="num">20.89 s</td><td class="num">21.05 s</td><td class="num">21.16 s</td><td class="num">0</td><td class="num">1.4 ms</td><td class="num">9.9 ms</td><td class="num">5.5</td><td class="num">783 MB</td><td class="num">82 ms</td></tr>
+<tr><th scope="row">1,900</th><td class="num">6,779</td><td class="num">166</td><td class="num">11.28 s</td><td class="num">12.11 s</td><td class="num">12.16 s</td><td class="num">12.20 s</td><td class="num">0</td><td class="num">1.1 ms</td><td class="num">7.8 ms</td><td class="num">5.8</td><td class="num">730 MB</td><td class="num">103 ms</td></tr>
+<tr><th scope="row">2,000</th><td class="num">7,094</td><td class="num">170</td><td class="num">11.59 s</td><td class="num">11.77 s</td><td class="num">11.84 s</td><td class="num">11.85 s</td><td class="num">0</td><td class="num">1.0 ms</td><td class="num">7.7 ms</td><td class="num">5.9</td><td class="num">812 MB</td><td class="num">40 ms</td></tr>
+<tr><th scope="row">3,000</th><td class="num">7,900</td><td class="num">168</td><td class="num">15.68 s</td><td class="num">17.58 s</td><td class="num">17.67 s</td><td class="num">17.70 s</td><td class="num">0</td><td class="num">2.4 ms</td><td class="num">8.6 ms</td><td class="num">5.5</td><td class="num">1,006 MB</td><td class="num">12 ms</td></tr>
+<tr><th scope="row">4,000</th><td class="num">9,170</td><td class="num">175</td><td class="num">20.70 s</td><td class="num">22.88 s</td><td class="num">22.93 s</td><td class="num">22.96 s</td><td class="num">0</td><td class="num">1.8 ms</td><td class="num">7.9 ms</td><td class="num">6.1</td><td class="num">1,072 MB</td><td class="num">24 ms</td></tr>
+<tr><th scope="row">5,000</th><td class="num">9,911</td><td class="num">156</td><td class="num">26.23 s</td><td class="num">33.87 s</td><td class="num">34.15 s</td><td class="num">34.19 s</td><td class="num">0</td><td class="num">4.6 ms</td><td class="num">9.2 ms</td><td class="num">5.0</td><td class="num">1,096 MB</td><td class="num">133 ms</td></tr>
+<tr><th scope="row">6,000</th><td class="num">10,347</td><td class="num">159</td><td class="num">32.03 s</td><td class="num">35.51 s</td><td class="num">35.65 s</td><td class="num">35.89 s</td><td class="num">0</td><td class="num">670 ms</td><td class="num">8.4 ms</td><td class="num">5.7</td><td class="num">1,261 MB</td><td class="num">186 ms</td></tr>
+<tr><th scope="row">7,000</th><td class="num">11,874</td><td class="num">168</td><td class="num">34.69 s</td><td class="num">41.36 s</td><td class="num">41.87 s</td><td class="num">41.90 s</td><td class="num">0</td><td class="num">164 ms</td><td class="num">8.0 ms</td><td class="num">5.8</td><td class="num">1,400 MB</td><td class="num">56 ms</td></tr>
+<tr><th scope="row">8,000</th><td class="num">11,238</td><td class="num">129</td><td class="num">43.15 s</td><td class="num">60.04 s</td><td class="num">64.17 s</td><td class="num">64.93 s</td><td class="num">0</td><td class="num">848 ms</td><td class="num">9.2 ms</td><td class="num">5.1</td><td class="num">1,082 MB</td><td class="num">516 ms</td></tr>
+<tr><th scope="row">9,000</th><td class="num">13,121</td><td class="num">154</td><td class="num">42.72 s</td><td class="num">56.64 s</td><td class="num">57.37 s</td><td class="num">57.57 s</td><td class="num">0</td><td class="num">1,295 ms</td><td class="num">12.0 ms</td><td class="num">5.3</td><td class="num">1,260 MB</td><td class="num">483 ms</td></tr>
+<tr><th scope="row">10,000</th><td class="num">14,013</td><td class="num">151</td><td class="num">42.23 s</td><td class="num">61.96 s</td><td class="num">62.49 s</td><td class="num">62.82 s</td><td class="num">0</td><td class="num">1,082 ms</td><td class="num">12.6 ms</td><td class="num">5.4</td><td class="num">1,187 MB</td><td class="num">239 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note"><b>Reading it.</b> 204,254 sign-ins, 0 errors, nobody turned away at any level. The rate stays
+      between 125 and 175 a second throughout: it is set by password hashing, which this machine's
+      default allows on five cores at a time, and nothing else gives way first. So the time a person waits is the size of the
+      crowd divided by that rate: about 595 ms at 100 at once, 11.59 s at
+      2,000, 42.23 s at 10,000. By default a sign-in waits its turn however long
+      that takes; an operator who would rather shed load can set <code>Oidc:MaxPasswordHashWaitSeconds</code>.</p>
+    <p class="note">The two columns for single requests show how the rest of the provider fares while the crowd waits. Up to 5,000
+      at once, the sign-in page (no hashing, no database) still answers in a few milliseconds and the token exchange, with
+      its five database round trips, in about 8 ms: the queue is in front of the hashing and nowhere else. From 6,000 the
+      page slows to hundreds of milliseconds and the generator's own timers run late, which says the laptop as a whole is
+      short of processor at that size, so the last levels understate what the provider would do with the generator on a
+      machine of its own. About six cores are busy at every level, five hashing and one for everything else. Provider
+      memory rises with the number of requests held in flight. The connection pool sits at its ceiling of 100 throughout
+      and is not what limits the rate. Among the first twenty levels, the two slower ones, 1,000 and 1,800, each coincide
+      with a PostgreSQL checkpoint completing on this laptop's virtual disk. To sign people in faster, add cores or
+      instances: the rate scales with the cores given to hashing.</p>
+    <p class="note"><b>Why it stops at 10,000.</b> One machine can hold only about 16,000 connections to another
+      address on itself, so a single load generator on the same laptop cannot hold 30,000 sign-ins open at once. The
+      relationship is a straight line through every level measured, so the wait at any crowd size is that size divided by
+      the rate. 30,000 people who are signed in and working, as opposed to 30,000 pressing "sign in" in the same second, is
+      what sections 1, 2 and 8 measure.</p>
+
   </section>
 
   <section id="changes">
@@ -466,14 +704,17 @@
         as a keyed digest held in memory for five minutes. A wrong secret costs what it always did, and replacing a
         secret takes effect at once.</p></li>
       <li class="card"><h3>Rarely changing rows are held for 30 seconds</h3><p>Tenants, clients, scopes and the signing key.
-        A change made on an instance applies there immediately and on the others within the 30 seconds. Nothing about a
-        user is held: accounts, access and sessions are read on every request.</p></li>
+        A change made on an instance applies there immediately. No request is refused on a held copy: the record is
+        read again first, so a new secret, redirect address or scope works everywhere at once, and only a change that
+        takes something away needs up to the 30 seconds to reach other instances. Nothing about a user is held:
+        accounts, access and sessions are read on every request.</p></li>
       <li class="card"><h3>Signing keys are loaded once</h3><p>Each token used to import the private key afresh, twice per
         response, and never release it.</p></li>
       <li class="card"><h3>Password hashing has a ceiling</h3><p>Half the cores by default. Sign-ins beyond that wait their
-        turn without holding a thread; after 20 seconds the page says the server is busy rather than hanging.</p></li>
+        turn without holding a thread. Nobody is turned away unless an operator sets a waiting limit.</p></li>
       <li class="card"><h3>One key ring for every instance</h3><p>The keys protecting the sign-in form and the console cookie
-        are kept in the provider's database on PostgreSQL and MySQL, so any instance can read what another wrote.</p></li>
+        are kept in the provider's database on PostgreSQL and MySQL, so any instance can read what another wrote. The
+        keys already in use are carried across, so the upgrade signs nobody out.</p></li>
       <li class="card"><h3>Housekeeping keeps tables small</h3><p>The hourly purge now also removes refresh tokens whose
         session has ended, and can trim the audit trail. Ending a session, a user or a client is one statement
         instead of loading every row.</p></li>
@@ -485,7 +726,9 @@
   <section id="verified">
     <div class="section-head">
       <h2>Behaviour checked after the changes</h2>
-      <p>Speed that changes what the provider does would be a regression. The same 48 checks pass on PostgreSQL and on MySQL.</p>
+      <p>Speed that changes what the provider does would be a regression. 48 checks pass on PostgreSQL, MySQL and SQLite,
+        and 20 more cover the admin console's own sign-in and two instances sharing one database. A sign-in form drawn
+        by version 2.3.0 is accepted by the new build after an upgrade in place.</p>
     </div>
     <div class="grid2">
       <div class="card">
@@ -506,10 +749,132 @@
           <li>Deactivating a user or a client takes effect on the next request.</li>
           <li>A signing key rotated elsewhere is published at once and adopted within 30 seconds; older tokens still validate.</li>
           <li>The audit trail is written, including error rows that were previously lost.</li>
+          <li>A secret regenerated, a redirect address or scope added, or a client reactivated on one instance works on the other on the next request.</li>
+          <li>The admin console signs in, lists clients and exports data; the export never contains the key ring.</li>
         </ul>
       </div>
     </div>
   </section>
+
+
+  <section id="decide">
+    <div class="section-head">
+      <h2>Choosing a deployment</h2>
+      <p>What the measurements say about each decision a team has to make. Figures in this section are from this
+        report's tests; where a recommendation goes beyond what was measured, it says so.</p>
+    </div>
+
+    <h3 class="sub">Cost of each operation</h3>
+    <p class="note">One user, nothing else running, PostgreSQL, final build. "Database round trips" were counted from PostgreSQL's
+      transaction counter. They are what turns database distance into response time: the last two columns add 1 ms and
+      5 ms per round trip to the unloaded time.</p>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Operation</th><th>Median, unloaded</th><th>95th percentile</th><th>Database round trips</th><th>Database 1 ms away</th><th>Database 5 ms away</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Sign-in, returning user (page, form, token)</th><td class="num">36.6 ms</td><td class="num">45.3 ms</td><td class="num">14</td><td class="num">+14 ms</td><td class="num">+68 ms</td></tr>
+<tr><th scope="row">Token refresh</th><td class="num">4.8 ms</td><td class="num">6.2 ms</td><td class="num">7</td><td class="num">+7 ms</td><td class="num">+36 ms</td></tr>
+<tr><th scope="row">Single sign-on hop (authorize + token)</th><td class="num">6.0 ms</td><td class="num">9.1 ms</td><td class="num">11</td><td class="num">+11 ms</td><td class="num">+55 ms</td></tr>
+<tr><th scope="row">UserInfo</th><td class="num">0.6 ms</td><td class="num">0.9 ms</td><td class="num">1</td><td class="num">+1 ms</td><td class="num">+5 ms</td></tr>
+<tr><th scope="row">Pushed authorization request, end to end</th><td class="num">7.3 ms</td><td class="num">10.9 ms</td><td class="num">16</td><td class="num">+16 ms</td><td class="num">+80 ms</td></tr>
+<tr><th scope="row">Device flow, end to end</th><td class="num">7.5 ms</td><td class="num">11.8 ms</td><td class="num">16</td><td class="num">+16 ms</td><td class="num">+80 ms</td></tr>
+<tr><th scope="row">Sign-out with back-channel logout</th><td class="num">6.3 ms</td><td class="num">8.2 ms</td><td class="num">8</td><td class="num">+8 ms</td><td class="num">+38 ms</td></tr>
+<tr><th scope="row">Legacy v1 sign-in, end to end</th><td class="num">36.8 ms</td><td class="num">46.7 ms</td><td class="num">16</td><td class="num">+16 ms</td><td class="num">+80 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Of the 36.6 ms a sign-in takes, about 29 ms is the password hash. It is the only
+      expensive step in the provider and it is deliberate. Everything else a signed-in user does costs a few milliseconds
+      of provider time plus the database round trips.</p>
+
+    <h3 class="sub">Which database</h3>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Database</th><th>Requests/s, steady mix</th><th>Sign-ins/s</th><th>Refresh, median</th><th>More than one instance</th><th>Use it when</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">PostgreSQL 16</th><td class="num">2,308</td><td class="num">159</td><td class="num">32.3 ms</td><td>Yes</td><td>The default choice for any deployment with thousands of users or more than one instance. The only database the 30,000-user tests ran on.</td></tr>
+          <tr><th scope="row">MySQL 8.4</th><td class="num">1,309</td><td class="num">129</td><td class="num">32.7 ms</td><td>Yes</td><td>The organisation already runs MySQL. Slower than PostgreSQL in this test, with ample room for 30,000 users; not tested beyond 2,000 users here.</td></tr>
+          <tr><th scope="row">SQLite</th><td class="num">1,424</td><td class="num">126</td><td class="num">2.2 ms (95th: 157 ms)</td><td>No</td><td>One small instance, a demo, development. One writer at a time gives it a slow tail under load, and the file cannot be shared between machines.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">PostgreSQL at 3,000 users with 64 requests in flight; MySQL and SQLite at 2,000 users with 32. The rows are
+      therefore indicative of each database's level, not a like-for-like race. SQL Server is listed as a provider and was
+      not tested.</p>
+
+    <h3 class="sub">How much processor: sign-in sets it</h3>
+    <div class="prose">
+      <p>Sign-ins per second = cores hashing at once × hashes per core per second. Measured here: 159 sign-ins a
+        second sustained over 204,254 sign-ins with five cores hashing, which is
+        32 a second per hashing core, on a processor where some of those cores are the slow kind. On cloud virtual
+        CPUs measure it; until then plan on 25 a second per hashing core. By default half the instance's cores hash.</p>
+      <p>While more people are trying to sign in than that, they queue, and the wait is the size of the queue divided by
+        the rate: section 9 shows 595 ms with 100 signing in at once and 42.23 s with
+        10,000. Nobody was refused at any size.</p>
+    </div>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>If 30,000 people sign in over</th><th>Sign-ins a second</th><th>Hashing cores needed (at 25/s each)</th><th>Cores in total at the default (half hashing)</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">30 minutes</th><td class="num">17</td><td class="num">1</td><td class="num">2</td></tr>
+          <tr><th scope="row">15 minutes</th><td class="num">33</td><td class="num">2</td><td class="num">4</td></tr>
+          <tr><th scope="row">5 minutes</th><td class="num">100</td><td class="num">4</td><td class="num">8</td></tr>
+          <tr><th scope="row">2 minutes</th><td class="num">250</td><td class="num">10</td><td class="num">20</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The cores can be in one instance or spread across several; the rate adds up. This table is arithmetic on the
+      measured rate, not a set of separate tests.</p>
+
+    <h3 class="sub">How many instances</h3>
+    <div class="prose">
+      <p>For everything except sign-in, one instance has room to spare: 30,000 people each refreshing tokens hourly and
+        moving between a few applications produce about 552 requests a second in this report's model, and one
+        instance sustained 2,308 on this laptop while sharing it with the database and the load generator
+        (section 3). Run at least two for availability, not for capacity. Two instances behind one address were tested:
+        every sign-in succeeded, sessions and tokens issued by one were honoured by the other, and no session affinity
+        was needed (sections 5 and 8). In section 8, two instances with three hashing slots each carried all 30,000 people,
+        arriving at 33 a second and then working at 400 operations a second, with every response-time median under
+        76.1 ms.</p>
+    </div>
+
+    <h3 class="sub">Where TLS ends</h3>
+    <div class="prose">
+      <p>Terminate TLS at the load balancer or platform front end, and let the provider receive plain HTTP on a private
+        network, with <code>BaseUrl</code> set to the public address. That is how Azure App Service and most container
+        platforms already work. It is the configuration that ran cleanly here. Terminating TLS inside the provider was
+        only tested on macOS, where it stalls under bursts of new connections for a reason specific to macOS (section 8);
+        Kestrel terminating TLS on Linux was not tested.</p>
+    </div>
+
+    <h3 class="sub">Database sizing</h3>
+    <div class="tablewrap card">
+      <table>
+        <tbody>
+          <tr><th scope="row">Placement</th><td>Same region and network as the provider. Each millisecond of round trip adds 7 ms to a refresh and 11 ms to a sign-on hop (table above).</td></tr>
+          <tr><th scope="row">Connections</th><td>Each instance holds up to 100 by default (<code>Maximum Pool Size</code>). The pools filled during sign-in bursts and were never what limited throughput. Give the database at least instances × pool size, plus headroom.</td></tr>
+          <tr><th scope="row">Writes</th><td>A sign-in writes a session, a record of the application joined, an authorization code and a refresh token. A refresh writes one row and updates one. With the audit trace on, add about three rows per sign-in.</td></tr>
+          <tr><th scope="row">Disk</th><td>Synchronous-write speed matters more than size. On this laptop's virtual disk, each five-minute PostgreSQL checkpoint cost up to a quarter of the sign-in rate for part of a minute (section 9, the levels at 1,000 and 1,800). Expect that effect to be smaller on server storage, and watch for it.</td></tr>
+          <tr><th scope="row">Size</th><td>Small. 30,000 accounts with three application mappings each: about 52 MB. After 30,000 sign-ins the whole database was 112 MB. The hourly purge removes expired sessions with their tokens, so the grant tables track the signed-in population, not history.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub">What to watch in production</h3>
+    <div class="tablewrap card">
+      <table>
+        <thead><tr><th>Signal</th><th>What it means</th><th>What to do</th></tr></thead>
+        <tbody>
+          <tr><td>Sign-in response time rising while refresh and UserInfo stay fast</td><td>People are queueing for password hashing: arrivals exceed hashing cores × rate</td><td>Add cores or instances</td></tr>
+          <tr><td>Every response time rising together</td><td>The database, or the path to it, is slow; or the instance is out of processor</td><td>Check database latency and connections first</td></tr>
+          <tr><td>Database connections at instances × pool size for long periods</td><td>Requests are waiting for a connection</td><td>Find the slow statements before raising the pool</td></tr>
+          <tr><td>Log line <code>Ark IdP: index not created</code> at start-up</td><td>A lookup will read a whole table</td><td>Grant the privilege or create the named index</td></tr>
+          <tr><td>Grant tables growing without limit</td><td>The purge is off or failing</td><td>Check <code>Oidc:CleanupIntervalMinutes</code> and the log</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
 
   <section id="operators">
     <div class="section-head">
@@ -531,29 +896,57 @@
         <tbody>
           <tr><td><code>DataProtectionKeys</code></td><td>auto</td><td>Keeps the key ring in the database on every provider but SQLite. <code>off</code> leaves it to the host.</td></tr>
           <tr><td><code>Oidc:MaxConcurrentPasswordHashes</code></td><td>half the cores</td><td>Raise to sign people in faster at the expense of those already signed in.</td></tr>
+          <tr><td><code>Oidc:MaxPasswordHashWaitSeconds</code></td><td>0 (never refuse)</td><td>Set, for example to 20, to answer "busy, try again" after that long in a queue instead of waiting.</td></tr>
           <tr><td><code>Oidc:ReferenceCacheSeconds</code></td><td>30</td><td>How long another instance may take to see a change to a client, scope, tenant or key. 0 reads the database every time.</td></tr>
           <tr><td><code>Oidc:ClientSecretCacheSeconds</code></td><td>300</td><td>How long a verified client secret is remembered. 0 hashes every time.</td></tr>
           <tr><td><code>Oidc:AuditRetentionDays</code></td><td>0 (keep all)</td><td>Days of audit trail to keep.</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note">After the upgrade, operators sign in to the admin console once more, and a sign-in page left open across
-      the upgrade has to be reloaded. Users' single sign-on sessions are not affected.</p>
+    <p class="note">The upgrade is meant to be invisible: existing sessions, console cookies and sign-in pages already open keep
+      working, and no request that used to succeed is refused.</p>
   </section>
+
+
+  <section id="data">
+    <div class="section-head">
+      <h2>Raw results</h2>
+      <p>The result files behind every table, as written by the load generator. Each holds counts and response-time
+        percentiles per step, and any errors.</p>
+    </div>
+    <div class="tablewrap card">
+      <table>
+        <thead><tr><th>Section</th><th>Files</th></tr></thead>
+        <tbody>
+          <tr><td>1 and 2</td><td><a href="2026-11-21-data/full_baseline30k.json">before</a>, <a href="2026-11-21-data/full_final30k.json">after</a></td></tr>
+          <tr><td>3</td><td><a href="2026-11-21-data/baseline_pg_3k.json">before</a>, <a href="2026-11-21-data/final_pg_3k.json">after</a></td></tr>
+          <tr><td>4</td><td>before: <a href="2026-11-21-data/storm_baseline_steady.json">signed-in users</a>, <a href="2026-11-21-data/storm_baseline_signin.json">storm</a>; 9 slots: <a href="2026-11-21-data/storm_gate9_steady.json">users</a>, <a href="2026-11-21-data/storm_gate9_signin.json">storm</a>; 5 slots: <a href="2026-11-21-data/storm_final_steady.json">users</a>, <a href="2026-11-21-data/storm_final_signin.json">storm</a>; 3 slots: <a href="2026-11-21-data/storm_gate3_steady.json">users</a>, <a href="2026-11-21-data/storm_gate3_signin.json">storm</a></td></tr>
+          <tr><td>5</td><td><a href="2026-11-21-data/pair_baseline.json">before</a>, <a href="2026-11-21-data/pair_final.json">after</a></td></tr>
+          <tr><td>6</td><td>MySQL <a href="2026-11-21-data/mysql_baseline.json">before</a>, <a href="2026-11-21-data/mysql_final.json">after</a>; SQLite <a href="2026-11-21-data/sqlite_baseline.json">before</a>, <a href="2026-11-21-data/sqlite_final.json">after</a></td></tr>
+          <tr><td>7</td><td><a href="2026-11-21-data/trace_baseline.json">before</a>, <a href="2026-11-21-data/trace_final.json">after</a></td></tr>
+          <tr><td>8</td><td><a href="2026-11-21-data/combined_tls_at_lb_30000.json">full run, 30,000 users, TLS at the load balancer</a>, <a href="2026-11-21-data/combined_one_third.json">one-third-scale run</a></td></tr>
+          <tr><td>9</td><td><a href="2026-11-21-data/step_load.json">100 to 2,000</a>, <a href="2026-11-21-data/step_load_3000_to_10000.json">3,000 to 10,000</a></td></tr>
+          <tr><td>Unit costs</td><td><a href="2026-11-21-data/unit_costs.json">round trips and unloaded response times</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">To repeat any of it: <code>scripts/loadtest</code> in the repository holds the generator, the seed script and
+      the commands.</p>
+  </section>
+
 
   <section id="limits">
     <div class="section-head">
       <h2>What this test does not show</h2>
     </div>
     <div class="prose">
-      <p>Everything ran on one laptop. The combined run adds TLS, a load balancer, a second instance and network delay
-        to the database, but the instances, the database and the load generator still share ten cores, the
-        database serves nothing else, and that run is at one-third of the 30,000 users: the production-shaped
-        deployment has not been measured at full size. The longest run is seven minutes with sessions shortened to
-        match, which shows sessions expiring, people signing in again and the purge keeping up, but it is not a soak:
-        a leak that takes hours to show would not appear here. That run also contains one unexplained six-second
-        pause, described with its results. The laptop was on battery, which ruled out a longer or larger run, and
-        chasing the pause, on the day.
+      <p>Everything ran on one laptop: the instances, the database and the load generator share ten cores, and the
+        database serves nothing else. The production-shaped test ran at the full 30,000 for 25 minutes with
+        people arriving at the realistic rate of 33 a second; when arrivals were compressed to 100 a second on that
+        topology the laptop itself ran out of processor, so its headroom for a sharper peak is known only for a single
+        instance (sections 4 and 9). No run is longer than 25 minutes, with sessions shortened to match: that
+        shows sessions expiring, people signing in again and the purge keeping up, but it is not a soak, and a leak that
+        takes hours to show would not appear here. Terminating TLS inside the provider was tested only on macOS.
         SQL Server was not tested. Treat the figures as evidence that the provider's own code is no longer the limit,
         and run the same test, for a full day, on the hardware you deploy to; the generator and its instructions are
         in <code>scripts/loadtest</code>.</p>

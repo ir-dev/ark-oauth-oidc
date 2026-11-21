@@ -144,6 +144,14 @@ namespace Ark.oAuth.Oidc.Protocol
                 return defaults.Count > 0 ? defaults : clientScopes.Take(1).ToList();
             }
 
+            if (requestedList.Any(scope => !clientScopes.Contains(scope)))
+            {
+                // Before refusing: a scope may have been added to the client through another
+                // instance since this copy was read (ArkIdpCache.ClientIfChangedAsync).
+                var fresh = await ArkIdpCache.ClientIfChangedAsync(_ctx, client);
+                if (!ReferenceEquals(fresh, client))
+                    clientScopes = new HashSet<string>(fresh.EffectiveScopes, StringComparer.OrdinalIgnoreCase);
+            }
             foreach (var scope in requestedList)
             {
                 if (!clientScopes.Contains(scope))

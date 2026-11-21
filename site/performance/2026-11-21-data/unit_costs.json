@@ -1,0 +1,149 @@
+{
+ "roundTrips": {
+  "signin": 13.5,
+  "refresh": 7.1,
+  "sso": 11.0,
+  "userinfo": 1.0,
+  "par": 16.0,
+  "device": 16.0,
+  "logout": 7.6,
+  "v1": 16.0
+ },
+ "single": {
+  "signin.TOTAL": {
+   "count": 200,
+   "p50": 36.61,
+   "p95": 45.27
+  },
+  "signin.page": {
+   "count": 200,
+   "p50": 0.51,
+   "p95": 0.98
+  },
+  "signin.post": {
+   "count": 200,
+   "p50": 30.69,
+   "p95": 35.34
+  },
+  "signin.token": {
+   "count": 200,
+   "p50": 5.15,
+   "p95": 8.72
+  },
+  "refresh": {
+   "count": 1250,
+   "p50": 4.76,
+   "p95": 6.19
+  },
+  "sso.TOTAL": {
+   "count": 904,
+   "p50": 6.03,
+   "p95": 9.11
+  },
+  "sso.authorize": {
+   "count": 904,
+   "p50": 2.18,
+   "p95": 3.92
+  },
+  "sso.token": {
+   "count": 904,
+   "p50": 3.53,
+   "p95": 5.5
+  },
+  "userinfo": {
+   "count": 8950,
+   "p50": 0.6,
+   "p95": 0.9
+  },
+  "par.TOTAL": {
+   "count": 736,
+   "p50": 7.35,
+   "p95": 10.88
+  },
+  "par.authorize": {
+   "count": 736,
+   "p50": 3.12,
+   "p95": 4.96
+  },
+  "par.push": {
+   "count": 736,
+   "p50": 0.69,
+   "p95": 1.0
+  },
+  "par.token": {
+   "count": 736,
+   "p50": 3.43,
+   "p95": 4.85
+  },
+  "device.TOTAL": {
+   "count": 723,
+   "p50": 7.5,
+   "p95": 11.83
+  },
+  "device.approve": {
+   "count": 723,
+   "p50": 2.31,
+   "p95": 4.31
+  },
+  "device.page": {
+   "count": 723,
+   "p50": 0.59,
+   "p95": 1.08
+  },
+  "device.start": {
+   "count": 723,
+   "p50": 0.93,
+   "p95": 1.93
+  },
+  "device.token": {
+   "count": 723,
+   "p50": 3.4,
+   "p95": 4.9
+  },
+  "logout": {
+   "count": 137,
+   "p50": 6.35,
+   "p95": 8.18
+  },
+  "resignin.TOTAL": {
+   "count": 137,
+   "p50": 36.41,
+   "p95": 41.01
+  },
+  "resignin.page": {
+   "count": 137,
+   "p50": 0.42,
+   "p95": 0.66
+  },
+  "resignin.post": {
+   "count": 137,
+   "p50": 30.13,
+   "p95": 33.66
+  },
+  "resignin.token": {
+   "count": 137,
+   "p50": 5.68,
+   "p95": 7.14
+  },
+  "v1.TOTAL": {
+   "count": 152,
+   "p50": 36.78,
+   "p95": 46.67
+  },
+  "v1.page": {
+   "count": 152,
+   "p50": 1.53,
+   "p95": 2.29
+  },
+  "v1.post": {
+   "count": 152,
+   "p50": 28.86,
+   "p95": 32.92
+  },
+  "v1.token": {
+   "count": 152,
+   "p50": 6.27,
+   "p95": 9.66
+  }
+ }
+}

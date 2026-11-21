@@ -1171,14 +1171,16 @@ signOut.onclick = () =&gt; ark.signoutRedirect(); <span class="c">// app + provi
         <li class="card review">
           <time class="review-date" datetime="2026-11-21"><span><span class="d">21</span><br><span class="m">Nov 2026</span></span></time>
           <div class="review-body">
-            <h3>Scale test: 30,000 signed-in users</h3>
-            <p>The provider was loaded with 30,000 accounts and driven through real sign-ins, single sign-on, token refreshes and UserInfo calls, before and after the scale work in the release that follows 2.3.0. The report gives the method, every measurement on PostgreSQL, MySQL and SQLite, the two-instance test, and what operators should configure.</p>
+            <h3>Performance report: 30,000 users, and sign-in under step load</h3>
+            <p>The provider was loaded with 30,000 accounts and driven through real sign-ins, single sign-on, token refreshes and UserInfo calls, before and after the scale work in the release that follows 2.3.0, then, as two instances behind a load balancer, through a full working pattern for all 30,000 (804,332 requests, 0 errors), and through a step-load test from 100 to 10,000 people signing in at once. The report records the exact hardware, software, network and settings, every measurement on PostgreSQL, MySQL and SQLite, the raw result files, and what the numbers mean for choosing a database, sizing and topology.</p>
             <ul class="review-stats" aria-label="Summary">
               <li class="fixed">30,000 of 30,000 signed in, 0 errors</li>
               <li class="fixed">6.6× requests per second</li>
               <li class="fixed">4.7 ms median refresh at 30,000 sessions</li>
-              <li class="fixed">2 instances, 0 failed sign-ins</li>
+              <li class="fixed">2 instances behind a load balancer: 804,332 requests, 0 errors</li>
+              <li class="fixed">step load 100 to 10,000 at once: 204,254 sign-ins, 0 errors</li>
               <li>PostgreSQL · MySQL · SQLite</li>
+              <li>hardware, settings and raw data included</li>
             </ul>
           </div>
           <a class="btn-report" href="performance/2026-11-21-scale-test.html" target="_blank" rel="noopener">Read the report <span aria-hidden="true">↗</span><span class="visually-hidden">(opens in a new tab)</span></a>

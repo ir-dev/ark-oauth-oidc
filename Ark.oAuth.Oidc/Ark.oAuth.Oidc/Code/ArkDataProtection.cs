@@ -50,8 +50,84 @@ namespace Ark.oAuth.Oidc
             using var scope = _scopes.CreateScope();
             var ctx = scope.ServiceProvider.GetRequiredService<ArkDataContext>();
             EnsureTable(ctx);
-            return ctx.data_protection_keys.AsNoTracking().Select(k => k.xml).ToList()
-                .Select(xml => XElement.Parse(xml)).ToList();
+            var stored = ctx.data_protection_keys.AsNoTracking().Select(k => k.xml).ToList();
+            if (stored.Count == 0 && !_localKeysImported)
+            {
+                _localKeysImported = true;
+                ImportLocalKeys(ctx);
+                stored = ctx.data_protection_keys.AsNoTracking().Select(k => k.xml).ToList();
+            }
+            return stored.Select(xml => XElement.Parse(xml)).ToList();
+        }
+
+        private volatile bool _localKeysImported;
+
+        /// <summary>
+        /// The first time the ring is read from the database and found empty, the keys this
+        /// machine was using until now are copied in.
+        ///
+        /// Without this, moving the ring into the database is an upgrade people can feel: every
+        /// console cookie and every sign-in form already drawn was protected with a key in the
+        /// old folder, so each operator is signed out and each open form fails once. Carried
+        /// across, those keep working and nobody notices the move. Each key is stored under its
+        /// own id, so several instances importing the same folder, or their own, cannot store a
+        /// key twice.
+        ///
+        /// Best effort: a folder that is not there or cannot be read simply means a new ring.
+        /// </summary>
+        private static void ImportLocalKeys(ArkDataContext ctx)
+        {
+            try
+            {
+                foreach (var directory in LocalKeyDirectories())
+                {
+                    if (!directory.Exists) continue;
+                    var local = new FileSystemXmlRepository(directory, Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+                    foreach (var element in local.GetAllElements())
+                    {
+                        var row = Row(element, $"imported from {directory.Name}");
+                        if (ctx.data_protection_keys.AsNoTracking().Any(k => k.id == row.id)) continue;
+                        ctx.data_protection_keys.Add(row);
+                        try
+                        {
+                            ctx.SaveChanges();
+                        }
+                        catch (DbUpdateException)
+                        {
+                            ctx.Entry(row).State = EntityState.Detached; // another instance stored it first
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Never a reason not to start: the framework makes a new key when it finds none.
+            }
+        }
+
+        /// <summary>Where ASP.NET Core keeps the ring when nothing says otherwise, most specific first.</summary>
+        private static IEnumerable<DirectoryInfo> LocalKeyDirectories()
+        {
+            // Azure App Service: a folder under %HOME% that every instance of the site shares.
+            var home = Environment.GetEnvironmentVariable("HOME");
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_INSTANCE_ID")) && !string.IsNullOrEmpty(home))
+                yield return new DirectoryInfo(Path.Combine(home, "ASP.NET", "DataProtection-Keys"));
+            var profile = FileSystemXmlRepository.DefaultKeyStorageDirectory;
+            if (profile != null) yield return profile;
+        }
+
+        /// <summary>A key is stored under its own id; anything else (a revocation) under a digest of itself.</summary>
+        private static ArkDataProtectionKey Row(XElement element, string friendlyName)
+        {
+            var xml = element.ToString(SaveOptions.DisableFormatting);
+            var keyId = element.Name.LocalName == "key" ? element.Attribute("id")?.Value : null;
+            return new ArkDataProtectionKey
+            {
+                id = string.IsNullOrWhiteSpace(keyId) ? Protocol.ArkCrypto.Sha256Base64Url(xml) : keyId!,
+                friendly_name = friendlyName,
+                xml = xml,
+                created_at = DateTime.UtcNow
+            };
         }
 
         public void StoreElement(XElement element, string friendlyName)
@@ -59,13 +135,9 @@ namespace Ark.oAuth.Oidc
             using var scope = _scopes.CreateScope();
             var ctx = scope.ServiceProvider.GetRequiredService<ArkDataContext>();
             EnsureTable(ctx);
-            ctx.data_protection_keys.Add(new ArkDataProtectionKey
-            {
-                id = Guid.NewGuid().ToString("N"),
-                friendly_name = friendlyName,
-                xml = element.ToString(SaveOptions.DisableFormatting),
-                created_at = DateTime.UtcNow
-            });
+            var row = Row(element, friendlyName);
+            if (ctx.data_protection_keys.AsNoTracking().Any(k => k.id == row.id)) return;
+            ctx.data_protection_keys.Add(row);
             ctx.SaveChanges();
         }
     }

@@ -76,6 +76,9 @@ namespace Ark.oAuth.Oidc.Endpoints
                 var redirectUri = parameters.GetValueOrDefault("redirect_uri");
                 if (!string.IsNullOrEmpty(redirectUri) &&
                     !RedirectUriValidator.Matches(client.EffectiveRedirectUris, redirectUri!))
+                    client = await FreshClientAsync(client); // registered through another instance just now
+                if (!string.IsNullOrEmpty(redirectUri) &&
+                    !RedirectUriValidator.Matches(client.EffectiveRedirectUris, redirectUri!))
                     throw OAuthException.InvalidRequest("redirect_uri does not match a registered value for this client.");
 
                 var (requestUri, expiresAt) = await _grants.CreateParRequestAsync(

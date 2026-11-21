@@ -1277,6 +1277,7 @@ Under `ark_oauth_server:Oidc`, all optional:
 | `ReferenceCacheSeconds` | `30` | How long an instance answers from its own copy of tenants, clients, scopes and the signing key; `0` disables |
 | `ClientSecretCacheSeconds` | `300` | How long a client secret that verified is remembered; `0` disables |
 | `MaxConcurrentPasswordHashes` | `0` | Password hashes running at once; `0` = half the cores |
+| `MaxPasswordHashWaitSeconds` | `0` | Longest a sign-in waits for a hashing slot before "server is busy"; `0` never refuses |
 
 For a deployment with many users or more than one instance, see **Running at scale** in the
 [server README](Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md#running-at-scale); the measured numbers are

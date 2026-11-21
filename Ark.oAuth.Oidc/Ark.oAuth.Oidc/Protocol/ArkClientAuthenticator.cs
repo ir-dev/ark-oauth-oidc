@@ -77,6 +77,9 @@ namespace Ark.oAuth.Oidc.Protocol
             var client = await FindClientAsync(tenantId, clientId);
             if (client == null)
                 throw OAuthException.InvalidClient("client authentication failed: unknown client.");
+            // Nothing is refused on a copy that may be stale: see ArkIdpCache.ClientIfChangedAsync.
+            if (!client.IsPublicClient || !client.is_active)
+                client = await ArkIdpCache.ClientIfChangedAsync(_ctx, client);
             if (!client.IsPublicClient)
                 throw OAuthException.InvalidClient("this client is confidential and must authenticate.");
             // Every method refuses a deactivated client, not only the secret-based ones — a public
@@ -91,37 +94,56 @@ namespace Ark.oAuth.Oidc.Protocol
             string tenantId, string clientId, string? secret, string method, bool viaHeader)
         {
             var client = await FindClientAsync(tenantId, clientId);
+            var options = ArkConfigSnapshot.Oidc(_ctx.Configuration);
+            ArkHashGate.Configure(options.MaxConcurrentPasswordHashes, options.MaxPasswordHashWaitSeconds);
 
+            var refusal = await RefusalAsync(client, secret, method, options, viaHeader);
+            if (refusal != null && client != null)
+            {
+                // Before refusing: the copy of the client this instance holds may predate a secret
+                // regenerated, or a client reactivated, through another instance a moment ago.
+                var fresh = await ArkIdpCache.ClientIfChangedAsync(_ctx, client);
+                if (!ReferenceEquals(fresh, client))
+                {
+                    client = fresh;
+                    refusal = await RefusalAsync(client, secret, method, options, viaHeader);
+                }
+            }
+            if (refusal != null) throw refusal;
+            return new ClientAuthResult { Client = client!, Method = method, UsedAuthorizationHeader = viaHeader };
+        }
+
+        /// <summary>Why this client may not authenticate with this secret, or null when it may.</summary>
+        private static async Task<OAuthException?> RefusalAsync(
+            ArkClient? client, string? secret, string method, ArkOidcOptions options, bool viaHeader)
+        {
             // Verify against a dummy hash when the client is unknown so that a bad client_id and a
             // bad secret cost the same amount of time and cannot be told apart by an attacker.
             var stored = client?.client_secret_hash ?? DummyHash.Value;
-            // Remembered once it has verified, so a client that calls the token endpoint all day
-            // does not spend a full PBKDF2 on each call. A wrong secret is hashed every time.
-            var options = ArkConfigSnapshot.Oidc(_ctx.Configuration);
-            ArkHashGate.Configure(options.MaxConcurrentPasswordHashes);
             bool ok;
             try
             {
+                // Remembered once it has verified, so a client that calls the token endpoint all day
+                // does not spend a full PBKDF2 on each call. A wrong secret is hashed every time.
                 ok = await ArkSecretVerifier.VerifyAsync(secret, stored, options.ClientSecretCacheSeconds);
             }
             catch (ArkBusyException)
             {
                 // RFC 6749 §5.2 has no "busy"; 503 with the code the authorization endpoint uses
                 // for the same condition is what a client library retries on.
-                throw new OAuthException(OAuthErrorCodes.TemporarilyUnavailable,
+                return new OAuthException(OAuthErrorCodes.TemporarilyUnavailable,
                     "the server is busy; retry the request shortly.", 503);
             }
 
             if (client == null || !ok)
-                throw OAuthException.InvalidClient("client authentication failed.", viaHeader);
+                return OAuthException.InvalidClient("client authentication failed.", viaHeader);
             if (!client.is_active)
-                throw OAuthException.InvalidClient("client is disabled.", viaHeader);
+                return OAuthException.InvalidClient("client is disabled.", viaHeader);
             if (client.client_secret_expires_at != null && client.client_secret_expires_at <= DateTime.UtcNow)
-                throw OAuthException.InvalidClient("client secret has expired.", viaHeader);
+                return OAuthException.InvalidClient("client secret has expired.", viaHeader);
             if (!string.Equals(client.token_endpoint_auth_method, method, StringComparison.OrdinalIgnoreCase))
-                throw OAuthException.InvalidClient($"client is registered for {client.token_endpoint_auth_method}.", viaHeader);
-
-            return new ClientAuthResult { Client = client, Method = method, UsedAuthorizationHeader = viaHeader };
+                return OAuthException.InvalidClient($"client is registered for {client.token_endpoint_auth_method}.", viaHeader);
+            return null;
         }
 
         /// <summary>
@@ -147,6 +169,9 @@ namespace Ark.oAuth.Oidc.Protocol
 
             var client = await FindClientAsync(tenantId, clientId)
                 ?? throw OAuthException.InvalidClient("client authentication failed: unknown client.");
+            if (!client.is_active || string.IsNullOrEmpty(client.jwks_uri)
+                || !string.Equals(client.token_endpoint_auth_method, "private_key_jwt", StringComparison.OrdinalIgnoreCase))
+                client = await ArkIdpCache.ClientIfChangedAsync(_ctx, client);
             if (!client.is_active)
                 throw OAuthException.InvalidClient("client is disabled.");
             if (!string.Equals(client.token_endpoint_auth_method, "private_key_jwt", StringComparison.OrdinalIgnoreCase))

@@ -30,7 +30,7 @@ dotnet scripts/loadtest/loadgen/bin/Release/net10.0/loadgen.dll \
 | Option | Default | Meaning |
 |---|---|---|
 | `--base` | `http://127.0.0.1:5391` | The provider's public address (its `BaseUrl`) |
-| `--bases` | | More instances of the same provider, comma separated; each request goes to the next in turn |
+| `--bases` | | More instances of the same provider, comma separated; each request goes to the next in turn. In a `--ramp` run each virtual user keeps to one of them instead, which splits a very large crowd evenly: one machine can hold only about 16,000 connections from itself to any one address, so to go beyond that give the provider a second address (for example `http://[::1]:5391` beside `http://127.0.0.1:5391`) |
 | `--tenant` | `ark_idp` | The tenant in the issuer |
 | `--client` | `web` | `web` = `load_web`, confidential; `spa` = `load_spa`, public with PKCE |
 | `--users`, `--offset` | `1000`, `1` | How many seeded accounts sign in, starting at which |
@@ -42,6 +42,9 @@ dotnet scripts/loadtest/loadgen/bin/Release/net10.0/loadgen.dll \
 | `--mix` | `sso=40,refresh=30,userinfo=30` | Weights of the operations: `sso`, `refresh`, `userinfo`, `par` (pushed authorization request), `device` (device flow, approved by the signed-in user), `logout` (sign out, then sign in again), `v1` (the legacy flow). `par` and `v1` need `--client web` |
 | `--bcl-port` | `0` | Listen on this port for back-channel logout tokens and count them; give the seed the matching `--backchannel-uri` |
 | `--insecure` | `false` | `true` accepts any TLS certificate, for a provider on a development certificate |
+| `--ramp` | | `start,step,max`: a step-load test instead of the above. That many people sign in at once, continuously, each as a new browser; the number rises by `step` after every `--ramp-seconds` (30). Prints sign-ins a second and response times per level |
+| `--ramp-join-seconds` | `0` | Spread each level's newcomers over this many seconds instead of starting them in the same instant. Needed for big steps: an operating system accepts only so many new connections at once (128 queued by default on macOS) |
+| `--timeout` | `60` | Seconds the generator waits for one response. Raise it when a level is large enough that people queue for longer than that |
 | `--max-connections` | `8192` | Connections the generator may hold. Keep it high: real users each have their own, and a small pool makes quick requests queue behind slow ones inside the generator |
 | `--connection-lifetime` | `300` | Seconds before a connection is recycled, so a load balancer keeps re-spreading them |
 | `--window` | `60` | Seconds per progress line: people signed in, operations a second, errors, the generator's own timer lag, and median/95th-percentile response times in that window |

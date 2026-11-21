@@ -43,6 +43,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                 var client = auth.Client;
 
                 if (!client.EffectiveGrantTypes.Contains("urn:ietf:params:oauth:grant-type:device_code", StringComparer.OrdinalIgnoreCase))
+                    client = await FreshClientAsync(client);
+                if (!client.EffectiveGrantTypes.Contains("urn:ietf:params:oauth:grant-type:device_code", StringComparer.OrdinalIgnoreCase))
                     throw OAuthException.UnauthorizedClient("this client is not registered for the device grant.");
 
                 var scopes = await _claims.ResolveScopesAsync(Request.Form["scope"].ToString(), client);
@@ -116,6 +118,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             {
                 // The same access mapping the authorization endpoint requires of a session.
                 var client = await FindClientAsync(tenant, entry.client_id);
+                if (client != null && !client.is_active) client = await FreshClientAsync(client);
                 if (client == null || !client.is_active
                     || !await _claims.HasClientAccessAsync(session.subject, tenant.tenant_id, client))
                 {

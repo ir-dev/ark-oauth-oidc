@@ -58,8 +58,9 @@ Next release — built to hold 30,000 signed-in users, and to run on more than o
 
 Measured, not estimated: with 30,000 accounts in PostgreSQL the same test went from 78 to 159
 sign-ins a second and from 352 to 2,308 requests a second on one instance, and two instances behind
-one address went from refusing most sign-ins to refusing none. The dated report is on the project
-site, under Reviews and reports. Nothing a client sees changes — the
+one address went from refusing most sign-ins to refusing none: as two instances behind a load
+balancer, 30,000 people were carried through 804,332 requests in 25 minutes with no error. The dated
+report, with the hardware, settings and raw results, is on the project site under Reviews and reports. Nothing a client sees changes — the
 endpoints, tokens, discovery and configuration are as in 2.3.0 — and the README's "Running at scale"
 has the settings.
 
@@ -72,15 +73,19 @@ has the settings.
   `Oidc:ClientSecretCacheSeconds` (300). It was a full PBKDF2 — 40 ms of a core — on every token
   request. Only a correct secret is remembered; replacing the secret retires the entry.
 * **Tenants, clients, scopes and the signing key are kept for `Oidc:ReferenceCacheSeconds`** (30).
-  A change made on an instance applies there at once; on other instances within that time. Set 0 to
-  read the database every time. Signing keys are imported once instead of once per token.
+  A change made on an instance applies there at once. Nothing is refused on a cached copy: before a
+  request is turned down for what a client record says, the record is read again, so a new secret,
+  redirect URI or scope works on every instance immediately. Only a change that takes something
+  away reaches other instances within that time. Set 0 to read the database every time. Signing
+  keys are imported once instead of once per token.
 * **Password hashing is bounded** (`Oidc:MaxConcurrentPasswordHashes`, half the cores), so a
-  sign-in storm no longer starves people who are already signed in.
+  sign-in storm no longer starves people who are already signed in. Nobody is turned away unless
+  `Oidc:MaxPasswordHashWaitSeconds` is set.
 * **More than one instance works without configuration.** The data-protection key ring is kept in
   the server's database on PostgreSQL, MySQL and SQL Server (`DataProtectionKeys: auto`); it used to
   sit in a folder per machine, so the sign-in form drawn by one instance was refused by the next.
-  A host that configures its own key storage keeps it. After upgrading, operators sign in to the
-  console once more and a sign-in form already open at the moment of the upgrade has to be reloaded.
+  A host that configures its own key storage keeps it. The keys already on the machine are copied
+  into the database the first time, so the upgrade signs nobody out.
 * **Failed sign-ins are counted atomically.** Concurrent guesses at one account all read the same
   count, so the lockout saw a fraction of them.
 * **The purge also removes refresh tokens whose session has ended**, and can trim the audit trail

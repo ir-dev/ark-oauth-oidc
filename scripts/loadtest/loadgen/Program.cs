@@ -42,6 +42,11 @@ var windowSeconds = int.Parse(Opt("window", "60"));
 var maxConnections = int.Parse(Opt("max-connections", "8192"));
 var connectionSeconds = int.Parse(Opt("connection-lifetime", "300")); // a browser keeps its connection for minutes
 var outFile = Opt("out", "");
+// Step load: "start,step,max" concurrent users signing in, each level held for --ramp-seconds.
+var ramp = Opt("ramp", "");
+var rampSeconds = int.Parse(Opt("ramp-seconds", "30"));
+var rampJoinSeconds = double.Parse(Opt("ramp-join-seconds", "0")); // spread each level's newcomers over this long, as real people arrive
+var timeoutSeconds = int.Parse(Opt("timeout", "60"));              // how long the generator waits for one response
 
 var clientId = clientKind == "spa" ? "load_spa" : "load_web";
 var clientSecret = clientKind == "spa" ? null : Opt("client-secret", Environment.GetEnvironmentVariable("LOADTEST_CLIENT_SECRET") ?? "");
@@ -55,6 +60,9 @@ var issuer = $"{baseUrl}/{tenant}";
 // Several instances behind one public address: the issuer stays the first, each request is sent to the next in turn.
 var instances = new[] { baseUrl }.Concat(bases.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(b => b.Trim().TrimEnd('/'))).ToArray();
 var turn = -1;
+// In a step-load run each virtual user keeps to one instance address, so that a very large crowd is split evenly
+// across them: one machine can hold only about 16,000 connections from itself to any one address.
+var pinned = new AsyncLocal<string?>();
 
 var mix = mixSpec.Split(',', StringSplitOptions.RemoveEmptyEntries)
     .Select(p => p.Split('=')).Select(p => (op: p[0].Trim(), weight: int.Parse(p[1]))).Where(p => p.weight > 0).ToArray();
@@ -74,7 +82,7 @@ var handler = new SocketsHttpHandler
     AutomaticDecompression = DecompressionMethods.None
 };
 if (insecure) handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true;
-var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) };
+var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(timeoutSeconds) };
 
 // ---------------------------------------------------------------- measurements
 var stats = new ConcurrentDictionary<string, ConcurrentBag<double>>();
@@ -112,6 +120,7 @@ var scopeRe = new Regex("name=\"scope\" value=\"([^\"]+)\"", RegexOptions.Compil
 var alertRe = new Regex("ark-alert.*?<span>([^<]*)</span>", RegexOptions.Compiled | RegexOptions.Singleline);
 
 static string B64Url(byte[] b) => Convert.ToBase64String(b).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+static double Pct0(double[] sorted, double p) => sorted.Length == 0 ? 0 : sorted[Math.Min(sorted.Length - 1, (int)(sorted.Length * p))];
 static string Trunc(string s) => (s.Length > 90 ? s[..90] : s).Replace('\n', ' ').Trim();
 static (string verifier, string challenge) Pkce()
 {
@@ -134,7 +143,7 @@ async Task<(HttpResponseMessage resp, string body)> Send(string step, HttpReques
 {
     if (instances.Length > 1)
     {
-        var target = instances[(int)((uint)Interlocked.Increment(ref turn) % (uint)instances.Length)];
+        var target = pinned.Value ?? instances[(int)((uint)Interlocked.Increment(ref turn) % (uint)instances.Length)];
         req.RequestUri = new Uri(target + req.RequestUri!.PathAndQuery);
     }
     var sw = Stopwatch.GetTimestamp();
@@ -414,6 +423,65 @@ if (bclPort > 0)
     });
 }
 
+// ---------------------------------------------------------------- step load: N people signing in at once, N growing
+if (ramp.Length > 0)
+{
+    var parts = ramp.Split(',').Select(int.Parse).ToArray();
+    var (first, step, last) = (parts[0], parts[1], parts[2]);
+    Console.WriteLine($"[{label}] {baseUrl}  client={clientId}  step load {first}..{last} by {step}, {rampSeconds}s per level, accounts {offset}..{offset + users - 1}");
+    Console.WriteLine($"{"users",6}{"sign-ins",10}{"per sec",9}{"p50",9}{"p95",9}{"p99",9}{"max",9}{"page p50",10}{"post p50",10}{"token p50",11}{"errors",8}{"lag",7}   (ms)");
+    var levels = new List<object>();
+    var nextUser = -1;
+    var previous = 0;
+    for (var n = first; n <= last; n += step)
+    {
+        var newcomers = Math.Max(1, n - previous);
+        var already = previous;
+        previous = n;
+        Interlocked.Exchange(ref window, new ConcurrentDictionary<string, ConcurrentBag<double>>());
+        Interlocked.Exchange(ref windowErrors, 0);
+        Interlocked.Exchange(ref lagMs, 0);
+        var errorsBefore = errors.ToDictionary(e => e.Key, e => e.Value);
+        var started = DateTime.UtcNow;
+        var sw = Stopwatch.StartNew();
+        await Task.WhenAll(Enumerable.Range(0, n).Select(i => Task.Run(async () =>
+        {
+            // those who were here in the last level carry on at once; the newcomers join over the join time
+            pinned.Value = instances[i % instances.Length];
+            if (rampJoinSeconds > 0 && i >= already) await Task.Delay(TimeSpan.FromSeconds(rampJoinSeconds * (i - already) / newcomers));
+            do
+            {
+                // a new browser each time: no cookies carried over, so every sign-in is a full one
+                var u = new VUser { Email = $"user{offset + (int)((uint)Interlocked.Increment(ref nextUser) % (uint)users):D5}@load.test" };
+                try { await SignIn(u); } catch (Exception ex) { Err($"signin:exception:{ex.GetType().Name}"); }
+            }
+            while (sw.Elapsed.TotalSeconds < rampSeconds);   // everyone signs in at least once, however long the level
+        })));
+        sw.Stop();
+        var snap = window;
+        double[] Sorted(string key) { var a = snap.TryGetValue(key, out var bag) ? bag.ToArray() : Array.Empty<double>(); Array.Sort(a); return a; }
+        var total = Sorted("signin.TOTAL"); var page = Sorted("signin.page"); var post = Sorted("signin.post"); var token = Sorted("signin.token");
+        var errs = Interlocked.Read(ref windowErrors);
+        var kinds = errors.Where(e => e.Value > errorsBefore.GetValueOrDefault(e.Key)).ToDictionary(e => e.Key, e => e.Value - errorsBefore.GetValueOrDefault(e.Key));
+        var lag = Interlocked.Read(ref lagMs);
+        var perSecond = total.Length / sw.Elapsed.TotalSeconds;
+        Console.WriteLine($"{n,6}{total.Length,10}{perSecond,9:0.0}{Pct0(total, .50),9:0}{Pct0(total, .95),9:0}{Pct0(total, .99),9:0}{(total.Length > 0 ? total[^1] : 0),9:0}" +
+                          $"{Pct0(page, .50),10:0.0}{Pct0(post, .50),10:0}{Pct0(token, .50),11:0.0}{errs,8}{lag,7}");
+        foreach (var k in kinds.OrderByDescending(k => k.Value).Take(3)) Console.WriteLine($"          {k.Value,6} x {k.Key}");
+        levels.Add(new
+        {
+            users = n, startedUtc = started.ToString("o"), seconds = sw.Elapsed.TotalSeconds, signIns = total.Length, perSecond,
+            p50 = Pct0(total, .50), p95 = Pct0(total, .95), p99 = Pct0(total, .99), max = total.Length > 0 ? total[^1] : 0,
+            pageP50 = Pct0(page, .50), postP50 = Pct0(post, .50), postP95 = Pct0(post, .95), tokenP50 = Pct0(token, .50), errors = errs, errorKinds = kinds, generatorLagMs = lag
+        });
+    }
+    var failed = errors.Values.Sum();
+    Console.WriteLine($"errors: {failed}");
+    if (outFile.Length > 0)
+        File.WriteAllText(outFile, JsonSerializer.Serialize(new { label, ramp, rampSeconds, accounts = users, errors = failed, errorKinds = errors, levels }, new JsonSerializerOptions { WriteIndented = true }));
+    return failed == 0 ? 0 : 1;
+}
+
 // ---------------------------------------------------------------- population
 var vusers = Enumerable.Range(offset, users).Select(i => new VUser { Email = $"user{i:D5}@load.test" }).ToArray();
 var pool = new VUser[users];
@@ -573,7 +641,10 @@ if (steadySeconds > 0 && (poolCount > 0 || arrivalRate > 0))
     {
         while (sw2.Elapsed.TotalSeconds < steadySeconds)
         {
-            await Task.Delay(TimeSpan.FromSeconds(windowSeconds));
+            // never sleeps past the end of the run: a short run must not wait out a whole window
+            var remaining = steadySeconds - sw2.Elapsed.TotalSeconds;
+            await Task.Delay(TimeSpan.FromSeconds(Math.Max(0.05, Math.Min(windowSeconds, remaining))));
+            if (sw2.Elapsed.TotalSeconds >= steadySeconds && steadySeconds < windowSeconds) break;
             CloseWindow();
         }
     }));

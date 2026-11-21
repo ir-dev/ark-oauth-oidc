@@ -76,6 +76,14 @@ namespace Ark.oAuth.Oidc.Endpoints
         protected Task<ArkClient?> FindClientAsync(ArkTenant tenant, string? clientId) =>
             ArkIdpCache.ClientAsync(Ctx, tenant.tenant_id, clientId);
 
+        /// <summary>
+        /// The client as the database has it now, if that differs from the copy in hand. Called
+        /// before a request is refused because of what the client record says, so that nothing is
+        /// refused on a copy another instance has since changed — see
+        /// <see cref="ArkIdpCache.ClientIfChangedAsync"/>.
+        /// </summary>
+        protected Task<ArkClient> FreshClientAsync(ArkClient client) => ArkIdpCache.ClientIfChangedAsync(Ctx, client);
+
         protected void NoStore()
         {
             Response.Headers["Cache-Control"] = "no-store";

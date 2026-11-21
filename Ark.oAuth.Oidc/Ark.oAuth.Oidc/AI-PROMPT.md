@@ -244,7 +244,7 @@ AlwaysRequireConsent=false, SessionLifetimeMinutes=480, MaxFailedSignIns=10, Loc
 EnableBackChannelLogout=true, BackChannelLogoutTimeoutSeconds=5, LogoutTokenLifetimeSeconds=120,
 SignOutAllBrowserSessions=true, SignOutAcrossTenants=true, CorsOrigins=[], CleanupIntervalMinutes=60,
 AuditRetentionDays=0 (keep all), ReferenceCacheSeconds=30, ClientSecretCacheSeconds=300,
-MaxConcurrentPasswordHashes=0 (half the cores)}, DataProtectionKeys=auto (auto|database|off: the
+MaxConcurrentPasswordHashes=0 (half the cores), MaxPasswordHashWaitSeconds=0 (never refuse)}, DataProtectionKeys=auto (auto|database|off: the
 data-protection key ring is kept in the IdP database on every provider but SQLite, so instances share it).
 ConnectionStrings:ArkAuthConnection.
 SCALE: more than one instance needs postgres or mysql and nothing else; never SQLite across machines.

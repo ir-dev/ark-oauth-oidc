@@ -1,0 +1,50 @@
+{
+  "label": "gate3-storm",
+  "users": 6000,
+  "conc": 128,
+  "steadyConc": 128,
+  "signedIn": 6000,
+  "signinSeconds": 53.7519249,
+  "signinRate": 111.62390949091387,
+  "steadyRps": 0,
+  "steadyOps": 0,
+  "errors": 0,
+  "errorKinds": {},
+  "steps": {
+    "signin.TOTAL": {
+      "count": 6000,
+      "p50": 1129.7397,
+      "p95": 1253.0524,
+      "p99": 1293.1766,
+      "max": 1322.5057
+    },
+    "signin.consent": {
+      "count": 6000,
+      "p50": 6.2013,
+      "p95": 11.0134,
+      "p99": 19.5691,
+      "max": 64.0325
+    },
+    "signin.page": {
+      "count": 6000,
+      "p50": 0.6067,
+      "p95": 2.3893,
+      "p99": 23.6707,
+      "max": 51.1065
+    },
+    "signin.post": {
+      "count": 6000,
+      "p50": 1114.0988,
+      "p95": 1238.5882,
+      "p99": 1277.8935,
+      "max": 1295.267
+    },
+    "signin.token": {
+      "count": 6000,
+      "p50": 6.2626,
+      "p95": 10.0465,
+      "p99": 16.2107,
+      "max": 52.7514
+    }
+  }
+}

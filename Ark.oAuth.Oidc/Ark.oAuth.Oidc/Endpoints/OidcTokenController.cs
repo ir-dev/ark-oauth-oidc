@@ -67,6 +67,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                     throw OAuthException.UnsupportedGrantType(grantType);
 
                 if (!client.EffectiveGrantTypes.Contains(grantType, StringComparer.OrdinalIgnoreCase))
+                    client = await FreshClientAsync(client); // a grant added through another instance
+                if (!client.EffectiveGrantTypes.Contains(grantType, StringComparer.OrdinalIgnoreCase))
                     throw OAuthException.UnauthorizedClient($"this client is not registered for the '{grantType}' grant.");
 
                 return grantType switch

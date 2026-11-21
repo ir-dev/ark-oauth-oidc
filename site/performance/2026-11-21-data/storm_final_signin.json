@@ -1,0 +1,50 @@
+{
+  "label": "final-storm",
+  "users": 6000,
+  "conc": 128,
+  "steadyConc": 128,
+  "signedIn": 6000,
+  "signinSeconds": 36.8609147,
+  "signinRate": 162.77403989651944,
+  "steadyRps": 0,
+  "steadyOps": 0,
+  "errors": 0,
+  "errorKinds": {},
+  "steps": {
+    "signin.TOTAL": {
+      "count": 6000,
+      "p50": 775.666,
+      "p95": 868.0557,
+      "p99": 918.4228,
+      "max": 1008.0325
+    },
+    "signin.consent": {
+      "count": 6000,
+      "p50": 11.7754,
+      "p95": 42.3708,
+      "p99": 82.91,
+      "max": 134.8068
+    },
+    "signin.page": {
+      "count": 6000,
+      "p50": 2.3435,
+      "p95": 13.6904,
+      "p99": 66.0627,
+      "max": 113.9469
+    },
+    "signin.post": {
+      "count": 6000,
+      "p50": 738.9865,
+      "p95": 833.7791,
+      "p99": 853.0931,
+      "max": 882.3459
+    },
+    "signin.token": {
+      "count": 6000,
+      "p50": 11.3247,
+      "p95": 34.3797,
+      "p99": 62.8547,
+      "max": 131.3196
+    }
+  }
+}

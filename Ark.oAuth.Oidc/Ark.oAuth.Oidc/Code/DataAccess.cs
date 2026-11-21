@@ -596,7 +596,8 @@ namespace Ark.oAuth.Oidc
             //
             // Through the gate: this is the expensive step of a sign-in, and a few hundred of them
             // arriving together must not take every thread the server has (ArkHashGate).
-            Protocol.ArkHashGate.Configure(_util.ServerConfig.Oidc?.MaxConcurrentPasswordHashes ?? 0);
+            Protocol.ArkHashGate.Configure(_util.ServerConfig.Oidc?.MaxConcurrentPasswordHashes ?? 0,
+                _util.ServerConfig.Oidc?.MaxPasswordHashWaitSeconds ?? 0);
             var stored = usr_cl_cl != null ? usr!.hash_pw ?? "" : ArkUtil.DummyPasswordHash.Value;
             var verified = await Protocol.ArkHashGate.RunAsync(() => _util.VerifyPasswordPBKDF2(pw, stored));
             // Every failure counts towards the lockout, not only a wrong password for an account

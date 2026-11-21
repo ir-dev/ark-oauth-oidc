@@ -91,7 +91,9 @@ These apply in every language and are the source of most "it just says the passw
 * **Look users and access mappings up through `ArkLookup`, never with `x.ToLower() == y.ToLower()`.**
   That comparison reads the whole table; with 30,000 accounts it was most of the server's load.
   Tenants, clients, scopes and the signing key come from `ArkIdpCache` (30 s, reset on any save that
-  touches them); nothing about a user is ever cached.
+  touches them); nothing about a user is ever cached. Before refusing a request for what a cached
+  client says (secret, redirect URI, scope, grant, inactive), call `ArkIdpCache.ClientIfChangedAsync`:
+  nothing may be refused on a stale copy.
 * **.NET only:** keep the `Microsoft.IdentityModel.*` package graph on one version. A mixed graph
   fails only at runtime, on the first challenge, with a message that names none of this.
 * **Python only:** `ArkClientCredentials` always authenticates with `client_secret_post`. The server

@@ -75,6 +75,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             var client = await FindClientAsync(tenant, clientId);
             if (client == null)
                 return ErrorPage(OAuthErrorCodes.InvalidRequest, "unknown client_id.", brand, tenant);
+            if (!client.is_active) client = await FreshClientAsync(client); // reactivated elsewhere a moment ago?
             if (!client.is_active)
                 // Named, and phrased for the person in front of the screen rather than for the
                 // developer reading a log. There is nothing they can retype to get past this, so
@@ -123,6 +124,12 @@ namespace Ark.oAuth.Oidc.Endpoints
                     "redirect_uri is required because this client has several registered.", brand, tenant);
             }
             if (!RedirectUriValidator.Matches(registered, redirectUri!))
+            {
+                // A redirect URI registered through another instance in the last few seconds.
+                client = await FreshClientAsync(client);
+                registered = client.EffectiveRedirectUris;
+            }
+            if (!RedirectUriValidator.Matches(registered, redirectUri!))
                 return ErrorPage(OAuthErrorCodes.InvalidRequest,
                     "redirect_uri does not match a registered value for this client.", brand, tenant);
 
@@ -145,6 +152,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                     throw new OAuthException(OAuthErrorCodes.UnsupportedResponseType,
                         "only the authorization code flow (response_type=code) is supported; implicit and hybrid flows are removed in OAuth 2.1.");
 
+                if (!client.EffectiveGrantTypes.Contains("authorization_code", StringComparer.OrdinalIgnoreCase))
+                    client = await FreshClientAsync(client);
                 if (!client.EffectiveGrantTypes.Contains("authorization_code", StringComparer.OrdinalIgnoreCase))
                     throw OAuthException.UnauthorizedClient("this client is not registered for the authorization_code grant.");
 
