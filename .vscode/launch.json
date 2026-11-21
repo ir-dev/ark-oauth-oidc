@@ -9,7 +9,7 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build: QuickStart",
-      "program": "${workspaceFolder}/Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart/bin/Debug/net9.0/Ark.oAuth.Oidc.QuickStart.dll",
+      "program": "${workspaceFolder}/Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart/bin/Debug/net10.0/Ark.oAuth.Oidc.QuickStart.dll",
       "cwd": "${workspaceFolder}/Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart",
       "args": [],
       "env": {

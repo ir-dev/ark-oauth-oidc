@@ -13,7 +13,7 @@
 
 	<!-- ============================== Compilation ============================== -->
 	<PropertyGroup>
-		<TargetFramework>net9.0</TargetFramework>
+		<TargetFramework>net10.0</TargetFramework>
 		<OutputType>Library</OutputType>
 		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
@@ -26,9 +26,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.2.0</Version>
-		<AssemblyVersion>2.2.0.0</AssemblyVersion>
-		<FileVersion>2.2.0.0</FileVersion>
+		<Version>2.3.0</Version>
+		<AssemblyVersion>2.3.0.0</AssemblyVersion>
+		<FileVersion>2.3.0.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -50,6 +50,34 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.3.0 — .NET 10, alongside Ark.oAuth.Oidc 2.3.0. No API change.
+
+.NET 9 left support on 2026-11-10; .NET 10 is the long-term support release. The package moves onto
+it with no change to its API, options, defaults or behaviour. It works with any Ark IdP the 2.2.x
+client did, and the provider changes nothing on the wire in 2.3.0, so the app and the provider can
+be upgraded in either order.
+
+Before upgrading:
+* **Move the app to .NET 10 first.** Target net10.0, build with the .NET 10 SDK and run on the
+  ASP.NET Core 10 runtime. A net9.0 app fails restore with NU1202. An app that stays on net9.0 stays
+  on 2.2.1, the last net9.0 release.
+* **If the app pins Microsoft.IdentityModel.* itself**, raise those pins to 8.23.0 or remove them.
+  A split graph builds, then fails at the first challenge with "Cannot redirect to the authorization
+  endpoint".
+* ASP.NET Core 10 answers 401/403 instead of redirecting on API endpoints. What this package does is
+  unchanged: a challenge still goes to the OpenID Connect handler, and a signed-in user who is
+  refused is still sent to the access-denied page by this package's own handler.
+
+Version updates:
+* Target framework: net9.0 → net10.0.
+* Microsoft.AspNetCore.Authentication.OpenIdConnect and Microsoft.AspNetCore.Authentication.JwtBearer:
+  8.0.15 → 10.0.15.
+* Microsoft.IdentityModel.JsonWebTokens, Microsoft.IdentityModel.Protocols.OpenIdConnect and
+  System.IdentityModel.Tokens.Jwt: 8.8.0 → 8.23.0, still one version across the graph.
+
+2.2.1 — 2.2.0 republished through the release workflow. The published files differ from 2.2.0 only
+in the version number.
+
 2.2.0 — security release, alongside Ark.oAuth.Oidc 2.2.0. Upgrade both.
 
 Behaviour changes:
@@ -235,25 +263,27 @@ carries a readme, an SPDX license expression and a symbol package.
 	<!-- ============================== Dependencies ============================== -->
 	<ItemGroup>
 		<PackageReference Include="ark.net.util" Version="1.0.4.15" />
-		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.15" />
-		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.15" />
-		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.8.0" />
+		<!-- The framework's own handlers, on the same patch train as Ark.oAuth.Oidc's. -->
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.15" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.15" />
+		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
 		<!--
 			Pinned deliberately, and they must stay on the same version as JsonWebTokens above.
 
-			Microsoft.AspNetCore.Authentication.OpenIdConnect 8.0.15 brings
-			Microsoft.IdentityModel.Protocols[.OpenIdConnect] 7.x, while JsonWebTokens 8.8.0 lifts
-			Microsoft.IdentityModel.Tokens to 8.8.0. The halves do not run together: the 7.x
-			ConfigurationManager fails against 8.x Tokens, GetConfigurationAsync yields no
-			configuration, and every sign-in dies at the challenge with "Cannot redirect to the
-			authorization endpoint, the configuration may be missing or invalid." Nothing warns at
-			build time — the mismatch only shows up on the first challenge.
+			The two handlers above ask for Microsoft.IdentityModel.Protocols.OpenIdConnect 8.19.2,
+			while JsonWebTokens lifts Microsoft.IdentityModel.Tokens to 8.23.0. This pin keeps the
+			whole graph on one version. The failure it guards against was seen with the 8.0.x
+			handlers, which brought Protocols 7.x against 8.x Tokens: the 7.x ConfigurationManager
+			fails against 8.x Tokens, GetConfigurationAsync yields no configuration, and every
+			sign-in dies at the challenge with "Cannot redirect to the authorization endpoint, the
+			configuration may be missing or invalid." Nothing warns at build time — the mismatch
+			only shows up on the first challenge.
 
 			Because these are direct references they are also listed as package dependencies, so a
 			consumer inherits the same aligned graph instead of re-deriving the broken one.
 		-->
-		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.8.0" />
-		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.8.0" />
+		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.23.0" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
 	</ItemGroup>
 
 </Project>

@@ -7,27 +7,31 @@
 
 ## Current version
 
-- **`2.0.11`** (`<Version>` in `Ark.oAuth.Client.csproj`), `net9.0`.
-- Ships in lockstep with **`Ark.oAuth.Oidc 2.0.11`** — the client and server packages deliberately
+- **`2.3.0`** (`<Version>` in `Ark.oAuth.Client.csproj`), `net10.0`.
+- Ships in lockstep with **`Ark.oAuth.Oidc 2.3.0`** — the client and server packages deliberately
   carry the **same version number**. Upgrade both together.
+- **2.3.0 moves to .NET 10 (LTS); no API, option or behaviour change.** 2.2.1 is the last `net9.0`
+  release (it is 2.2.0 republished, no code change), and .NET 9 left support on 2026-11-10.
+  Retarget a `net9.0` app to `net10.0` before upgrading (restore fails with NU1202 otherwise). If
+  the app pins `Microsoft.IdentityModel.*` itself, raise those pins to `8.23.0` or remove them.
+  The provider changes nothing on the wire in 2.3.0, so app and provider upgrade in either order.
 - The Python (`ark-oauth-client` / PyPI) and Node (`ark-oauth-client-node` / npm) clients are ports of
   this one and carry the same version; an integration translates almost line-for-line.
 
 > **Version-number vs changelog note (flagged discrepancy):** the `PackageReleaseNotes` in the
-> `.csproj` are written under the heading of the version a feature *landed in*. The client's newest
-> heading is **"2.1.0 — account switching on a shared browser"**, but the package's actual
-> `<Version>` is **`2.0.11`**. The account-switching feature described under that heading **is present
-> and compiled** in the 2.0.11 assembly (`Access/ArkAccountSwitch.cs` etc.). Treat the shipped
-> assembly as the source of truth: the feature exists in 2.0.11 and is **off by default**.
+> `.csproj` are written under the heading of the version a feature *landed in*. The heading
+> **"2.1.0 — account switching on a shared browser"** names a version that was never published: the
+> feature is present and compiled from 2.0.11 on (`Access/ArkAccountSwitch.cs` etc.), and is **off by
+> default**. Treat the shipped assembly as the source of truth.
 
 ## Framework & dependency compatibility
 
 | Requirement | Value |
 |---|---|
-| Target framework | `net9.0` (host app must be ASP.NET Core, `Microsoft.NET.Sdk.Web`) |
+| Target framework | `net10.0` (host app must be ASP.NET Core, `Microsoft.NET.Sdk.Web`); `net9.0` up to 2.2.1 |
 | OIDC handler | `Microsoft.AspNetCore.Authentication.OpenIdConnect` |
 | Bearer | `Microsoft.AspNetCore.Authentication.JwtBearer` |
-| IdentityModel graph | **All on `8.8.0`** — `JsonWebTokens`, `Protocols.OpenIdConnect`, `System.IdentityModel.Tokens.Jwt` |
+| IdentityModel graph | **All on `8.23.0`** (`8.8.0` up to 2.2.1) — `JsonWebTokens`, `Protocols.OpenIdConnect`, `System.IdentityModel.Tokens.Jwt` |
 
 **Hard rule:** keep the `Microsoft.IdentityModel.*` graph on one major/version. A mixed graph
 (Protocols 7.x with Tokens 8.x) restores and compiles, then fails at the **first challenge** with
@@ -37,6 +41,14 @@ downward.
 
 ## Changelog (from the .csproj, newest first)
 
+- **2.3.0 — .NET 10, alongside `Ark.oAuth.Oidc` 2.3.0.** Target framework `net9.0` → `net10.0`;
+  `Microsoft.AspNetCore.Authentication.OpenIdConnect` / `JwtBearer` `8.0.15` → `10.0.15`;
+  `Microsoft.IdentityModel.*` `8.8.0` → `8.23.0`. No API, option or behaviour change: ASP.NET Core
+  10's 401/403 for API endpoints does not alter this package's flow, because challenges go to the
+  OIDC handler and the access-denied redirect is the package's own handler.
+- **2.2.1**: 2.2.0 republished through the release workflow; the files differ only in the version.
+- **2.2.0 — security release**: `AddArkOidcApi` accepts only `typ: at+jwt` access tokens; the v1
+  routes answer only with `UseLegacyFlow`. Full list in `<PackageReleaseNotes>`.
 - **"2.1.0" — account switching on a shared browser** (present in 2.0.11): `AccountSwitch:RequireArkClaims`
   moves the entitlement check to the callback; a built-in `/ark/no-access` page offers "Sign in as a
   different user" (`prompt=login`) and replaces the framework's `/Account/AccessDenied` for `[Authorize]`

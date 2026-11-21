@@ -18,6 +18,7 @@ stands alone and repeats the facts it depends on, so you can paste one without t
 | Latest release | **2.1.4**, the same number for all four packages (git tag `v2.1.4`) |
 | IdP | NuGet `Ark.oAuth.Oidc`, `net9.0`, namespace `Ark.oAuth.Oidc` |
 | .NET client | NuGet `Ark.oAuth.Client`, `net9.0`, namespace **`Ark.oAuth`** (not `Ark.oAuth.Client`) |
+| 2.3.0 and later | Both NuGet packages target **`net10.0`** with EF Core 10 and `Microsoft.IdentityModel.*` 8.23.0; 2.2.1 is the last `net9.0` release. The prompts below pin 2.1.4, which is `net9.0`; if you raise a prompt's `--version` to 2.3.0 or later, also change its `-f net9.0` / "net9.0 or later" to `net10.0` and its 8.8.0 pin to 8.23.0 |
 | Python client | PyPI `ark-oauth-client`, Python 3.9+, import `ark_oauth_client` |
 | Node client | npm `ark-oauth-client-node` from 2.2.0 (`ark-oauth-client` up to 2.1.8, so the 2.1.4 lines below keep that name), Node 20+, ESM, no runtime dependencies |
 | Issuer / authority | `{BaseUrl}{BasePath}/{TenantId}`. Discovery is at `{issuer}/.well-known/openid-configuration` |

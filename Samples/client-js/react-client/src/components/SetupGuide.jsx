@@ -30,7 +30,7 @@ export default function SetupGuide() {
         <h2 id="guide-title">Get it running against the QuickStart IdP</h2>
         <p className="lede">
           About five minutes. You start the identity provider from this repository, register this app on it as a
-          client, then point the app at it. You need the .NET 9 SDK and Node 20.19 or later.
+          client, then point the app at it. You need the .NET 10 SDK and Node 20.19 or later.
         </p>
       </div>
 

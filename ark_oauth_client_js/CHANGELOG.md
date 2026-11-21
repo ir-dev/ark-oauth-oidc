@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.3.0
+
+No change to this package. It has the same code, API and adapters as 2.2.1 and is published at the
+family's version. In this release the .NET packages, `Ark.oAuth.Oidc` and `Ark.oAuth.Client`, move
+to .NET 10 and EF Core 10.
+
+There is nothing to do when you upgrade. The provider's endpoints, CORS behaviour, tokens and
+discovery document are the same in 2.3.0 as in 2.2.x. This client therefore behaves the same against
+a 2.2.x provider and a 2.3.0 one, and you can upgrade the two in either order. There are still no
+runtime dependencies, and the framework adapters keep the same peer ranges. `VERSION` reads
+`2.3.0`. The CDN `<script>` example in the README now pins `@2.3.0`.
+
+## 2.2.1
+
+2.2.0 republished through the repository's release workflow. The published files differ from 2.2.0
+only in the version number.
+
 ## 2.2.0
 
 No API change. Published at the family's version, with `Ark.oAuth.Oidc` 2.2.0, a security

@@ -8,36 +8,42 @@
 
 ## Current version
 
-- **`2.0.11`** (`<Version>` in `Ark.oAuth.Oidc.csproj`), `net9.0`, EF Core `9.0.x`.
-- Ships in lockstep with **`Ark.oAuth.Client 2.0.11`** — deliberately the **same version number**.
-  Upgrade both packages together.
+- **`2.3.0`** (`<Version>` in `Ark.oAuth.Oidc.csproj`), `net10.0`, EF Core `10.0.x`.
+- Ships in lockstep with **`Ark.oAuth.Client 2.3.0`** — deliberately the **same version number** —
+  and with the Python, Node and browser clients at 2.3.0. Upgrade both .NET packages together.
+- **2.3.0 moves to .NET 10 (LTS) and EF Core 10, and changes nothing else.** Endpoints, discovery,
+  tokens, pages, configuration and schema are as in 2.2.1, so every client that works with a 2.2.x
+  provider works with 2.3.0. 2.2.1 is the last `net9.0` release (it is 2.2.0 republished, no code
+  change), and .NET 9 left support on 2026-11-10. Retarget a `net9.0` host to `net10.0` before
+  upgrading (restore fails with NU1202 otherwise). The database needs nothing: a database built
+  under EF Core 9 opens as it is.
 
-> **Version-number vs changelog note (flagged discrepancy):** the `PackageReleaseNotes` are headed by
-> the version a feature *landed in*; the server's newest heading is **"2.0.3"**, while the package's
-> actual `<Version>` is **`2.0.11`**. The 2.0.3-described features (back-channel logout, browser-wide
-> sign-out, the trimmed dependency graph) **are present and compiled** in 2.0.11. Treat the shipped
-> assembly and the schema scripts on disk as the source of truth.
+> **Release-note headings:** the `PackageReleaseNotes` are headed by the version a change first
+> shipped in, newest first, and every later release carries it. Before 2.3.0 some entries were headed
+> "Next release" or "Earlier"; they now carry the version that shipped them (2.0.14, 2.1.3, 2.1.6).
+> Treat the shipped assembly and the schema scripts on disk as the source of truth.
 
 ## Framework, database & dependency compatibility
 
 | Requirement | Value |
 |---|---|
-| Target framework | `net9.0` (host is ASP.NET Core, `Microsoft.NET.Sdk.Web`) |
-| ORM | EF Core `9.0.x` |
+| Target framework | `net10.0` (host is ASP.NET Core, `Microsoft.NET.Sdk.Web`); `net9.0` up to 2.2.1 |
+| ORM | EF Core `10.0.x`; `9.0.x` up to 2.2.1 |
 | Databases | SQLite (default), MySQL, PostgreSQL — **SQL Server is not wired** |
-| IdentityModel graph | pinned to `8.8.0` (`JsonWebTokens`, `Protocols.OpenIdConnect`, `System.IdentityModel.Tokens.Jwt`) |
+| IdentityModel graph | pinned to `8.23.0`, `8.8.0` up to 2.2.1 (`JsonWebTokens`, `Protocols.OpenIdConnect`, `System.IdentityModel.Tokens.Jwt`) |
 
 **SQL Server:** `Provider: "sqlserver"` falls through every branch of `ArkDataContext.OnConfiguring`
 and leaves the context with no provider. It has never worked; do not select it.
 
-**IdentityModel graph:** `MySql.EntityFrameworkCore`/`MySql.Data` request
-`Microsoft.IdentityModel.Protocols.OpenIdConnect 7.5.0` while the rest of the package is on `8.8.0`.
-The split does not fail at restore or build — it fails at the **first OIDC challenge** with a
-`MethodAccessException`/missing-method error naming neither package. The .csproj raises the floor to
-`8.8.0`; do not override it downward.
+**IdentityModel graph:** the framework's OpenID Connect handler asks for
+`Microsoft.IdentityModel.Protocols.OpenIdConnect 8.19.2` while `JsonWebTokens` lifts
+`Microsoft.IdentityModel.Tokens` to `8.23.0` (and up to 2.2.1, `MySql.Data` asked for Protocols
+`7.5.0`). A split graph does not fail at restore or build — it fails at the **first OIDC challenge**
+with a `MethodAccessException`/missing-method error naming neither package. The .csproj pins all
+three to `8.23.0`; do not override it downward.
 
 **Dependency change in 2.0.3 (present in 2.0.11):** `Ark.EfCore`, `Azure.Identity` and `BouncyCastle`
-were removed. EF Core `9.0.x` and the Sqlite/MySQL/PostgreSQL providers are now referenced directly.
+were removed. EF Core and the Sqlite/MySQL/PostgreSQL providers are now referenced directly.
 Nothing in this package used a type from `Ark.EfCore`; it was only a carrier for EF packages (and was
 dragging in a SQL Server provider stack this package cannot select).
 
@@ -79,7 +85,7 @@ table did not, so `/api/oauth/v1/user/list` answered a bare 500 and the console'
 empty with nothing saying why.
 
 Run/rollback one by hand: `POST /api/migration/v1/sql?action=up|down&name=00005_sql.sql` (reports
-whether the script actually worked instead of always saying "executed"). Since the next release the
+whether the script actually worked instead of always saying "executed"). Since 2.0.14 the
 endpoint is off unless `ark_oauth_server:Management:AllowMigrationEndpoint` is `true`.
 
 ## Upgrade playbook
@@ -117,7 +123,22 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
 
 ## Behavioural changes by version (from the .csproj notes)
 
-- **Next release — management API authorization (breaking; ship as 2.1.0).**
+- **2.3.0 — .NET 10 and EF Core 10; no behaviour change.** Target framework `net9.0` → `net10.0`;
+  EF Core / Sqlite `9.0.19` → `10.0.15`; `Npgsql.EntityFrameworkCore.PostgreSQL` `9.0.4` → `10.0.4`;
+  `MySql.EntityFrameworkCore` `9.0.17` → `10.0.12` (MySql.Data 26.10.0, which no longer pulls
+  IdentityModel 7.5.0); `Microsoft.AspNetCore.Authentication.OpenIdConnect` `9.0.10` → `10.0.15`;
+  `Microsoft.IdentityModel.*` `8.8.0` → `8.23.0`.
+  - **Upgrade action:** retarget the host to `net10.0` (SDK and runtime 10; container image
+    `mcr.microsoft.com/dotnet/aspnet:10.0`), and raise any EF Core, EF provider,
+    `Microsoft.AspNetCore.Authentication.*` or `Microsoft.IdentityModel.*` reference the host
+    holds itself.
+  - No schema change, no migration, no configuration change. A database created by 2.2.x opens as
+    it is (checked on SQLite, PostgreSQL 16 and MySQL 8.4).
+- **2.2.1**: 2.2.0 republished through the release workflow; the files differ only in the version.
+- **2.2.0 — security release**, **2.1.6 — landing page after sign-in**, **2.1.3 — setup wizard and
+  appearance picker**: see `<PackageReleaseNotes>` in the .csproj, which has them in full.
+
+- **2.0.14 — management API authorization (breaking).**
   - `ManageController` and `ProvisionController` take the `ArkOperator` policy instead of a bare
     `[Authorize]`. Admitted: the operator's console session (`AdminUser:Username`, or an `admin` /
     `ark_admin` claim on the console mapping), or a bearer token issued to `{TenantId}_machine` with
@@ -136,7 +157,7 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
     `/oauth2/register` (`invalid_client_metadata`); an operator still grants it in the console.
   - No schema change.
 
-- **Next release** (after 2.0.13): the operator's **Data** page (`/{tenant}/admin/data`) and API —
+- **2.0.14**, too: the operator's **Data** page (`/{tenant}/admin/data`) and API —
   full export (every table and column, optionally AES-256-GCM encrypted), analysed import with three
   modes (`replace`, `merge_skip`, `merge_overwrite`) and rule-based per-record exclusion, and factory
   reset to the first-run seed. **No schema change and no migration**; existing routes are unchanged.

@@ -137,10 +137,10 @@ brings the wizard back
 where they can be, and never into the settings file. A host that already has `TenantId` and a
 connection string never sees the wizard: that is the pipeline route, [S8](#s8--stand-up-the-identity-provider).
 
-> **Release status.** `AddArkIdp()` / `UseArkIdp()`, the wizard and the appearance picker are on `main`.
-> They arrived after v2.1.2 and ship in the next release. Until then:
+> **Release status.** `AddArkIdp()` / `UseArkIdp()`, the wizard and the appearance picker are released,
+> since 2.1.3. To try them from a clone:
 > `dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart` and open <https://localhost:7300>.
-> The configured route, `AddArkOidcServer`, is released. To see a whole working setup from a fresh
+> From 2.3.0 the host must target `net10.0`; 2.2.1 is the last release for `net9.0`. To see a whole working setup from a fresh
 > clone, run `./run.sh` (macOS/Linux) or `run.bat` (Windows), as described in [GETTINGSTARTED.md](GETTINGSTARTED.md).
 
 ### Step 2 — Onboard the app: one call
@@ -401,7 +401,7 @@ first** · **Steps** · **Done when** · **Do not**.
 
 ### S1 — Sign users in to an ASP.NET Core app
 
-**Use when:** an ASP.NET Core (`Microsoft.NET.Sdk.Web`, `net9.0`) app must sign users in against Ark.
+**Use when:** an ASP.NET Core (`Microsoft.NET.Sdk.Web`, `net10.0`) app must sign users in against Ark.
 
 **Prompt**
 
@@ -1418,9 +1418,9 @@ PROVIDER SIDE (code alone never works):
 - Map the user to the client — without it sign-in fails exactly like a wrong password.
 - One call does all of it: POST /api/oauth/v1/provision/client.
 
-PROVIDER HOST — the whole of it (next release; on main now):
+PROVIDER HOST — the whole of it (2.1.3 and later; net10.0 from 2.3.0):
   builder.AddArkIdp(); app.UseArkIdp();  -> unconfigured, it serves the setup wizard at /ark-idp/setup
-  Configured route (released): AddArkOidcServer + AddArkOidcClient, UseRouting -> UseArkOidcCors ->
+  Configured route: AddArkOidcServer + AddArkOidcClient, UseRouting -> UseArkOidcCors ->
   UseArkAuthData -> UseArkOidcClient -> UseAuthentication -> UseAuthorization.
 
 GOVERNANCE (operator only; console session or {TenantId}_machine token with client.register):

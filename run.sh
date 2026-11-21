@@ -106,13 +106,13 @@ trap cleanup INT TERM EXIT
 preflight() {
     step "Checking prerequisites"
 
-    command -v dotnet >/dev/null 2>&1 || die "the .NET SDK is not on PATH. Install .NET 9 or later: https://dotnet.microsoft.com/download"
+    command -v dotnet >/dev/null 2>&1 || die "the .NET SDK is not on PATH. Install .NET 10 or later: https://dotnet.microsoft.com/download"
     ok ".NET SDK $(dotnet --version)"
 
     command -v curl >/dev/null 2>&1 || die "curl is required for the readiness checks."
 
-    if ! dotnet --list-runtimes 2>/dev/null | grep -q 'Microsoft\.AspNetCore\.App 9\.'; then
-        warn "no ASP.NET Core 9 runtime found — both projects target net9.0."
+    if ! dotnet --list-runtimes 2>/dev/null | grep -q 'Microsoft\.AspNetCore\.App 10\.'; then
+        warn "no ASP.NET Core 10 runtime found — both projects target net10.0."
         hint "install it, or run with DOTNET_ROLL_FORWARD=Major to use a newer runtime."
     fi
 

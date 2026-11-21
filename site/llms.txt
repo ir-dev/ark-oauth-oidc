@@ -15,7 +15,7 @@ Only two settings are required: `authority` (the issuer, `{BaseUrl}/{TenantId}`,
 
 ## Run the identity provider
 
-- Zero-config (on main, ships in the next release after v2.1.2): `builder.AddArkIdp();` then `app.UseArkIdp();`. Unconfigured, every page goes to the setup wizard at `/ark-idp/setup` (organization and logos, public URL and tenant, database with test, RSA key generate/import, administrator, users and SMTP, protocol options, review and install). The same process becomes the IdP with no restart. Remote access needs the setup code from the start-up log. Sample: `dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart`.
+- Zero-config (since 2.1.3): `builder.AddArkIdp();` then `app.UseArkIdp();`. Unconfigured, every page goes to the setup wizard at `/ark-idp/setup` (organization and logos, public URL and tenant, database with test, RSA key generate/import, administrator, users and SMTP, protocol options, review and install). The same process becomes the IdP with no restart. Remote access needs the setup code from the start-up log. Sample: `dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart`.
 - Configured (released): `AddArkOidcServer(builder.Environment)` + `AddArkOidcClient(builder.Configuration)`; pipeline `UseRouting -> UseArkOidcCors -> UseArkAuthData -> UseArkOidcClient -> UseAuthentication -> UseAuthorization`. Section `ark_oauth_server` (TenantId, BaseUrl, Provider sqlite|mysql|postgres) + `ConnectionStrings:ArkAuthConnection`. `AdminUser:Password` from user-secrets or env, never appsettings.
 
 ## Onboard an application
@@ -41,7 +41,7 @@ Caller: the operator's console session, or a `client_credentials` token issued t
 - Never add a route at the callback path. Sign out of the local session and the provider.
 - Shared browsers: enable the account switch with required claims: .NET `AccountSwitch:RequireArkClaims` + `RequiredClaims`; Python `account_switch.require_ark_claims` + `required_claims`; Node `accountSwitch.requireArkClaims` + `requiredClaims`.
 - Never hand-roll OAuth; never recreate the v1 shape (pasted `rsaPublic`, custom callback route, no state/nonce).
-- .NET: keep `Microsoft.IdentityModel.*` on one version. No implicit, hybrid, ROPC, plain PKCE or SQL Server.
+- .NET: both packages target `net10.0` from 2.3.0 (`net9.0` up to 2.2.1); keep `Microsoft.IdentityModel.*` on one version (8.23.0 from 2.3.0). No implicit, hybrid, ROPC, plain PKCE or SQL Server.
 - The repository is public: never write a secret into a tracked file. Do not commit or publish unless asked.
 
 ## Docs

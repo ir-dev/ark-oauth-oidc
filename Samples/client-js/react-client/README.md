@@ -19,7 +19,7 @@ register this app on it as a client and connect the two, and ends with a live se
 
 ## Run it
 
-Needs Node 20.19+ (or 22.12+). The IdP side needs the .NET 9 SDK.
+Needs Node 20.19+ (or 22.12+). The IdP side needs the .NET 10 SDK.
 
 ```bash
 cd Samples/client-js/react-client

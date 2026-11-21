@@ -79,7 +79,9 @@ TOOLCHAIN ON THIS MACHINE  (confirmed present, no install needed)
   nuget (CLI)     7.0.1.1           /opt/homebrew/bin/nuget    (not needed below)
   mono                              /opt/homebrew/bin/mono     (not needed below)
 
-  Both packages target net9.0 and build cleanly on the 10.0.101 SDK.
+  Both packages target net10.0 from 2.3.0 (net9.0 up to 2.2.1) and build
+  cleanly on the 10.0.101 SDK. Any .NET 10 SDK will do; an SDK 9 cannot build
+  a net10.0 project.
   Everything below uses `dotnet`; the standalone nuget CLI is not required.
 
   Registered package sources (`dotnet nuget list source`):
@@ -236,8 +238,8 @@ PATHS
   Check the payload first. All four passed on the 2.0.2 build; 5c matters more
   this time, because the dependency list is one of the things that changed.
 
-  # 5a. Package contents. Expect exactly: the nuspec, lib/net9.0/<name>.dll,
-  #     lib/net9.0/<name>.xml, ark_logo.png and README.md at the package root.
+  # 5a. Package contents. Expect exactly: the nuspec, lib/net10.0/<name>.dll,
+  #     lib/net10.0/<name>.xml, ark_logo.png and README.md at the package root.
   unzip -l Ark.oAuth.Oidc/bin/Release/Ark.oAuth.Oidc.2.0.3.nupkg
   unzip -l Ark.oAuth.Client/bin/Release/Ark.oAuth.Client.2.0.3.nupkg
 
@@ -253,10 +255,11 @@ PATHS
 
   # 5c. Nuspec metadata: version, icon, readme, and the Source Link commit
   #     (the commit must be the "release 2.0.3" commit from STEP 2). Print the
-  #     dependencies too and read them: the group must list EntityFrameworkCore
-  #     9.0.19, its Sqlite provider, MySql.EntityFrameworkCore 9.0.17,
-  #     Npgsql.EntityFrameworkCore.PostgreSQL 9.0.4, the three
-  #     Microsoft.IdentityModel packages at 8.8.0 and ark.net.util -- and must
+  #     dependencies too and read them: there must be one group, net10.0, listing
+  #     EntityFrameworkCore 10.0.15, its Sqlite provider, MySql.EntityFrameworkCore
+  #     10.0.12, Npgsql.EntityFrameworkCore.PostgreSQL 10.0.4,
+  #     Microsoft.AspNetCore.Authentication.OpenIdConnect 10.0.15, the three
+  #     Microsoft.IdentityModel packages at 8.23.0 and ark.net.util -- and must
   #     NOT list Ark.EfCore, Azure.Identity or BouncyCastle.Cryptography.
   cd /tmp && rm -rf nsp && mkdir nsp && cd nsp
   unzip -o -q /Users/Immanuel.Raj/Immi/git_src/ark-oauth-oidc/Ark.oAuth.Oidc/Ark.oAuth.Oidc/bin/Release/Ark.oAuth.Oidc.2.0.3.nupkg Ark.oAuth.Oidc.nuspec
@@ -375,7 +378,7 @@ PATHS
                            PackagePath="\" is taken literally on macOS and lands
                            the file in a directory named "\". Both csproj files
                            already do this correctly -- do not "fix" them.
-  * NU1701 / graph errors  Microsoft.IdentityModel.* must stay aligned at 8.8.0
+  * NU1701 / graph errors  Microsoft.IdentityModel.* must stay aligned at 8.23.0
                            across JsonWebTokens, Protocols.OpenIdConnect and
                            System.IdentityModel.Tokens.Jwt. A split graph builds
                            fine and then fails at the first OIDC challenge with

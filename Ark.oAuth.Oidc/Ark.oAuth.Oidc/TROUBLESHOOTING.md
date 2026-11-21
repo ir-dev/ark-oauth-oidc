@@ -109,6 +109,6 @@ Diagnose against the provider's actual behaviour. Verify .NET changes against a 
 
 | Symptom | Likely cause | Diagnosis | Correct solution | Avoid |
 |---|---|---|---|---|
-| First OIDC challenge dies with `MethodAccessException` / missing-method (naming no package) | Mixed `Microsoft.IdentityModel.*` (MySql.Data pulls Protocols 7.5.0) | `dotnet list package --include-transitive \| grep IdentityModel` | Keep the graph on `8.8.0` (pinned in the .csproj) | Letting MySql.Data pin Protocols down |
+| First OIDC challenge dies with `MethodAccessException` / missing-method (naming no package) | Mixed `Microsoft.IdentityModel.*` (a transitive reference pulls another Protocols version; up to 2.2.1, MySql.Data pulled 7.5.0) | `dotnet list package --include-transitive \| grep IdentityModel` | Keep the graph on `8.23.0` (pinned in the .csproj) | Letting a transitive reference pin Protocols down |
 | Assets missing on disk in Development | `EmbeddedResourceUnpacker` runs only in Development | They're served from the assembly regardless | Ignore in Production; the served copies come from the assembly | Committing the unpacked copies as the source of truth |
 | A revoked/replayed refresh token keeps working | Expected: replay revokes the whole family; issued access tokens live until expiry | Token is `at+jwt`, self-contained | Rely on short access-token lifetimes; revoke refresh to stop new ones | Expecting instant JWT revocation |

@@ -16,17 +16,17 @@ failures in [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md); upgrades in [`MIGRATION.
 | | |
 |---|---|
 | **Package** | `Ark.oAuth.Oidc` (nuget.org) |
-| **Current version** | `2.0.11` (moves in lockstep with `Ark.oAuth.Client`) |
+| **Current version** | `2.3.0` (moves in lockstep with `Ark.oAuth.Client`) |
 | **Root namespace** | `Ark.oAuth.Oidc`. Host also uses `Ark.oAuth` for the client extension. |
-| **Target framework** | `net9.0` |
+| **Target framework** | `net10.0` (`net9.0` up to 2.2.1) |
 | **Purpose** | A self-contained OAuth 2.1 / OpenID Connect **provider** (IdP) for ASP.NET Core. Add two lines to `Program.cs`; standard OIDC clients configure themselves from discovery. |
 | **Problem solved** | Run your own multi-tenant IdP without stitching together a protocol stack. Ships sign-in, consent, device and admin UI. |
 | **Multi-tenancy** | The protocol is multi-tenant (issuer = `{BaseUrl}/{TenantId}`). **Administration is not** — one operator tenant administers all. |
 | **Databases** | SQLite (default), MySQL, PostgreSQL. (SQL Server is *not* wired — do not select `Provider: "sqlserver"`.) |
 | **Config section** | `ark_oauth_server` (+ `ConnectionStrings:ArkAuthConnection`) |
 
-**Key dependencies:** EF Core `9.0.x` (+ Sqlite/MySQL/PostgreSQL providers), `Microsoft.IdentityModel.*`
-`8.8.0` (kept on one version deliberately — see anti-patterns), `ark.net.util`.
+**Key dependencies:** EF Core `10.0.x` (+ Sqlite/MySQL/PostgreSQL providers), `Microsoft.IdentityModel.*`
+`8.23.0` (kept on one version deliberately — see anti-patterns), `ark.net.util`.
 
 ## 2. AI usage instructions
 
@@ -183,8 +183,8 @@ DO NOT:
   exactly like a wrong password. Use POST /provision/client.
 - Try to re-enable the implicit grant, hybrid flow, or resource-owner password credentials.
 - Accept plain PKCE. Only S256 is advertised/accepted; PKCE is mandatory for public clients.
-- Mix Microsoft.IdentityModel.* versions. MySql.Data pulls Protocols 7.5.0; the graph is pinned to
-  8.8.0 so the OIDC challenge does not die with a MethodAccessException. Keep it aligned.
+- Mix Microsoft.IdentityModel.* versions. The OIDC handler asks for Protocols 8.19.2; the graph is
+  pinned to 8.23.0 so the OIDC challenge does not die with a MethodAccessException. Keep it aligned.
 - Add a plain http BaseUrl in production, or turn RequireHttpsMetadata off on clients.
 - Expect the admin console's Sign out to end the host session — only the host can drop its cookie;
   point Admin:SignOutUrl at a host route that signs out of the cookie AND the OIDC scheme.
@@ -200,8 +200,8 @@ DO NOT:
 
 ## 6. Version & compatibility
 
-- Target framework `net9.0`; EF Core `9.0.x`.
-- Current version **2.0.11**; ships with `Ark.oAuth.Client 2.0.11`.
+- Target framework `net10.0`; EF Core `10.0.x` (`net9.0` and EF Core `9.0.x` up to 2.2.1).
+- Current version **2.3.0**; ships with `Ark.oAuth.Client 2.3.0`. 2.3.0 is 2.2.1 moved to .NET 10 / EF Core 10, with no behaviour change.
 - **Unsupported by design:** implicit grant, hybrid flow, ROPC, plain PKCE, SQL Server.
 - Schema history is tracked in `ark_schema_history`; scripts `00003` (2.0.0), `00004` (2.0.2),
   `00005` (2.0.3). Full detail: [`MIGRATION.md`](MIGRATION.md).
@@ -209,7 +209,7 @@ DO NOT:
 ## 7. AI context block (inject into a system/developer prompt)
 
 ```text
-LIBRARY: Ark.oAuth.Oidc (v2.0.11, net9.0, namespace Ark.oAuth.Oidc)
+LIBRARY: Ark.oAuth.Oidc (net10.0 — net9.0 up to 2.2.1 — namespace Ark.oAuth.Oidc)
 
 PURPOSE:
 Self-contained multi-tenant OAuth 2.1 / OpenID Connect provider for ASP.NET Core. Two lines in

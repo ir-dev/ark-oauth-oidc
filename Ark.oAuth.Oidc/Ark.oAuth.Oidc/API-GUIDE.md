@@ -6,7 +6,7 @@
 
 # Ark.oAuth.Oidc — API guide
 
-Exact host-facing surface (namespace **`Ark.oAuth.Oidc`**, package `Ark.oAuth.Oidc` v2.0.11, `net9.0`).
+Exact host-facing surface (namespace **`Ark.oAuth.Oidc`**, package `Ark.oAuth.Oidc`, `net10.0`; `net9.0` up to 2.2.1).
 Verified against the source. The provider is consumed by *hosting* it (three extension methods +
 configuration) and by *calling* its HTTP endpoints (protocol + management APIs).
 

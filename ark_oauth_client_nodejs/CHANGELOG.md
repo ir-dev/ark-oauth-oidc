@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.3.0
+
+No change to this package. It has the same code, API and options as 2.2.1 and is published at the
+family's version. In this release the .NET packages, `Ark.oAuth.Oidc` and `Ark.oAuth.Client`, move
+to .NET 10 and EF Core 10.
+
+There is nothing to do when you upgrade. The provider's endpoints, tokens and discovery document are
+the same in 2.3.0 as in 2.2.x. This client therefore behaves the same against a 2.2.x provider and a
+2.3.0 one, and you can upgrade the two in either order. The requirements are unchanged: Node 20 or
+later, ESM, and no runtime dependencies. The built-in access-denied page names
+`ark-oauth-client-node 2.3.0` in its footer.
+
+If you are still on the old package name, `ark-oauth-client` (up to 2.1.8), the move to this name is
+described under 2.2.0 below.
+
+## 2.2.1
+
+2.2.0 republished through the repository's release workflow. The published files differ from 2.2.0
+only in the version number.
+
 ## 2.2.0
 
 **Renamed to `ark-oauth-client-node`.** Up to 2.1.8 this package was published as

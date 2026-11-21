@@ -16,9 +16,9 @@ task-oriented walkthrough see [`AI-RECIPES.md`](AI-RECIPES.md); for the full API
 | | |
 |---|---|
 | **Package** | `Ark.oAuth.Client` (nuget.org) |
-| **Current version** | `2.0.11` (moves in lockstep with `Ark.oAuth.Oidc`) |
+| **Current version** | `2.3.0` (moves in lockstep with `Ark.oAuth.Oidc`) |
 | **Root namespace** | `Ark.oAuth` — **not** `Ark.oAuth.Client`. `using Ark.oAuth;` |
-| **Target framework** | `net9.0` |
+| **Target framework** | `net10.0` (`net9.0` up to 2.2.1) |
 | **Purpose** | Turns an ASP.NET Core app into an OAuth 2.1 / OIDC **relying party** (client). One call in `Program.cs` + two settings and `[Authorize]` works. |
 | **Problem solved** | Replaces hand-rolled OAuth flows and the v1 "paste an `rsaPublic` key" client that validated neither `state` nor `nonce`. |
 | **How it works** | A thin configuration layer over ASP.NET Core's **own** OpenID Connect + cookie handlers. PKCE, `state`, `nonce`, JWKS rollover and silent token refresh come from the framework, not from this package. |
@@ -27,8 +27,8 @@ task-oriented walkthrough see [`AI-RECIPES.md`](AI-RECIPES.md); for the full API
 
 **Key dependencies** (pinned, must stay on one `Microsoft.IdentityModel.*` major — see anti-patterns):
 `Microsoft.AspNetCore.Authentication.OpenIdConnect`, `Microsoft.AspNetCore.Authentication.JwtBearer`,
-`Microsoft.IdentityModel.JsonWebTokens 8.8.0`, `Microsoft.IdentityModel.Protocols.OpenIdConnect 8.8.0`,
-`System.IdentityModel.Tokens.Jwt 8.8.0`, `ark.net.util`.
+`Microsoft.IdentityModel.JsonWebTokens 8.23.0`, `Microsoft.IdentityModel.Protocols.OpenIdConnect 8.23.0`,
+`System.IdentityModel.Tokens.Jwt 8.23.0`, `ark.net.util`.
 
 ## 2. AI usage instructions
 
@@ -154,7 +154,7 @@ DO NOT:
   cookie handler rotates it (ArkTokenRefresher refreshes ~2 min before expiry).
 - Mix Microsoft.IdentityModel.* versions. A split graph (Protocols 7.x + Tokens 8.x) compiles and
   restores fine, then dies on the FIRST challenge: "Cannot redirect to the authorization endpoint,
-  the configuration may be missing or invalid." Keep the whole graph on 8.8.0.
+  the configuration may be missing or invalid." Keep the whole graph on 8.23.0.
 - Set UseLegacyFlow=true for new apps. It skips state/nonce validation and derives PKCE predictably.
 - Sign out of only the cookie scheme. Sign out of BOTH ArkOidcClient.CookieScheme AND OidcScheme
   (or call ArkSignOutEverywhereAsync) or the IdP session survives and re-signs the user in silently.
@@ -169,17 +169,17 @@ DO NOT:
 
 ## 6. Version & compatibility
 
-- Target framework `net9.0`; the app must be an ASP.NET Core (`Microsoft.NET.Sdk.Web`) app.
-- Current version **2.0.11**; ships alongside `Ark.oAuth.Oidc 2.0.11`.
+- Target framework `net10.0` (`net9.0` up to 2.2.1); the app must be an ASP.NET Core (`Microsoft.NET.Sdk.Web`) app.
+- Current version **2.3.0**; ships alongside `Ark.oAuth.Oidc 2.3.0`. 2.3.0 is 2.2.1 moved to .NET 10, with no API change.
 - **2.0.0** made the standards flow the default (was hand-rolled). `UseLegacyFlow` preserves the old
   cookie/bearer middleware for migration only.
-- **Account switching** (the changelog's "2.1.0" heading) is present in 2.0.11 and is **off by default**.
+- **Account switching** (the changelog's "2.1.0" heading) is present from 2.0.11 on and is **off by default**.
 - Full version/migration detail: [`MIGRATION.md`](MIGRATION.md).
 
 ## 7. AI context block (inject into a system/developer prompt)
 
 ```text
-LIBRARY: Ark.oAuth.Client (v2.0.11, net9.0, namespace Ark.oAuth)
+LIBRARY: Ark.oAuth.Client (net10.0 — net9.0 up to 2.2.1 — namespace Ark.oAuth)
 
 PURPOSE:
 OAuth 2.1 / OpenID Connect client for ASP.NET Core. Configures the framework's own OIDC + cookie
@@ -223,7 +223,7 @@ IMPORTANT CONSTRAINTS:
 - Provider maps users to clients explicitly; no mapping => sign-in fails like a wrong password.
 - Scopes are a whitelist on the client record; offline_access yields the refresh token.
 - Redirect URIs matched byte-for-byte; register sign-in AND sign-out callbacks.
-- Keep Microsoft.IdentityModel.* on one version (8.8.0).
+- Keep Microsoft.IdentityModel.* on one version (8.23.0).
 
 ERROR HANDLING:
 Failed callbacks redirect to AuthErrorPath?auth_error=... (not an exception page). Use ArkSetupProbe

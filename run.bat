@@ -112,7 +112,7 @@ echo ==^> Checking prerequisites
 
 where dotnet >nul 2>&1
 if errorlevel 1 (
-    echo   [X] the .NET SDK is not on PATH. Install .NET 9 or later:
+    echo   [X] the .NET SDK is not on PATH. Install .NET 10 or later:
     echo       https://dotnet.microsoft.com/download
     exit /b 1
 )
@@ -126,9 +126,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-dotnet --list-runtimes 2>nul | findstr /r /c:"Microsoft.AspNetCore.App 9\." >nul
+dotnet --list-runtimes 2>nul | findstr /r /c:"Microsoft.AspNetCore.App 10\." >nul
 if errorlevel 1 (
-    echo   [warn] no ASP.NET Core 9 runtime found - both projects target net9.0.
+    echo   [warn] no ASP.NET Core 10 runtime found - both projects target net10.0.
     echo       install it, or set DOTNET_ROLL_FORWARD=Major to use a newer runtime.
 )
 

@@ -6,7 +6,7 @@
     In your own app this ProjectReference is `dotnet add package Ark.oAuth.Oidc`.
   -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Ark.oAuth.Oidc.QuickStart</RootNamespace>

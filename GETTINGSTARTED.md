@@ -134,7 +134,7 @@ client is ASP.NET Core's own OpenID Connect handler, configured by `Ark.oAuth.Cl
 
 | | |
 |---|---|
-| **.NET SDK** | 9.0 or later. Both projects target `net9.0`, so you also need the ASP.NET Core **9** runtime — or `DOTNET_ROLL_FORWARD=Major` to run them on a newer one. |
+| **.NET SDK** | 10.0 or later. Both projects target `net10.0`, so you also need the ASP.NET Core **10** runtime — or `DOTNET_ROLL_FORWARD=Major` to run them on a newer one. |
 | **A trusted https dev certificate** | `dotnet dev-certs https --trust`. Sign-in is a chain of https redirects; an untrusted certificate breaks it in the browser, where neither application can report it. |
 | **curl** | Used by the readiness checks. Ships with macOS, Linux and Windows 10 1803+. |
 

@@ -12,7 +12,7 @@
 
 	<!-- ============================== Compilation ============================== -->
 	<PropertyGroup>
-		<TargetFramework>net9.0</TargetFramework>
+		<TargetFramework>net10.0</TargetFramework>
 		<OutputType>Library</OutputType>
 		<LangVersion>latest</LangVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
@@ -30,9 +30,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.2.0</Version>
-		<AssemblyVersion>2.2.0.0</AssemblyVersion>
-		<FileVersion>2.2.0.0</FileVersion>
+		<Version>2.3.0</Version>
+		<AssemblyVersion>2.3.0.0</AssemblyVersion>
+		<FileVersion>2.3.0.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -54,6 +54,44 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+2.3.0 — .NET 10 and EF Core 10. Nothing else changes.
+
+.NET 9 left support on 2026-11-10; .NET 10 is the long-term support release. This release moves the
+package onto it and changes nothing a client or a user can see: the endpoints, the discovery
+document, tokens, sign-in, consent, the admin console, the configuration and the database schema are
+as in 2.2.1. Every client that works with a 2.2.x provider works with 2.3.0 unchanged, so the
+provider and its clients can be upgraded in either order.
+
+Before upgrading:
+* **Move the host to .NET 10 first.** Target net10.0, build with the .NET 10 SDK and run on the
+  ASP.NET Core 10 runtime (container image mcr.microsoft.com/dotnet/aspnet:10.0; on App Service, the
+  .NET 10 stack). A net9.0 host fails restore with NU1202. A host that stays on net9.0 stays on
+  2.2.1, the last net9.0 release.
+* **Raise the host's own pins.** A host that references EF Core, an EF provider,
+  Microsoft.AspNetCore.Authentication.* or Microsoft.IdentityModel.* directly moves them to the
+  versions below, or drops them. Keep every Microsoft.IdentityModel package on one version: a split
+  graph builds, then fails at the first sign-in.
+* ASP.NET Core 10's own breaking changes apply to the host's code as to any app. None of them
+  changes what this package serves; its management and data APIs already answered 401/403 rather
+  than redirecting.
+
+Databases: nothing to run. A database built by 2.2.x under EF Core 9 opens as it is, and the
+start-up schema sync is unchanged. Checked on SQLite, PostgreSQL 16 and MySQL 8.4, against databases
+created by the 2.2.1 build.
+
+Version updates:
+* Target framework: net9.0 → net10.0.
+* Microsoft.EntityFrameworkCore and Microsoft.EntityFrameworkCore.Sqlite: 9.0.19 → 10.0.15.
+* Npgsql.EntityFrameworkCore.PostgreSQL: 9.0.4 → 10.0.4, which needs EF Core 10.0.15 or later.
+* MySql.EntityFrameworkCore: 9.0.17 → 10.0.12. It brings MySql.Data 26.10.0, which no longer pulls
+  in Microsoft.IdentityModel 7.5.0.
+* Microsoft.AspNetCore.Authentication.OpenIdConnect: 9.0.10 → 10.0.15.
+* Microsoft.IdentityModel.JsonWebTokens, Microsoft.IdentityModel.Protocols.OpenIdConnect and
+  System.IdentityModel.Tokens.Jwt: 8.8.0 → 8.23.0, still one version across the graph.
+
+2.2.1 — 2.2.0 republished through the release workflow, which also created the GitHub release. The
+published files differ from 2.2.0 only in the version number.
+
 2.2.0 — security release. Upgrade every Ark IdP and every app using an Ark client library.
 
 Follows a full review of the provider and the four client libraries, done because apps now use Ark
@@ -95,7 +133,7 @@ endpoints at your edge), no password policy, and provisioned accounts share an i
 
 The npm Node client is renamed ark-oauth-client-node from this release. The API is unchanged.
 
-Next release — a landing page after sign-in. Additive.
+2.1.6 — a landing page after sign-in. Additive.
 
 * **The wizard asks where sign-in lands.** The Server step has a landing page, prefilled with the
   public URL (which opens the console). A page of this app is stored as a path in
@@ -108,7 +146,7 @@ Next release — a landing page after sign-in. Additive.
   A returnUrl that is not a local path is ignored. The auth-error page's "Try again" uses it.
 * Unchanged for existing servers: no LandingUrl means / ends in the console, as it did.
 
-Earlier — start with nothing configured: the setup wizard. Additive; suggest 2.2.0.
+2.1.3 — start with nothing configured: the setup wizard. Additive.
 
 * **Two lines, no appsettings.** builder.AddArkIdp() and app.UseArkIdp(). Started with no TenantId or
   no connection string, every browser request goes to /ark-idp/setup (other requests get 503
@@ -140,7 +178,25 @@ Earlier — start with nothing configured: the setup wizard. Additive; suggest 2
 * New dependency: Microsoft.AspNetCore.Authentication.OpenIdConnect 9.0.x (IdentityModel stays on
   8.8.0).
 
-Earlier — the management API answers to the operator only. BREAKING: ship as 2.1.0.
+Also in 2.1.3 — themes and text size chosen by the viewer, and a "Powered by" mark.
+
+* **Appearance picker on every page the package draws.** Sign-in, consent, device, signed-out,
+  error, password reset, the admin console and the setup wizard all carry an Appearance button:
+  System, Light, Dark, Midnight, Graphite, Forest, Rose, Paper, High contrast, High contrast dark,
+  or Custom (light/dark mode, accent and background, with borders, muted text and button labels
+  derived to stay readable). Text size from 80% to 160%, every font-size following one variable.
+* **Saved per browser, applied before first paint.** localStorage on the IdP's origin, so a choice
+  made at sign-in holds in the console, and other open tabs follow. Under the wizard's strict CSP
+  too: values are set through CSSOM, never inline styles. Without storage, or without the script,
+  the pages render exactly as before.
+* **Powered by Ark Identity Server.** The Ark shield under the sign-in card, in the console footer
+  and as the wizard's mark. New anonymous assets at /ark-admin/asset/: ark-theme.js, ark-theme.css,
+  ark-shield-64.png, ark-shield-512.png. Optional: ark_oauth_server:ShowPoweredBy=false hides it on
+  the sign-in pages and in the console footer (the version stays); the setup wizard asks.
+* The password-reset confirmation page (/oauth/PwdResetThank) is rebuilt on the shared layout; it was
+  the last page of the reset flow still on its own stylesheet.
+
+2.0.14 — the management API answers to the operator only. BREAKING.
 
 * **The package decides who may call /api/oauth/v1/….** It used to be a bare [Authorize] against the
   host's default scheme: with the console cookie as the default, any account mapped to the console
@@ -158,7 +214,7 @@ Earlier — the management API answers to the operator only. BREAKING: ship as 2
 * **/api/migration is off by default** (Management:AllowMigrationEndpoint) and answers 404 while off.
 * Optional Management:OperatorDeviceClients admits operator-approved device-code tokens, for a CLI.
 
-Also in the next release — export, import and factory reset, on an operator-only Data page.
+Also in 2.0.14 — export, import and factory reset, on an operator-only Data page.
 
 * **Export everything.** One JSON file with every mapped table and column — tenants, signing keys,
   clients (with secret hashes), users (with password hashes), access mappings, scopes, claims,
@@ -176,24 +232,6 @@ Also in the next release — export, import and factory reset, on an operator-on
 * **Additive.** No schema change, no migration, no change to an existing route. Switches under
   ark_oauth_server:Admin:DataTools (Enabled, AllowReset, AllowImport, AllowReplace,
   MaxImportMegabytes), all on by default. Specified in API-GUIDE.md.
-
-Also in the next release — themes and text size chosen by the viewer, and a "Powered by" mark.
-
-* **Appearance picker on every page the package draws.** Sign-in, consent, device, signed-out,
-  error, password reset, the admin console and the setup wizard all carry an Appearance button:
-  System, Light, Dark, Midnight, Graphite, Forest, Rose, Paper, High contrast, High contrast dark,
-  or Custom (light/dark mode, accent and background, with borders, muted text and button labels
-  derived to stay readable). Text size from 80% to 160%, every font-size following one variable.
-* **Saved per browser, applied before first paint.** localStorage on the IdP's origin, so a choice
-  made at sign-in holds in the console, and other open tabs follow. Under the wizard's strict CSP
-  too: values are set through CSSOM, never inline styles. Without storage, or without the script,
-  the pages render exactly as before.
-* **Powered by Ark Identity Server.** The Ark shield under the sign-in card, in the console footer
-  and as the wizard's mark. New anonymous assets at /ark-admin/asset/: ark-theme.js, ark-theme.css,
-  ark-shield-64.png, ark-shield-512.png. Optional: ark_oauth_server:ShowPoweredBy=false hides it on
-  the sign-in pages and in the console footer (the version stays); the setup wizard asks.
-* The password-reset confirmation page (/oauth/PwdResetThank) is rebuilt on the shared layout; it was
-  the last page of the reset flow still on its own stylesheet.
 
 2.0.3 —back-channel logout, sign-out that covers the whole browser, and a dependency graph that
 is only what this package uses.
@@ -477,27 +515,33 @@ projects, and now carries a readme, an SPDX license expression and a symbol pack
 	     ============================================================================== -->
 	<ItemGroup>
 		<PackageReference Include="ark.net.util" Version="1.0.4.15" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.19" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.19" />
-		<PackageReference Include="MySql.EntityFrameworkCore" Version="9.0.17" />
-		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
-		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.8.0" />
-		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.8.0" />
+		<!--
+			EF Core and its providers move together. Npgsql.EntityFrameworkCore.PostgreSQL 10.0.4
+			requires Microsoft.EntityFrameworkCore 10.0.15 or later, which sets the floor for the two
+			Microsoft packages; MySql.EntityFrameworkCore 10.0.12 asks for 10.0.12 and is lifted.
+		-->
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.15" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.15" />
+		<PackageReference Include="MySql.EntityFrameworkCore" Version="10.0.12" />
+		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.4" />
+		<PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
+		<PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
 		<!--
 			Not used by this assembly — pinned to keep the graph on one Microsoft.IdentityModel
-			version. MySql.Data (under MySql.EntityFrameworkCore) asks for
-			Microsoft.IdentityModel.Protocols.OpenIdConnect 7.5.0 while everything else here is on
-			8.8.0, and that split does not fail at restore or at build: it fails at the first OIDC
-			challenge, with a MethodAccessException or a missing-method error that names neither
-			package. Raising the floor to 8.8.0 keeps Protocols and Tokens on the same major.
+			version. The OpenIdConnect package below asks for Protocols.OpenIdConnect 8.19.2 while
+			JsonWebTokens above lifts Microsoft.IdentityModel.Tokens to 8.23.0. A split graph does
+			not fail at restore or at build: it fails at the first OIDC challenge, with a
+			MethodAccessException or a missing-method error that names neither package. (Up to EF
+			Core 9, MySql.Data also pulled Protocols 7.5.0; MySql.Data 26.x no longer does, but a
+			future transitive reference could, and this pin is what keeps it from mattering.)
 		-->
-		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.8.0" />
+		<PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.23.0" />
 		<!--
 			The built-in console sign-in that AddArkIdp registers: the framework's own OIDC handler,
 			pointed at this server. Same patch train as the EF packages above; it asks for
-			Microsoft.IdentityModel.Protocols.OpenIdConnect 8.0.x, which the pin above lifts to 8.8.0.
+			Microsoft.IdentityModel.Protocols.OpenIdConnect 8.19.2, which the pin above lifts to 8.23.0.
 		-->
-		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="9.0.10" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.15" />
 	</ItemGroup>
 
 </Project>
