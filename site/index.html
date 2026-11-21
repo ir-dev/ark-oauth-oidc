@@ -1157,16 +1157,32 @@ signOut.onclick = () =&gt; ark.signoutRedirect(); <span class="c">// app + provi
     </div>
   </section>
 
-  <!-- ===== Security reviews =====
-       Newest first. Each report is a static page under security/, named by its date. -->
+  <!-- ===== Reviews and reports =====
+       Newest first. Each report is a static page named by its date: security reviews under
+       security/, performance tests under performance/. -->
   <section id="reviews">
     <div class="wrap">
       <div class="section-head">
-        <div class="kicker">Security reviews</div>
+        <div class="kicker">Reviews and reports</div>
         <h2>Reviewed in the open.</h2>
-        <p>Each review is published with what was found, what was fixed and what operators need to do. Every report opens in a new tab.</p>
+        <p>Each security review is published with what was found, what was fixed and what operators need to do; each performance test with its method and every number measured. Every report opens in a new tab.</p>
       </div>
       <ol class="reviews">
+        <li class="card review">
+          <time class="review-date" datetime="2026-11-21"><span><span class="d">21</span><br><span class="m">Nov 2026</span></span></time>
+          <div class="review-body">
+            <h3>Scale test: 30,000 signed-in users</h3>
+            <p>The provider was loaded with 30,000 accounts and driven through real sign-ins, single sign-on, token refreshes and UserInfo calls, before and after the scale work in the release that follows 2.3.0. The report gives the method, every measurement on PostgreSQL, MySQL and SQLite, the two-instance test, and what operators should configure.</p>
+            <ul class="review-stats" aria-label="Summary">
+              <li class="fixed">30,000 of 30,000 signed in, 0 errors</li>
+              <li class="fixed">6.6× requests per second</li>
+              <li class="fixed">4.7 ms median refresh at 30,000 sessions</li>
+              <li class="fixed">2 instances, 0 failed sign-ins</li>
+              <li>PostgreSQL · MySQL · SQLite</li>
+            </ul>
+          </div>
+          <a class="btn-report" href="performance/2026-11-21-scale-test.html" target="_blank" rel="noopener">Read the report <span aria-hidden="true">↗</span><span class="visually-hidden">(opens in a new tab)</span></a>
+        </li>
         <li class="card review">
           <time class="review-date" datetime="2026-11-20"><span><span class="d">20</span><br><span class="m">Nov 2026</span></span></time>
           <div class="review-body">

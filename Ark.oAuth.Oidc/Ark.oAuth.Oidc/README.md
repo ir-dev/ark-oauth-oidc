@@ -105,6 +105,7 @@ endpoint the authorization middleware cannot see the `[Authorize]` metadata it i
     "UploadPath": "./wwwroot/{0}/",
     "DefaultPw": "<initial password for new users>",
     "UserPasswordMode": "admin_managed", // admin_managed | email_based | auto (legacy behaviour)
+    "DataProtectionKeys": "auto",      // auto | database | off - see "Running at scale"
     "AdminUser": {                     // the account seeded when the database is first created
       "Username": "admin",             // optional, defaults to "admin"; need not be an email address
       "Password": "<required>",        // no default - see below
@@ -129,7 +130,12 @@ endpoint the authorization middleware cannot see the `[Authorize]` metadata it i
       "LogoutTokenLifetimeSeconds": 120,
       "SignOutAllBrowserSessions": true,     // sign-out covers every session in the browser
       "SignOutAcrossTenants": true,
-      "CorsOrigins": []                // exact origins of any single-page-application clients
+      "CorsOrigins": [],               // exact origins of any single-page-application clients
+      "CleanupIntervalMinutes": 60,    // expired codes, tokens and sessions are purged this often
+      "AuditRetentionDays": 0,         // 0 keeps the audit trail for ever
+      "ReferenceCacheSeconds": 30,     // see "Running at scale"
+      "ClientSecretCacheSeconds": 300,
+      "MaxConcurrentPasswordHashes": 0 // 0 = half the cores
     }
   },
   "ConnectionStrings": {
@@ -600,6 +606,12 @@ Skipping this used to be silent and specific: without 00004 the entity carried `
 and the table did not, so `/api/oauth/v1/user/list` answered a bare 500 and the console's Users
 grid came up empty with nothing saying why.
 
+Indexes are kept current the same way. An index the entity model declares and an existing
+database lacks is created on start-up, along with the `lower(email)` indexes behind the
+case-insensitive lookups. This is never fatal: an index that cannot be built — no privilege, or a
+column type the provider will not index — is written to the log as `Ark IdP: index not created`
+and the server starts without it. Unique indexes are never added this way.
+
 Only the SQLite scripts ship in this package, so after them, on every provider, the updater
 compares the entity model with the live database and adds whatever table or column is missing —
 with DDL from the provider's own EF migrations generator, and with each entity's initialiser
@@ -609,6 +621,60 @@ it, a missed one surfaced as `42703: column c.backchannel_logout_session_require
 the first request. `POST /api/migration/v1/sql?action=up|down&name=00005_sql.sql` is still there to
 run or roll back one SQLite script by hand, and reports whether it actually worked. It is off — 404 —
 unless `ark_oauth_server:Management:AllowMigrationEndpoint` is `true`, and operator-only when on.
+
+## Running at scale
+
+Measured with 30,000 accounts on PostgreSQL: all 30,000 signed in with no errors, and with their
+30,000 sessions live a single instance answered a refresh in 5 ms and a single-sign-on hop in 7 ms at
+the median. The dated report, with the method and every number, is on the project site:
+<https://ir-dev.github.io/ark-oauth-oidc/#reviews>.
+
+What decides whether a deployment holds up, in the order it matters:
+
+1. **Use PostgreSQL or MySQL, not SQLite, beyond one small instance.** SQLite takes one writer at a
+   time and its file cannot be shared between machines. Set `Provider` and the connection string;
+   nothing else changes. Size the connection pool for your peak (`Maximum Pool Size`, 100 by default
+   on both providers) and keep it under the database's own connection limit across all instances.
+2. **Let the upgrade build its indexes.** The first start on this version adds the indexes the hot
+   paths need to an existing database (see "Upgrading an existing database"). It reads each table
+   once; on a database with millions of rows allow that start a little longer.
+3. **More than one instance needs nothing more than a shared database.** The sign-in form's
+   anti-forgery token and the console's cookie are protected with the ASP.NET Core data-protection
+   key ring, which lives in a folder on each machine by default — so a form drawn by one instance is
+   refused by the next. `DataProtectionKeys: auto` keeps the ring in the server's database on every
+   provider except SQLite, so all instances share it. `database` does so on SQLite too; `off` leaves
+   it to the host. A host that calls `PersistKeysTo…` itself always wins. Set `BaseUrl` to the public
+   address, and no session affinity is required. On a brand-new database, bring one instance up and
+   let it answer a request before starting the others, so the schema and the first key are created
+   once.
+4. **Sign-in is the expensive request, by design.** A password is verified with PBKDF2 at 210,000
+   iterations: about 40 ms of one core, which no setting should make cheaper. At most
+   `MaxConcurrentPasswordHashes` run at once — half the cores by default — and the rest queue without
+   holding a thread, so a few thousand people signing in together slow each other down and leave
+   people who are already signed in alone. Budget roughly 25 sign-ins a second per hashing core;
+   30,000 people arriving over fifteen minutes is 33 a second, so plan for at least two hashing
+   cores across the deployment — four cores in total at the default — and more for a sharper peak.
+   A sign-in that has waited 20 seconds for a slot is answered "the server is busy, try again"
+   rather than left hanging, and is not counted as a failed attempt. That message means the
+   deployment is undersized for the rate people are arriving at, not that anything is broken.
+
+Three things this version keeps in memory, and what that means when an operator changes something:
+
+| Kept | For | A change is seen |
+|---|---|---|
+| Tenants, clients, scopes, the signing key | `ReferenceCacheSeconds` (30) | At once on the instance that made it; within that time on the others. `0` turns it off. |
+| A client secret that verified | `ClientSecretCacheSeconds` (300) | At once: replacing the secret retires the entry. A wrong secret is never remembered. |
+| The `ark_oauth_server` configuration | Until configuration reloads | On reload, as before. |
+
+Nothing about a user is kept: accounts, access mappings and sessions are read from the database —
+by index — on every request, so deactivating someone or ending a session takes effect immediately
+on every instance. `/jwks.json` is always read from the database too.
+
+Housekeeping runs every `CleanupIntervalMinutes`. It removes what has expired, and with it the
+refresh tokens issued under sessions that have ended, which is what keeps that table to the size of
+the signed-in population instead of a fortnight of rotations. The audit trail is written in batches,
+off the request path, and is kept for ever unless `AuditRetentionDays` says otherwise; with
+`EnableLogTrace` on, a busy server writes several rows per sign-in, so set one or the other.
 
 ## Before production
 

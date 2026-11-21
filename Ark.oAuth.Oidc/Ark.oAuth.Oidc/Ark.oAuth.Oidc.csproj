@@ -54,6 +54,42 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+Next release — built to hold 30,000 signed-in users, and to run on more than one instance.
+
+Measured, not estimated: with 30,000 accounts in PostgreSQL the same test went from 78 to 159
+sign-ins a second and from 352 to 2,308 requests a second on one instance, and two instances behind
+one address went from refusing most sign-ins to refusing none. The dated report is on the project
+site, under Reviews and reports. Nothing a client sees changes — the
+endpoints, tokens, discovery and configuration are as in 2.3.0 — and the README's "Running at scale"
+has the settings.
+
+* **Lookups use indexes.** Every sign-in and token request compared `lower(column)` to a value,
+  which no index could serve: a sign-in read the whole user table three times and the access-mapping
+  table four. They now ask for the stored value first and fall back to a `lower()` index.
+* **The first start adds the missing indexes to an existing database**, including
+  `refresh_tokens.session_id` and the `expires_at` columns. Never a unique index, and never fatal.
+* **A confidential client's secret is verified once, then remembered** for
+  `Oidc:ClientSecretCacheSeconds` (300). It was a full PBKDF2 — 40 ms of a core — on every token
+  request. Only a correct secret is remembered; replacing the secret retires the entry.
+* **Tenants, clients, scopes and the signing key are kept for `Oidc:ReferenceCacheSeconds`** (30).
+  A change made on an instance applies there at once; on other instances within that time. Set 0 to
+  read the database every time. Signing keys are imported once instead of once per token.
+* **Password hashing is bounded** (`Oidc:MaxConcurrentPasswordHashes`, half the cores), so a
+  sign-in storm no longer starves people who are already signed in.
+* **More than one instance works without configuration.** The data-protection key ring is kept in
+  the server's database on PostgreSQL, MySQL and SQL Server (`DataProtectionKeys: auto`); it used to
+  sit in a folder per machine, so the sign-in form drawn by one instance was refused by the next.
+  A host that configures its own key storage keeps it. After upgrading, operators sign in to the
+  console once more and a sign-in form already open at the moment of the upgrade has to be reloaded.
+* **Failed sign-ins are counted atomically.** Concurrent guesses at one account all read the same
+  count, so the lockout saw a fraction of them.
+* **The purge also removes refresh tokens whose session has ended**, and can trim the audit trail
+  (`Oidc:AuditRetentionDays`, off by default). Revoking a session, a token family, a user or a
+  client is one statement instead of loading every row.
+* **The audit trail is written in batches off the request path.** Error rows are written at all:
+  they were being discarded before they reached the database.
+* **Requests wait for the start-up bootstrap** instead of racing ahead of it.
+
 2.3.0 — .NET 10 and EF Core 10. Nothing else changes.
 
 .NET 9 left support on 2026-11-10; .NET 10 is the long-term support release. This release moves the

@@ -147,20 +147,31 @@ namespace Ark.oAuth.Oidc.Protocol
             return Sign(payload, key, "logout+jwt");
         }
 
+        // Stateless and thread-safe; one is enough.
+        private static readonly JsonWebTokenHandler Handler = new();
+
         private static string Sign(Dictionary<string, object> payload, ArkSigningKey key, string typ)
         {
-            var rsa = ArkCrypto.ImportPrivateKey(key.private_key);
-            var creds = new SigningCredentials(new RsaSecurityKey(rsa) { KeyId = key.kid }, SecurityAlgorithms.RsaSha256)
-            {
-                CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false }
-            };
-            var handler = new JsonWebTokenHandler();
-            return handler.CreateToken(new SecurityTokenDescriptor
+            // The key is imported once and kept (ArkIdpCache), not once per token.
+            return Handler.CreateToken(new SecurityTokenDescriptor
             {
                 Claims = payload,
-                SigningCredentials = creds,
+                SigningCredentials = ArkIdpCache.SigningCredentialsFor(key),
                 AdditionalHeaderClaims = new Dictionary<string, object> { ["typ"] = typ }
             });
+        }
+
+        /// <summary>The <c>kid</c> in a token's header, or null when it cannot be read.</summary>
+        private static string? KidOf(string token)
+        {
+            try
+            {
+                return Handler.CanReadToken(token) ? Handler.ReadJsonWebToken(token).Kid : null;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /// <summary>
@@ -173,14 +184,13 @@ namespace Ark.oAuth.Oidc.Protocol
         public async Task<TokenValidationResult> ValidateAsync(
             string token, ArkTenant tenant, string standardIssuer, string? expectedAudience = null)
         {
-            var keys = await _keys.GetPublishedKeysAsync(tenant.tenant_id);
+            var keys = await _keys.GetValidationKeySetAsync(tenant.tenant_id, KidOf(token));
             var issuers = new[] { standardIssuer, tenant.issuer }
                 .Where(i => !string.IsNullOrEmpty(i)).Distinct().ToArray();
             var audiences = new[] { expectedAudience, tenant.audience, standardIssuer }
                 .Where(a => !string.IsNullOrEmpty(a)).Distinct().ToArray()!;
 
-            var handler = new JsonWebTokenHandler();
-            return await handler.ValidateTokenAsync(token, new TokenValidationParameters
+            return await Handler.ValidateTokenAsync(token, new TokenValidationParameters
             {
                 ValidateIssuer = true,
                 ValidIssuers = issuers,
@@ -204,10 +214,10 @@ namespace Ark.oAuth.Oidc.Protocol
         /// </summary>
         public async Task<TokenValidationResult> ValidateIdTokenHintAsync(string token, ArkTenant tenant, string standardIssuer, TimeSpan maxAge)
         {
-            var keys = await _keys.GetPublishedKeysAsync(tenant.tenant_id);
+            var keys = await _keys.GetValidationKeySetAsync(tenant.tenant_id, KidOf(token));
             var issuers = new[] { standardIssuer, tenant.issuer }
                 .Where(i => !string.IsNullOrEmpty(i)).Distinct().ToArray();
-            return await new JsonWebTokenHandler().ValidateTokenAsync(token, new TokenValidationParameters
+            return await Handler.ValidateTokenAsync(token, new TokenValidationParameters
             {
                 ValidateIssuer = true,
                 ValidIssuers = issuers,

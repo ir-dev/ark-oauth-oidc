@@ -65,7 +65,7 @@ namespace Ark.oAuth.Oidc
             var principal = ctx.Principal;
             var subject = principal?.FindFirst("sub")?.Value;
             var sp = ctx.HttpContext.RequestServices;
-            var ser = sp.GetRequiredService<IConfiguration>().GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
+            var ser = Protocol.ArkConfigSnapshot.Server(sp.GetRequiredService<IConfiguration>());
             var tenantId = ser?.TenantId;
 
             var still = false;
@@ -77,8 +77,8 @@ namespace Ark.oAuth.Oidc
                 var user = await db.users.AsNoTracking().FirstOrDefaultAsync(u => u.email == login);
                 var client = await db.clients.AsNoTracking()
                     .FirstOrDefaultAsync(c => c.tenant_id == tenantId && c.client_id == consoleClientId);
-                var mapping = user == null || client == null ? null : await db.user_client_claims.AsNoTracking()
-                    .FirstOrDefaultAsync(m => (m.email ?? "").ToLower() == login && m.tenant_id == tenantId && m.client_id == client.id);
+                var mapping = user == null || client == null ? null
+                    : await Protocol.ArkLookup.MappingAsync(db, user.email, client.tenant_id, client.id);
 
                 still = user != null && user.is_active && mapping != null;
 
@@ -374,7 +374,7 @@ namespace Ark.oAuth.Oidc
 
             using var scope = _services.CreateScope();
             var sp = scope.ServiceProvider;
-            var ser = sp.GetRequiredService<IConfiguration>().GetSection("ark_oauth_server").Get<ArkAuthServerConfig>()
+            var ser = Protocol.ArkConfigSnapshot.Server(sp.GetRequiredService<IConfiguration>())
                       ?? throw new InvalidOperationException("ark_oauth_server is not configured");
             var http = sp.GetService<IHttpContextAccessor>()?.HttpContext;
             var ep = http != null

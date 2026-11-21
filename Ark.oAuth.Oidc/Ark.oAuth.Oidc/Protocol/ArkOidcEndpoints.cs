@@ -34,6 +34,39 @@ namespace Ark.oAuth.Oidc.Protocol
         /// <summary>How often expired codes, tokens, sessions and PAR requests are deleted. 0 turns it off.</summary>
         public int CleanupIntervalMinutes { get; set; } = 60;
 
+        /// <summary>
+        /// Days the audit trail (<c>audit_trace</c>) is kept; older rows are deleted by the same
+        /// timer as expired grants. 0, the default, keeps everything — nothing is deleted from an
+        /// audit trail unless someone asked for that. With <c>EnableLogTrace</c> on, a busy server
+        /// writes several rows per sign-in, so a deployment that leaves trace on should set this.
+        /// </summary>
+        public int AuditRetentionDays { get; set; } = 0;
+
+        /// <summary>
+        /// Seconds this instance may answer from its own copy of a tenant, client, scope or signing
+        /// key before reading it again (see <see cref="ArkIdpCache"/>). A change made through this
+        /// instance applies at once; this bounds how long a change made through <i>another</i>
+        /// instance takes to reach this one. 0 reads the database on every request.
+        /// </summary>
+        public int ReferenceCacheSeconds { get; set; } = 30;
+
+        /// <summary>
+        /// Seconds a client secret that verified is remembered, so a confidential client does not
+        /// pay a full PBKDF2 on every token request (see <see cref="ArkSecretVerifier"/>). Only a
+        /// correct secret is remembered, and replacing the secret retires the entry. 0 verifies
+        /// the hash every time.
+        /// </summary>
+        public int ClientSecretCacheSeconds { get; set; } = 300;
+
+        /// <summary>
+        /// How many password hashes may run at once; further sign-ins wait their turn without
+        /// holding a thread (see <see cref="ArkHashGate"/>). 0, the default, is half the number
+        /// of cores, which keeps a sign-in storm from starving the requests of people who are
+        /// already signed in. Raise it to sign people in faster at their expense; one hash takes
+        /// roughly 40 ms of one core, so each slot is worth some 25 sign-ins a second.
+        /// </summary>
+        public int MaxConcurrentPasswordHashes { get; set; } = 0;
+
         /// <summary>Lock an account after this many consecutive failed sign-ins. 0 disables lockout.</summary>
         public int MaxFailedSignIns { get; set; } = 10;
         public int LockoutMinutes { get; set; } = 15;

@@ -320,6 +320,8 @@ namespace Ark.oAuth
     }
 
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    // Read newest-first and purged oldest-first (Oidc:AuditRetentionDays); both walk this.
+    [Index(nameof(at))]
     public class ArkAudit
     {
         [Key]

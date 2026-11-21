@@ -31,8 +31,9 @@ namespace Ark.oAuth.Oidc.Protocol
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             // Not at start-up: the first requests bootstrap the database, and the wizard may not
-            // have written a connection string yet.
-            var delay = TimeSpan.FromMinutes(5);
+            // have written a connection string yet. Spread by up to a minute, so several instances
+            // started by one deployment do not all run the same deletes in the same second.
+            var delay = TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(Random.Shared.Next(0, 60));
             while (!stoppingToken.IsCancellationRequested)
             {
                 try { await Task.Delay(delay, stoppingToken); }
@@ -46,8 +47,9 @@ namespace Ark.oAuth.Oidc.Protocol
                 try
                 {
                     using var scope = _scopes.CreateScope();
-                    var removed = await scope.ServiceProvider.GetRequiredService<ArkGrantStore>().CleanupExpiredAsync();
-                    if (removed > 0) _log.LogInformation("Ark IdP removed {Count} expired grant rows.", removed);
+                    var retention = _config.GetValue("ark_oauth_server:Oidc:AuditRetentionDays", 0);
+                    var removed = await scope.ServiceProvider.GetRequiredService<ArkGrantStore>().CleanupExpiredAsync(retention);
+                    if (removed > 0) _log.LogInformation("Ark IdP removed {Count} expired rows.", removed);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

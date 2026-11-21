@@ -115,9 +115,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             if (action == "approve")
             {
                 // The same access mapping the authorization endpoint requires of a session.
-                var client = await Ctx.clients.AsNoTracking().FirstOrDefaultAsync(c =>
-                    c.tenant_id.ToLower() == tenant.tenant_id.ToLower() &&
-                    c.client_id.ToLower() == entry.client_id.ToLower());
+                var client = await FindClientAsync(tenant, entry.client_id);
                 if (client == null || !client.is_active
                     || !await _claims.HasClientAccessAsync(session.subject, tenant.tenant_id, client))
                 {
@@ -159,11 +157,9 @@ namespace Ark.oAuth.Oidc.Endpoints
             if (entry.status != "pending")
                 return DevicePage(tenant, "enter_code", "That code has already been used.", userCode, null);
 
-            var client = await Ctx.clients.AsNoTracking().FirstOrDefaultAsync(c =>
-                c.tenant_id.ToLower() == tenant.tenant_id.ToLower() &&
-                c.client_id.ToLower() == entry.client_id.ToLower());
+            var client = await FindClientAsync(tenant, entry.client_id);
 
-            var catalogue = await Ctx.scopes.AsNoTracking().ToListAsync();
+            var catalogue = await ArkIdpCache.ScopesAsync(Ctx);
             var scopes = (entry.scope ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Select(s =>
                 {

@@ -242,8 +242,13 @@ Admin{SignOutUrl,LandingUrl}, Oidc{EnableDynamicRegistration=false, RequireRegis
 EnableDeviceFlow=true, EnablePushedAuthorizationRequests=true, RequirePushedAuthorizationRequests=false,
 AlwaysRequireConsent=false, SessionLifetimeMinutes=480, MaxFailedSignIns=10, LockoutMinutes=15,
 EnableBackChannelLogout=true, BackChannelLogoutTimeoutSeconds=5, LogoutTokenLifetimeSeconds=120,
-SignOutAllBrowserSessions=true, SignOutAcrossTenants=true, CorsOrigins=[]}.
+SignOutAllBrowserSessions=true, SignOutAcrossTenants=true, CorsOrigins=[], CleanupIntervalMinutes=60,
+AuditRetentionDays=0 (keep all), ReferenceCacheSeconds=30, ClientSecretCacheSeconds=300,
+MaxConcurrentPasswordHashes=0 (half the cores)}, DataProtectionKeys=auto (auto|database|off: the
+data-protection key ring is kept in the IdP database on every provider but SQLite, so instances share it).
 ConnectionStrings:ArkAuthConnection.
+SCALE: more than one instance needs postgres or mysql and nothing else; never SQLite across machines.
+Never cache users, access mappings or sessions in a host; the server reads those by index per request.
 
 PREFERRED PATTERNS:
 Discovery-driven clients; issuer = {BaseUrl}/{TenantId}; one-call provisioning (never forget the

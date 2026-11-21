@@ -95,7 +95,22 @@ namespace Ark.oAuth.Oidc.Protocol
             // Verify against a dummy hash when the client is unknown so that a bad client_id and a
             // bad secret cost the same amount of time and cannot be told apart by an attacker.
             var stored = client?.client_secret_hash ?? DummyHash.Value;
-            var ok = ArkCrypto.VerifySecret(secret, stored);
+            // Remembered once it has verified, so a client that calls the token endpoint all day
+            // does not spend a full PBKDF2 on each call. A wrong secret is hashed every time.
+            var options = ArkConfigSnapshot.Oidc(_ctx.Configuration);
+            ArkHashGate.Configure(options.MaxConcurrentPasswordHashes);
+            bool ok;
+            try
+            {
+                ok = await ArkSecretVerifier.VerifyAsync(secret, stored, options.ClientSecretCacheSeconds);
+            }
+            catch (ArkBusyException)
+            {
+                // RFC 6749 §5.2 has no "busy"; 503 with the code the authorization endpoint uses
+                // for the same condition is what a client library retries on.
+                throw new OAuthException(OAuthErrorCodes.TemporarilyUnavailable,
+                    "the server is busy; retry the request shortly.", 503);
+            }
 
             if (client == null || !ok)
                 throw OAuthException.InvalidClient("client authentication failed.", viaHeader);
@@ -245,9 +260,8 @@ namespace Ark.oAuth.Oidc.Protocol
         public async Task<ArkClient?> FindClientAsync(string tenantId, string? clientId)
         {
             if (string.IsNullOrEmpty(clientId)) return null;
-            return await _ctx.clients.FirstOrDefaultAsync(c =>
-                c.tenant_id.ToLower() == (tenantId ?? "").ToLower() &&
-                c.client_id.ToLower() == clientId.ToLower());
+            // Shared and untracked (ArkIdpCache): every caller here only reads the client.
+            return await ArkIdpCache.ClientAsync(_ctx, tenantId, clientId);
         }
 
         /// <summary>A fixed valid-format hash used to keep unknown-client timing indistinguishable.</summary>

@@ -1272,6 +1272,15 @@ Under `ark_oauth_server:Oidc`, all optional:
 | `LogoutTokenLifetimeSeconds` | `120` | |
 | `SignOutAllBrowserSessions` | `true` | Off ends only the session the cookie names |
 | `SignOutAcrossTenants` | `true` | Off keeps a sign-out inside the tenant it was asked of |
+| `CleanupIntervalMinutes` | `60` | How often expired codes, tokens and sessions are purged; `0` disables |
+| `AuditRetentionDays` | `0` | Days of audit trail kept; `0` keeps everything |
+| `ReferenceCacheSeconds` | `30` | How long an instance answers from its own copy of tenants, clients, scopes and the signing key; `0` disables |
+| `ClientSecretCacheSeconds` | `300` | How long a client secret that verified is remembered; `0` disables |
+| `MaxConcurrentPasswordHashes` | `0` | Password hashes running at once; `0` = half the cores |
+
+For a deployment with many users or more than one instance, see **Running at scale** in the
+[server README](Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md#running-at-scale); the measured numbers are
+in the [scale test report](https://ir-dev.github.io/ark-oauth-oidc/#reviews).
 
 Per-client settings live on the client record: `access_token_lifetime_seconds`,
 `id_token_lifetime_seconds`, `refresh_token_lifetime_seconds`, `authorization_code_lifetime_seconds`,

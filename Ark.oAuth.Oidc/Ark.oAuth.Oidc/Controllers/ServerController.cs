@@ -48,7 +48,7 @@ namespace Ark.oAuth.Oidc.Controllers
         [Route("{tenant_id}/v1/signin-oidc/claims/{client_id}")]
         public async Task<dynamic> GetClaimsByCode([FromRoute] string tenant_id, [FromRoute] string client_id, [FromQuery] string code)
         {
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
             ViewBag.IsError = false;
             tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
             var tnt = await _da.GetTenant(tenant_id);
@@ -59,7 +59,7 @@ namespace Ark.oAuth.Oidc.Controllers
         [Route("{tenant_id}/v1/password/reset/{uid}")]
         public async Task<dynamic> PasswordReset([FromRoute] string tenant_id, [FromRoute] string uid)
         {
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
             ViewBag.IsError = false;
             ViewBag.config = ser.EmailConfig;
             tenant_id = string.IsNullOrEmpty(tenant_id) ? ser.TenantId : tenant_id;
@@ -74,7 +74,7 @@ namespace Ark.oAuth.Oidc.Controllers
         {
             ViewBag.IsError = false;
             ViewBag.msg = "";
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
             ViewBag.config = ser.EmailConfig;
             try
             {
@@ -101,13 +101,13 @@ namespace Ark.oAuth.Oidc.Controllers
         public async Task<IActionResult> PwdResetThank()
         {
             // The same branding PasswordReset draws, so the flow does not change look on its last page.
-            ViewBag.config = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>()?.EmailConfig;
+            ViewBag.config = Protocol.ArkConfigSnapshot.Server(_config)?.EmailConfig;
             return View();
         }
         [Route("{tenant_id}/v1/connect/authorize")]
         public async Task<IActionResult> Index([FromRoute] string tenant_id, [FromQuery] string client_id, [FromQuery] string redirect_uri)
         {
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
             var cc = await _da.GetClient(tenant_id, client_id);
             ViewBag.IsError = false;
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
@@ -145,7 +145,7 @@ namespace Ark.oAuth.Oidc.Controllers
             [FromQuery] string code_challenge_method)
         {
             ViewBag.IsError = false;
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
             var baseurl = !string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{Request.Scheme}://{Request.Host}/{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"{ser.BasePath}")}";
             ViewBag.client_url = $"{baseurl}/oauth/{tenant_id}/v1/.well-known/{client_id}/openid-configuration";
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
@@ -164,8 +164,7 @@ namespace Ark.oAuth.Oidc.Controllers
                 if (opt.MaxFailedSignIns > 0)
                 {
                     var login = (Username ?? "").ToLower().Trim();
-                    var status = await _ctx.auth_status.AsNoTracking()
-                        .FirstOrDefaultAsync(s => s.email.ToLower() == login);
+                    var status = await _da.GetAuthStatus(login);
                     if (status != null && status.retry_count >= opt.MaxFailedSignIns
                         && (DateTime.UtcNow - status.at).TotalMinutes < opt.LockoutMinutes)
                         throw new ApplicationException($"Too many failed attempts. Try again in {opt.LockoutMinutes} minutes.");
@@ -180,6 +179,11 @@ namespace Ark.oAuth.Oidc.Controllers
                 {
                     // Reached only after the password verified, as on the standard page.
                     throw new ApplicationException(ex.FriendlyMessage);
+                }
+                catch (ArkBusyException ex)
+                {
+                    // Nothing was checked; say so rather than "not recognised".
+                    throw new ApplicationException(ex.Message);
                 }
                 catch (Exception ex)
                 {
@@ -224,7 +228,7 @@ namespace Ark.oAuth.Oidc.Controllers
             [FromForm] string client_id,
             [FromForm] string code_verifier)
         {
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
             try
             {
                 var tt = await _da.GetTenant(tenant_id);
@@ -291,7 +295,7 @@ namespace Ark.oAuth.Oidc.Controllers
             //allowed only for server app (app_server)
             var tt = await _da.GetTenant(tenant_id);
             var cc = await _da.GetClient(tenant_id, client_id);
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
             ViewBag.tenant = tt;
             ViewBag.base_path = ser.BasePath.AnyNull() ? "" : $"/{ser.BasePath}";
             ViewBag.IsError = false;
@@ -307,7 +311,7 @@ namespace Ark.oAuth.Oidc.Controllers
         {
             // Another user's record is the operator's to read, nobody else's: honouring `sub` for
             // every signed-in caller let any of them read any account's claims for any client.
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
+            var ser = Protocol.ArkConfigSnapshot.Server(_config);
             if (!ArkOperator.IsOperator(User, ser)) sub = null;
             sub = sub ?? Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "sub" || t.Type?.ToLower() == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
             var name = Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "name");
@@ -318,7 +322,7 @@ namespace Ark.oAuth.Oidc.Controllers
         public async Task<dynamic> Wellknown([FromRoute] string tenant_id, [FromRoute] string client_id)
         {
             var tt = await _da.GetTenant(tenant_id);
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
             var cc = await _da.GetClient(tenant_id, client_id);
             if (cc == null) throw new ApplicationException("invalid_client");
             var baseurl = $"{(!string.IsNullOrEmpty(ser.BaseUrl) ? ser.BaseUrl : $"{Request.Scheme}://{Request.Host}")}{(string.IsNullOrEmpty(ser.BasePath) ? "" : $"/{ser.BasePath}")}";
@@ -380,7 +384,7 @@ namespace Ark.oAuth.Oidc.Controllers
         [Route("v1/{client_id}/{type}/upload")]
         public async Task<IActionResult> Upload([FromRoute] string client_id, [FromRoute] string type, IFormFile file)
         {
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
             if (!ArkOperator.IsOperator(User, ser)) return StatusCode(403, "uploads are restricted to the administrator account.");
             if (file == null || file.Length == 0) return BadRequest("No file uploaded or file is empty.");
             if (file.Length > MaxUploadBytes) return BadRequest("file is too large.");

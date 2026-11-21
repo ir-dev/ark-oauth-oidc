@@ -109,6 +109,15 @@ not seeded (tenant id must match; no key/client/account created).
 | `SignOutAllBrowserSessions` | `true` | Off ends only the session the cookie names. |
 | `SignOutAcrossTenants` | `true` | Off keeps sign-out inside the tenant. |
 | `CorsOrigins` | `[]` | Exact SPA origins; empty = cross-origin off (no wildcard). |
+| `CleanupIntervalMinutes` | `60` | Purge of expired codes, tokens, sessions (and tokens of ended sessions). 0 = off. |
+| `AuditRetentionDays` | `0` | Days of `audit_trace` kept; 0 = for ever. |
+| `ReferenceCacheSeconds` | `30` | In-memory copy of tenants, clients, scopes, signing key. Writes on the same instance apply at once; other instances within this time. 0 = off. |
+| `ClientSecretCacheSeconds` | `300` | A client secret that verified is not re-hashed for this long. Wrong secrets are never remembered. 0 = off. |
+| `MaxConcurrentPasswordHashes` | `0` | Password hashes running at once; 0 = half the cores. |
+
+`ark_oauth_server:DataProtectionKeys` (`auto` \| `database` \| `off`, default `auto`) keeps the ASP.NET
+Core data-protection key ring in the server's database so every instance shares it — on every
+provider except SQLite under `auto`. A host that configures its own key storage keeps it.
 
 **`ArkDataToolsConfig`** (section `ark_oauth_server:Admin:DataTools`). Every value defaults to on, so
 a configuration written before this section existed gets the data page as documented. Whatever these

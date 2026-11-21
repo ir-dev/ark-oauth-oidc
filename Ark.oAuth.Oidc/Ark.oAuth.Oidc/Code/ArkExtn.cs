@@ -91,6 +91,9 @@ namespace Ark.oAuth.Oidc
         // ran on every single request — opening a scope, querying pending migrations and
         // probing the connection before the real work could start.
         private static int _dataInitialized;
+        private static readonly SemaphoreSlim BootstrapLock = new(1, 1);
+        private static Exception? _bootstrapFailure;
+        private static long _bootstrapFailedAt;
 
         public static void UseArkAuthData(this IApplicationBuilder builder)
         {
@@ -101,26 +104,50 @@ namespace Ark.oAuth.Oidc
 
             builder.Use(async (context, next) =>
             {
-                if (Interlocked.CompareExchange(ref _dataInitialized, 1, 0) != 0)
+                if (Volatile.Read(ref _dataInitialized) != 0)
                 {
                     await next();
                     return;
                 }
-                using (var scope = builder.ApplicationServices.CreateScope())
+
+                // Everyone waits for the one bootstrap. The first request used to take the latch
+                // and every request that arrived while it worked was waved straight through — to a
+                // database whose tables or columns were, at that moment, still being created. An
+                // instance that starts under load receives hundreds of requests in that window.
+                await BootstrapLock.WaitAsync(context.RequestAborted);
+                try
                 {
-                    try
+                    if (Volatile.Read(ref _dataInitialized) == 0)
                     {
-                        await BootstrapDatabaseAsync(scope.ServiceProvider, context);
+                        // A bootstrap that has just failed is not tried again by each request in
+                        // the queue behind it: they get the same answer for a few seconds, then
+                        // the next one tries.
+                        var failure = _bootstrapFailure;
+                        if (failure != null && Environment.TickCount64 - Interlocked.Read(ref _bootstrapFailedAt) < 3000)
+                            throw new Exception("Database initialization failed", failure);
+
+                        using var scope = builder.ApplicationServices.CreateScope();
+                        try
+                        {
+                            await BootstrapDatabaseAsync(scope.ServiceProvider, context);
+                            _bootstrapFailure = null;
+                            Interlocked.Exchange(ref _dataInitialized, 1);
+                        }
+                        catch (Exception ex)
+                        {
+                            // A bootstrap that threw has not happened. The latch stays open so a
+                            // later request tries again once the cause is fixed — setting it would
+                            // have the process serve requests against a database it never finished
+                            // creating, failing later with errors that say nothing about the cause.
+                            _bootstrapFailure = ex;
+                            Interlocked.Exchange(ref _bootstrapFailedAt, Environment.TickCount64);
+                            throw new Exception("Database initialization failed", ex);
+                        }
                     }
-                    catch (Exception ex)
-                    {
-                        // A bootstrap that threw has not happened. Releasing the latch lets the next
-                        // request try again once the cause is fixed — leaving it set would have the
-                        // process serve requests against a database it never finished creating,
-                        // failing later with errors that say nothing about the real cause.
-                        Interlocked.Exchange(ref _dataInitialized, 0);
-                        throw new Exception("Database initialization failed", ex);
-                    }
+                }
+                finally
+                {
+                    BootstrapLock.Release();
                 }
                 await next();
             });
@@ -131,7 +158,13 @@ namespace Ark.oAuth.Oidc
         /// above — the setup wizard, which runs the same <see cref="BootstrapDatabaseAsync"/> with
         /// the values it collected and must not have the first request after it do it again.
         /// </summary>
-        internal static void MarkDataInitialized() => Interlocked.Exchange(ref _dataInitialized, 1);
+        internal static void MarkDataInitialized()
+        {
+            Interlocked.Exchange(ref _dataInitialized, 1);
+            // The wizard may have looked at other databases on the way here; nothing read from
+            // one of them may answer for the one it settled on.
+            Protocol.ArkIdpCache.Reset();
+        }
 
         /// <summary>
         /// Creates or updates the schema, seeds an empty database and runs the reconciliations.
@@ -646,6 +679,16 @@ namespace Ark.oAuth.Oidc
                 if (result.Baselined.Count > 0)
                     da.Log("schema_baseline", string.Join(", ", result.Baselined),
                         "schema already current; scripts recorded without running", "");
+                if (result.Indexed.Count > 0)
+                    da.Log("schema_index", string.Join(", ", result.Indexed),
+                        $"{result.Indexed.Count} index(es) created on existing tables", "");
+                // Not fatal — the server runs without an index, only slower — but it has to be
+                // findable, and the trace may be off: straight to the host's log as well.
+                foreach (var warning in result.IndexWarnings)
+                {
+                    da.Log("schema_index_skipped", warning, "an index could not be created; lookups on it read the whole table", "", "warn");
+                    Console.WriteLine($"Ark IdP: index not created - {warning}");
+                }
             }
             catch (Exception ex)
             {
@@ -724,6 +767,9 @@ namespace Ark.oAuth.Oidc
             var task = unpack.UnpackFiles(environment);
             Task.WaitAll(task);
             services.AddDbContext<ArkDataContext>();
+            // The audit trail is written in batches, off the request path — see ArkAuditWriter.
+            services.AddSingleton<ArkAuditWriter>();
+            services.AddHostedService(sp => sp.GetRequiredService<ArkAuditWriter>());
             services.AddScoped<DataAccess>();
             services.AddScoped<TokenServer>();
             services.AddSingleton<ArkUtil>();
@@ -764,6 +810,13 @@ namespace Ark.oAuth.Oidc
             // the interactive endpoints render Razor views shipped inside this package
             services.AddControllersWithViews();
             services.AddAntiforgery(o => o.Cookie.Name = "ark_idp_csrf");
+
+            // One data-protection key ring for every instance, kept in the database, unless the
+            // host has arranged its own — see ArkKeyRingConfigurator. Without a shared ring the
+            // sign-in form drawn by one instance is refused by the next.
+            services.AddDataProtection();
+            services.AddSingleton<Microsoft.Extensions.Options.IPostConfigureOptions<Microsoft.AspNetCore.DataProtection.KeyManagement.KeyManagementOptions>,
+                ArkKeyRingConfigurator>();
         }
 
         /// <summary>

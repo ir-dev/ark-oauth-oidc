@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scale test · 21 Nov 2026 · ARK Identity</title>
+<meta name="description" content="Load test of the ARK identity provider with 30,000 signed-in users, 21 November 2026: method, every measurement before and after the scale work, and what operators should configure.">
+<meta name="theme-color" content="#0b1533">
+<meta name="robots" content="index, follow">
+<link rel="icon" type="image/png" href="../assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand: #2450d8; --brand-soft: #e9eefc; --ink: #0b1533; --text: #24304d; --muted: #5d6883;
+    --line: #e1e6f0; --bg: #f5f7fb; --surface: #ffffff;
+    --crit: #b4232c; --high: #c2410c; --med: #a16207; --low: #2f6f8f; --ok: #12805a; --open: #6b4fbb;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(11, 21, 51, .05), 0 8px 28px rgba(11, 21, 51, .07);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --brand: #7fa2ff; --brand-soft: #13214a; --ink: #eef3ff; --text: #ccd5ea; --muted: #8e9ab7;
+      --line: #1d2a4b; --bg: #060c1d; --surface: #0d1630;
+      --crit: #ff7a82; --high: #ff9a5c; --med: #f2c14e; --low: #6cc4e8; --ok: #4cc38a; --open: #b9a2ff;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --brand: #7fa2ff; --brand-soft: #13214a; --ink: #eef3ff; --text: #ccd5ea; --muted: #8e9ab7;
+    --line: #1d2a4b; --bg: #060c1d; --surface: #0d1630;
+    --crit: #ff7a82; --high: #ff9a5c; --med: #f2c14e; --low: #6cc4e8; --ok: #4cc38a; --open: #b9a2ff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: .86em; background: var(--brand-soft); color: var(--ink); padding: .1em .38em; border-radius: 6px; overflow-wrap: anywhere; }
+  h1, h2, h3 { color: var(--ink); line-height: 1.2; margin: 0; }
+  h1, h2 { font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif; letter-spacing: -.02em; }
+  h1 { font-size: clamp(1.9rem, 4.6vw, 2.9rem); font-weight: 800; color: #fff; }
+  h2 { font-size: clamp(1.4rem, 3vw, 1.9rem); font-weight: 800; }
+  h3 { font-size: 1.02rem; font-weight: 600; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 720px) { .wrap { padding: 0 32px; } }
+
+  .nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  .nav .wrap { display: flex; align-items: center; gap: 16px; height: 58px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 700; font-family: "Plus Jakarta Sans", Inter, sans-serif; }
+  .brand:hover { text-decoration: none; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .nav-links { margin-left: auto; display: flex; align-items: center; gap: 18px; font-size: .9rem; }
+  .nav-links a { color: var(--muted); font-weight: 500; }
+  .nav-links a:hover { color: var(--ink); text-decoration: none; }
+  .hide-sm { display: none; }
+  @media (min-width: 760px) { .hide-sm { display: inline; } }
+  .theme-btn { border: 1px solid var(--line); background: var(--surface); color: var(--muted); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; display: grid; place-items: center; }
+  .theme-btn:hover { color: var(--ink); }
+
+  .hero { background: radial-gradient(800px 420px at 90% -20%, rgba(36, 80, 216, .55), transparent 62%), radial-gradient(600px 360px at -10% 120%, rgba(180, 35, 44, .35), transparent 62%), #050b1d; color: #c3cde6; }
+  .hero .wrap { padding-top: 48px; padding-bottom: 52px; }
+  .kicker { font-size: .78rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #8fb0ff; margin-bottom: 12px; }
+  .hero .lead { font-size: 1.05rem; max-width: 760px; margin: 16px 0 0; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 22px; font-size: .88rem; color: #aab6d3; }
+  .meta b { color: #fff; font-weight: 600; }
+
+  .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+  @media (min-width: 720px) { .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+  .tile { border-radius: 12px; padding: 14px 16px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .12); }
+  .tile .n { font: 800 1.9rem/1 "Plus Jakarta Sans", Inter, sans-serif; color: #fff; }
+  .tile .l { font-size: .8rem; color: #aab6d3; margin-top: 6px; }
+  .tile.crit { border-color: rgba(255, 122, 130, .5); } .tile.high { border-color: rgba(255, 154, 92, .45); }
+  .tile.open { border-color: rgba(185, 162, 255, .45); }
+
+  main section { padding: 44px 0 8px; }
+  .section-head p { color: var(--muted); margin: 10px 0 0; max-width: 760px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .callout { padding: 18px 20px; border-left: 4px solid var(--brand); margin-top: 18px; }
+  .callout h3 { margin-bottom: 8px; }
+  .callout ol, .callout ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+
+  .grid2 { display: grid; gap: 14px; margin-top: 20px; }
+  @media (min-width: 820px) { .grid2 { grid-template-columns: 1fr 1fr; } }
+  .grid2 .card { padding: 18px 20px; }
+  .grid2 ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: .93rem; }
+
+  .tablewrap { overflow-x: auto; margin-top: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; min-width: 640px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .76rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td.id { font-family: "JetBrains Mono", monospace; font-size: .8rem; color: var(--muted); white-space: nowrap; }
+  td a { color: var(--ink); }
+
+  .sev, .st { display: inline-block; font-size: .72rem; font-weight: 700; letter-spacing: .03em; padding: 2px 9px; border-radius: 999px; white-space: nowrap; border: 1px solid currentColor; }
+  .sev.crit { color: var(--crit); } .sev.high { color: var(--high); } .sev.med { color: var(--med); } .sev.low { color: var(--low); }
+  .st.fixed { color: var(--ok); } .st.open { color: var(--open); }
+
+  .finding { padding: 18px 20px; margin-top: 14px; scroll-margin-top: 72px; }
+  .finding header { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-bottom: 8px; }
+  .finding header .fid { font-family: "JetBrains Mono", monospace; font-size: .78rem; color: var(--muted); }
+  .finding dl { margin: 10px 0 0; display: grid; gap: 8px; }
+  .finding dt { font-size: .74rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+  .finding dd { margin: 2px 0 0; font-size: .95rem; }
+  @media (min-width: 760px) { .finding dl { grid-template-columns: 150px 1fr; } .finding dd { margin: 0; } }
+
+  footer { margin-top: 56px; border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--muted); font-size: .88rem; }
+
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th[scope="row"] { text-transform: none; letter-spacing: 0; font-size: .92rem; font-weight: 500; color: var(--text); }
+  table.matrix th:nth-child(2), table.matrix th:nth-child(3) { text-align: right; }
+  .delta { display: inline-block; font-size: .78rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .delta.good { color: var(--ok); } .delta.bad { color: var(--crit); }
+  .tile.ok { border-color: rgba(76, 195, 138, .5); }
+  .tablewrap + p, .note { color: var(--muted); font-size: .9rem; margin: 10px 0 0; }
+  h3.sub { margin-top: 30px; }
+  .prose { max-width: 820px; }
+  .prose p { margin: 12px 0 0; }
+  .fixes { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+  .fixes li { padding: 16px 20px; }
+  .fixes h3 { margin-bottom: 6px; }
+  .fixes p { margin: 0; font-size: .95rem; }
+</style>
+<script>
+  (function () {
+    try { var t = localStorage.getItem('ark-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="../index.html#reviews" aria-label="ARK Identity Server, back to the home page">
+      <img src="../assets/img/ark-shield-64.png" alt="" width="30" height="30">
+      ARK Identity
+    </a>
+    <nav class="nav-links" aria-label="Report sections">
+      <a class="hide-sm" href="#results">Results</a>
+      <a class="hide-sm" href="#changes">What changed</a>
+      <a class="hide-sm" href="#operators">For operators</a>
+      <a class="hide-sm" href="#limits">Limits</a>
+      <a href="../index.html#reviews">All reports</a>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle colour theme">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="kicker">Performance report</div>
+    <h1>Scale test — 21 November 2026</h1>
+    <p class="lead">Can one ARK identity provider hold the sessions of 30,000 people who are all working at once?
+      The provider was loaded with 30,000 accounts and driven through real sign-ins, single sign-on, token
+      refreshes and UserInfo calls, first as released and then after the scale work described here. Every
+      number below was measured; the release that carries the changes is the one after 2.3.0.</p>
+    <div class="meta">
+      <span>Date <b><time datetime="2026-11-21">21 Nov 2026</time></b></span>
+      <span>Before <b>v2.3.0</b></span>
+      <span>After <b>the next release</b></span>
+      <span>Scope <b>IdP on PostgreSQL · MySQL · SQLite</b></span>
+    </div>
+    <div class="tiles" role="list" aria-label="Summary">
+      <div class="tile ok" role="listitem"><div class="n">30,000</div><div class="l">of 30,000 users signed in, 0 errors</div></div>
+      <div class="tile ok" role="listitem"><div class="n">6.6×</div><div class="l">requests per second, one instance</div></div>
+      <div class="tile ok" role="listitem"><div class="n">4.7 ms</div><div class="l">median refresh with 30,000 live sessions</div></div>
+      <div class="tile ok" role="listitem"><div class="n">0</div><div class="l">failed sign-ins across two instances (was 303 of 400)</div></div>
+      <div class="tile" role="listitem"><div class="n">48</div><div class="l">behaviour checks passing, on PostgreSQL and MySQL</div></div>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <section id="summary">
+    <div class="section-head">
+      <h2>What was found</h2>
+      <p>The provider's design was already sound for scale: sessions, codes and refresh tokens live in the
+        database, so nothing ties a user to one machine. What held it back was how the hot paths were written.</p>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Before</h3>
+        <ul>
+          <li>Every sign-in read the whole user table three times and the access-mapping table four. With
+            30,000 accounts the database read 4.9 billion rows without an index over the full test.</li>
+          <li>A confidential client paid a full password-grade hash on every token request.</li>
+          <li>A second instance behind the same address refused most sign-ins.</li>
+          <li>A sign-in storm slowed everyone who was already signed in.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>After</h3>
+        <ul>
+          <li>The same lookups use indexes: 0.5 million rows read that way over the same test.</li>
+          <li>6.6× the requests per second and 2.0× the sign-ins per second on one instance.</li>
+          <li>Two instances share one key ring through the database; none of 3,000 sign-ins failed.</li>
+          <li>During a storm, a refresh for a signed-in user takes 12.2 ms at the median, not 474 ms.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="method">
+    <div class="section-head">
+      <h2>How it was tested</h2>
+    </div>
+    <div class="prose">
+      <p><b>Data.</b> 30,000 user accounts, each mapped to two applications (60,000 access mappings): one
+        confidential web client authenticating with a client secret, one public client using PKCE alone.
+        Passwords and the client secret are stored as the provider stores them, PBKDF2-SHA256 at 210,000 iterations.</p>
+      <p><b>Load.</b> A purpose-built generator drove the provider over HTTP the way a browser and an
+        application do: fetch the sign-in page, post the form with its anti-forgery token, grant consent on
+        first use, exchange the code with PKCE, then read UserInfo. After sign-in, a steady mix of 40%
+        single sign-on hops with the session cookie, 30% refresh-token rotations and 30% UserInfo calls.
+        Each virtual user kept its own cookies and tokens.</p>
+      <p><b>Two kinds of run.</b> <i>Saturation</i> runs push as hard as the server will take and report
+        throughput. <i>Paced</i> runs hold a fixed rate, 400 operations a second, and report response
+        times as a user would see them; 30,000 people refreshing hourly across a few applications and
+        moving between them produce well under that.</p>
+      <p><b>One combined run.</b> The last test in the results puts the pieces together, at one-third scale: two
+        instances behind a load balancer over HTTPS, a database with network delay, people arriving while others
+        work, every protocol flow in the mix, and sessions short enough to expire during the run.</p>
+      <p><b>Machine.</b> One Apple M5 laptop (10 cores, 16 GB) ran everything: the provider on .NET 10, the
+        database in Docker (PostgreSQL 16, MySQL 8.4) and the load generator. They compete for the same
+        cores, so the absolute numbers are lower than a server with its own database would give. The
+        comparison is like for like: same machine, same data, same test, restored to the same starting
+        state before each run.</p>
+    </div>
+  </section>
+
+  <section id="results">
+    <div class="section-head">
+      <h2>Results</h2>
+      <p>"Before" is version 2.3.0 as published. "After" is the build with the changes in this report.</p>
+    </div>
+
+    <h3 class="sub">1. All 30,000 users, PostgreSQL, one instance</h3>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Measure</th><th>Before</th><th>After</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Users signed in (of 30,000)</th><td class="num">30,000</td><td class="num">30,000</td><td></td></tr>
+          <tr><th scope="row">Errors</th><td class="num">0</td><td class="num">0</td><td></td></tr>
+          <tr><th scope="row">Time to sign everyone in</th><td class="num">425 s</td><td class="num">179 s</td><td><span class="delta good">2.4× lower</span></td></tr>
+          <tr><th scope="row">Sign-ins per second (128 at once)</th><td class="num">71</td><td class="num">168</td><td><span class="delta good">2.4×</span></td></tr>
+          <tr><th scope="row">Rows the database read without an index</th><td class="num">4,943.3 M</td><td class="num">0.5 M</td><td><span class="delta good">9,534× lower</span></td></tr>
+          <tr><th scope="row">Provider memory at the end</th><td class="num">443 MB</td><td class="num">214 MB</td><td><span class="delta good">2.1× lower</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3 class="sub">2. Response times with every session live, paced at 400 operations a second</h3>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Operation</th><th>Before</th><th>After</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Requests per second achieved (about 550 asked for)</th><td class="num">324</td><td class="num">552</td><td></td></tr>
+          <tr><th scope="row">Token refresh, median</th><td class="num">968 ms</td><td class="num">4.7 ms</td><td><span class="delta good">204× lower</span></td></tr>
+<tr><th scope="row">Token refresh, 95th percentile</th><td class="num">1,483 ms</td><td class="num">7.3 ms</td><td><span class="delta good">203× lower</span></td></tr>
+<tr><th scope="row">Single sign-on hop (authorize + token), median</th><td class="num">1,500 ms</td><td class="num">6.8 ms</td><td><span class="delta good">220× lower</span></td></tr>
+<tr><th scope="row">Single sign-on hop (authorize + token), 95th percentile</th><td class="num">2,009 ms</td><td class="num">10.5 ms</td><td><span class="delta good">191× lower</span></td></tr>
+<tr><th scope="row">UserInfo, median</th><td class="num">586 ms</td><td class="num">0.7 ms</td><td><span class="delta good">861× lower</span></td></tr>
+<tr><th scope="row">UserInfo, 95th percentile</th><td class="num">847 ms</td><td class="num">1.6 ms</td><td><span class="delta good">538× lower</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The published build could not hold the requested rate, so its response times are those of a saturated server.</p>
+
+    <h3 class="sub">3. Throughput at saturation: 3,000 users, 64 at once</h3>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Measure</th><th>Before</th><th>After</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Sign-ins per second</th><td class="num">78</td><td class="num">159</td><td><span class="delta good">2.0×</span></td></tr>
+          <tr><th scope="row">Requests per second, steady mix</th><td class="num">352</td><td class="num">2,308</td><td><span class="delta good">6.6×</span></td></tr>
+          <tr><th scope="row">Token refresh, median</th><td class="num">238 ms</td><td class="num">32.3 ms</td><td><span class="delta good">7.4× lower</span></td></tr>
+<tr><th scope="row">Token refresh, 95th percentile</th><td class="num">365 ms</td><td class="num">45.6 ms</td><td><span class="delta good">8.0× lower</span></td></tr>
+<tr><th scope="row">Single sign-on hop (authorize + token), median</th><td class="num">339 ms</td><td class="num">55.8 ms</td><td><span class="delta good">6.1× lower</span></td></tr>
+<tr><th scope="row">Single sign-on hop (authorize + token), 95th percentile</th><td class="num">496 ms</td><td class="num">73.6 ms</td><td><span class="delta good">6.7× lower</span></td></tr>
+<tr><th scope="row">UserInfo, median</th><td class="num">123 ms</td><td class="num">19.6 ms</td><td><span class="delta good">6.3× lower</span></td></tr>
+<tr><th scope="row">UserInfo, 95th percentile</th><td class="num">220 ms</td><td class="num">30.5 ms</td><td><span class="delta good">7.2× lower</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub">4. A sign-in storm: 6,000 people sign in while 1,000 others keep working</h3>
+    <p class="note">The 1,000 signed-in users are paced at 200 operations a second. The table shows what <em>they</em>
+      experience while the storm runs. Password hashing is now limited to a number of slots, half the cores by default.</p>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>For the signed-in users</th><th>Before</th><th>After, 9 slots</th><th>After, 5 slots (default)</th><th>After, 3 slots</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Refresh, median</th><td class="num">474 ms</td><td class="num">76.2 ms</td><td class="num">12.2 ms</td><td class="num">7.6 ms</td></tr>
+          <tr><th scope="row">Refresh, 95th percentile</th><td class="num">4,966 ms</td><td class="num">216 ms</td><td class="num">41.8 ms</td><td class="num">13.5 ms</td></tr>
+          <tr><th scope="row">Single sign-on hop, median</th><td class="num">649 ms</td><td class="num">139 ms</td><td class="num">18.4 ms</td><td class="num">10.7 ms</td></tr>
+          <tr><th scope="row">UserInfo, median</th><td class="num">214 ms</td><td class="num">28.7 ms</td><td class="num">2.8 ms</td><td class="num">1.2 ms</td></tr>
+          <tr><th scope="row">Operations completed per second (200 requested)</th><td class="num">71</td><td class="num">200</td><td class="num">200</td><td class="num">200</td></tr>
+          <tr><th scope="row">Failures among those 1,000 users</th><td class="num">2</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+          <tr><th scope="row">Storm sign-ins per second</th><td class="num">60</td><td class="num">182</td><td class="num">163</td><td class="num">112</td></tr>
+          <tr><th scope="row">Storm sign-ins that failed</th><td class="num">6</td><td class="num">0</td><td class="num">0</td><td class="num">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub">5. Two instances behind one address</h3>
+    <p class="note">Two provider processes on one PostgreSQL database, each with its own data-protection key folder as two
+      machines would have, and every request sent to the next instance in turn.</p>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Measure</th><th>Before</th><th>After</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Sign-ins that succeeded</th><td class="num">97 of 400</td><td class="num">3,000 of 3,000</td><td><span class="delta good">fixed</span></td></tr>
+          <tr><th scope="row">Sign-ins refused with HTTP 400</th><td class="num">303</td><td class="num">0</td><td></td></tr>
+          <tr><th scope="row">Requests per second, steady mix, both instances</th><td class="num">not comparable</td><td class="num">2,130</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub">6. Other databases: 2,000 users, 32 at once</h3>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Measure</th><th>Before</th><th>After</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">MySQL 8.4: sign-ins per second</th><td class="num">73</td><td class="num">129</td><td><span class="delta good">1.8×</span></td></tr>
+          <tr><th scope="row">MySQL 8.4: requests per second</th><td class="num">297</td><td class="num">1,309</td><td><span class="delta good">4.4×</span></td></tr>
+          <tr><th scope="row">MySQL 8.4: refresh, median</th><td class="num">159 ms</td><td class="num">32.7 ms</td><td><span class="delta good">4.9× lower</span></td></tr>
+          <tr><th scope="row">SQLite: sign-ins per second</th><td class="num">87</td><td class="num">126</td><td><span class="delta good">1.4×</span></td></tr>
+          <tr><th scope="row">SQLite: requests per second</th><td class="num">448</td><td class="num">1,424</td><td><span class="delta good">3.2×</span></td></tr>
+          <tr><th scope="row">SQLite: refresh, median</th><td class="num">70.9 ms</td><td class="num">2.2 ms</td><td><span class="delta good">32× lower</span></td></tr>
+          <tr><th scope="row">SQLite: refresh, 95th percentile</th><td class="num">351 ms</td><td class="num">157 ms</td><td><span class="delta good">2.2× lower</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Both databases were created by version 2.3.0 with the 30,000 accounts in place and upgraded by the new
+      build on its first start, which is how an existing deployment meets it. SQLite's slow tail is its single
+      writer: it remains a database for one small instance.</p>
+
+    <h3 class="sub">7. With the audit trace switched on: 3,000 users, 64 at once</h3>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Measure</th><th>Before</th><th>After</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Sign-ins per second</th><td class="num">88</td><td class="num">154</td><td><span class="delta good">1.8×</span></td></tr>
+          <tr><th scope="row">Requests per second, steady mix</th><td class="num">350</td><td class="num">2,194</td><td><span class="delta good">6.3×</span></td></tr>
+          <tr><th scope="row">Audit rows written</th><td class="num">15,076</td><td class="num">46,609</td><td><span class="delta good">3.1×</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">The audit trail used to be written one row at a time on the request's own thread. It is now written in
+      batches in the background; the row counts differ only because the faster build did more work in the same time.</p>
+
+    <h3 class="sub">8. Everything together, at one-third scale: TLS, a load balancer, two instances and a database a network hop away</h3>
+    <p class="note">The tests above isolate one thing each. This one puts everything together. Two provider instances serve HTTPS
+      behind an nginx load balancer; the database answers with 1&nbsp;ms of added network delay each way; the audit trace is on.
+      10,000 people arrive at 50 a second while those already in keep working, each as busy as in the 30,000-user
+      tests (133 operations a second with everyone in). The work now includes pushed authorization requests, the device flow,
+      sign-out with back-channel logout to the application, and the legacy v1 flow. Sessions last four minutes, so the first
+      arrivals' sessions run out before the end and those people sign in again; the purge runs every minute. Each instance
+      may hash three passwords at once.</p>
+    <p class="note"><b>Why one-third scale.</b> This topology was first run with all 30,000 users. That run is not reported:
+      the load balancer in the test rig began refusing connections in the third minute (its upstream list included an
+      address nothing listened on, and it takes an instance out of rotation after one failed connection), and the
+      laptop, hosting two instances, the database, the load balancer and a TLS load generator on ten cores, did not
+      recover its footing afterwards. 29,056 of the 30,000 people had still signed in by the fifth minute, the 1,155
+      failed requests were refused by the load balancer, and the provider logged no errors. The laptop was on battery
+      with too little left to repeat it at full size, so the corrected rig was run at a size the machine can host. The full-size evidence is in sections 1 to 4; this section
+      shows the same build behaving correctly in a production-shaped deployment.</p>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Outcome</th><th>Measured</th><th></th><th></th></tr></thead>
+        <tbody>
+          <tr><th scope="row">People signed in</th><td class="num">10,000 of 10,000</td><td></td><td></td></tr>
+          <tr><th scope="row">Requests served</th><td class="num">119,184</td><td></td><td></td></tr>
+          <tr><th scope="row">Requests that failed</th><td class="num">0</td><td></td><td></td></tr>
+          <tr><th scope="row">Operations the generator had to drop for lack of capacity</th><td class="num">28</td><td></td><td></td></tr>
+          <tr><th scope="row">Sign-ins repeated after a session ran out</th><td class="num">4,432</td><td></td><td></td></tr>
+          <tr><th scope="row">Back-channel logout tokens delivered to the application</th><td class="num">739</td><td></td><td></td></tr>
+          <tr><th scope="row">Expired sessions still in the database at the end</th><td class="num">68</td><td></td><td></td></tr>
+          <tr><th scope="row">Refresh tokens left behind by purged sessions</th><td class="num">0</td><td></td><td></td></tr>
+          <tr><th scope="row">Audit rows written, of which errors</th><td class="num">80,229, 0</td><td></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Operation, over the whole run</th><th>Count</th><th>Median</th><th>95th percentile</th><th>99th percentile</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">First sign-in (page, form, consent, token)</th><td class="num">10,000</td><td class="num">74.2 ms</td><td class="num">1,421 ms</td><td class="num">5,972 ms</td></tr>
+<tr><th scope="row">Sign-in again after a session ended</th><td class="num">5,271</td><td class="num">60.0 ms</td><td class="num">75.5 ms</td><td class="num">131 ms</td></tr>
+<tr><th scope="row">Token refresh</th><td class="num">12,713</td><td class="num">18.3 ms</td><td class="num">30.5 ms</td><td class="num">1,878 ms</td></tr>
+<tr><th scope="row">Single sign-on hop</th><td class="num">12,222</td><td class="num">27.8 ms</td><td class="num">47.4 ms</td><td class="num">3,346 ms</td></tr>
+<tr><th scope="row">UserInfo</th><td class="num">10,731</td><td class="num">3.0 ms</td><td class="num">8.7 ms</td><td class="num">1,969 ms</td></tr>
+<tr><th scope="row">Pushed authorization request, end to end</th><td class="num">1,884</td><td class="num">39.4 ms</td><td class="num">73.5 ms</td><td class="num">5,645 ms</td></tr>
+<tr><th scope="row">Device flow, end to end</th><td class="num">1,110</td><td class="num">40.6 ms</td><td class="num">63.8 ms</td><td class="num">3,838 ms</td></tr>
+<tr><th scope="row">Sign-out, back-channel logout delivered</th><td class="num">839</td><td class="num">18.9 ms</td><td class="num">30.7 ms</td><td class="num">858 ms</td></tr>
+<tr><th scope="row">Legacy v1 sign-in, end to end</th><td class="num">417</td><td class="num">67.8 ms</td><td class="num">107 ms</td><td class="num">1,283 ms</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Response times are higher than in the earlier sections because every database round trip now costs about
+      2&nbsp;ms on the wire and every request crosses the load balancer. That is the shape to expect in production.</p>
+    <p class="note"><b>One thing in this run is not explained.</b> The medians and 95th percentiles above are what a user
+      would see almost all the time, but the 99th percentiles are seconds, and they come from a single pause of about six
+      seconds in the third minute, while people were still arriving. It hit every kind of request at once, including pages
+      that never touch the database, produced no errors, and did not recur in the four minutes that followed. Nothing like
+      it appears in sections 1 to 4, where one instance carried more load over plain HTTP: there the slowest refresh of the
+      whole 30,000-user run took 30.6 ms. That points at something this rig adds — TLS
+      connection set-up on macOS, Docker's port forwarding, or the laptop itself at 12% battery — but it was not
+      established which, and until it is reproduced or ruled out on real hardware it should be treated as open.</p>
+    <h3 class="sub">Minute by minute</h3>
+    <p class="note">What matters over time is that nothing drifts: response times in the last minute should look like those in the
+      first. The pause shows in minute 3; the purge starts removing expired sessions from minute 5.</p>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Minute</th><th>Signed in</th><th>Operations/s</th><th>Refresh, median</th><th>Refresh, 95th</th><th>Sign-on hop, median</th><th>Sign-on hop, 95th</th><th>UserInfo, 95th</th><th>Errors</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">1</th><td class="num">2,996</td><td class="num">20</td><td class="num">19.3 ms</td><td class="num">259 ms</td><td class="num">28.5 ms</td><td class="num">781 ms</td><td class="num">127 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">2</th><td class="num">5,996</td><td class="num">60</td><td class="num">18.2 ms</td><td class="num">40.6 ms</td><td class="num">27.1 ms</td><td class="num">51.3 ms</td><td class="num">9.8 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">3</th><td class="num">8,996</td><td class="num">99</td><td class="num">18.6 ms</td><td class="num">3,140 ms</td><td class="num">27.5 ms</td><td class="num">4,161 ms</td><td class="num">2,772 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">4</th><td class="num">10,000</td><td class="num">131</td><td class="num">19.2 ms</td><td class="num">30.1 ms</td><td class="num">28.6 ms</td><td class="num">43.2 ms</td><td class="num">6.7 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">5</th><td class="num">10,000</td><td class="num">133</td><td class="num">18.6 ms</td><td class="num">25.9 ms</td><td class="num">28.2 ms</td><td class="num">38.2 ms</td><td class="num">5.9 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">6</th><td class="num">10,000</td><td class="num">133</td><td class="num">17.8 ms</td><td class="num">24.3 ms</td><td class="num">27.7 ms</td><td class="num">37.9 ms</td><td class="num">6.4 ms</td><td class="num">0</td></tr>
+<tr><th scope="row">7</th><td class="num">10,000</td><td class="num">133</td><td class="num">17.1 ms</td><td class="num">22.1 ms</td><td class="num">27.1 ms</td><td class="num">33.2 ms</td><td class="num">4.9 ms</td><td class="num">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tablewrap card">
+      <table class="matrix">
+        <thead><tr><th>Minute</th><th>Instance 1 memory</th><th>Instance 2 memory</th><th>Session rows</th><th>Live sessions</th><th>Refresh-token rows</th><th>Audit rows</th><th>Database connections</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">0</th><td class="num">83 MB</td><td class="num">84 MB</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">3</td></tr>
+<tr><th scope="row">1</th><td class="num">248 MB</td><td class="num">224 MB</td><td class="num">3,038</td><td class="num">3,017</td><td class="num">3,858</td><td class="num">10,226</td><td class="num">85</td></tr>
+<tr><th scope="row">2</th><td class="num">237 MB</td><td class="num">233 MB</td><td class="num">6,154</td><td class="num">6,062</td><td class="num">9,456</td><td class="num">22,873</td><td class="num">85</td></tr>
+<tr><th scope="row">3</th><td class="num">103 MB</td><td class="num">215 MB</td><td class="num">9,333</td><td class="num">9,127</td><td class="num">16,708</td><td class="num">37,683</td><td class="num">185</td></tr>
+<tr><th scope="row">4</th><td class="num">163 MB</td><td class="num">157 MB</td><td class="num">10,546</td><td class="num">10,153</td><td class="num">23,344</td><td class="num">48,390</td><td class="num">185</td></tr>
+<tr><th scope="row">5</th><td class="num">163 MB</td><td class="num">229 MB</td><td class="num">8,495</td><td class="num">8,059</td><td class="num">19,771</td><td class="num">57,474</td><td class="num">103</td></tr>
+<tr><th scope="row">6</th><td class="num">183 MB</td><td class="num">197 MB</td><td class="num">7,260</td><td class="num">6,898</td><td class="num">16,113</td><td class="num">68,423</td><td class="num">103</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </section>
+
+  <section id="changes">
+    <div class="section-head">
+      <h2>What changed</h2>
+      <p>Nothing a client application sees: endpoints, tokens, discovery and configuration are as in 2.3.0.</p>
+    </div>
+    <ul class="fixes">
+      <li class="card"><h3>Lookups use indexes</h3><p>Accounts, access mappings and lockout counters were found by comparing
+        lower-cased text, which no ordinary index can serve. They are now looked up by the stored value first, with an
+        index on the lower-cased form for anything stored in another case.</p></li>
+      <li class="card"><h3>Missing indexes are added to existing databases</h3><p>On its first start the new build creates the
+        indexes the session, refresh-token and purge paths need. It never adds a unique index and never fails start-up
+        over one.</p></li>
+      <li class="card"><h3>Client secrets are verified once, then remembered briefly</h3><p>Only a correct secret is remembered,
+        as a keyed digest held in memory for five minutes. A wrong secret costs what it always did, and replacing a
+        secret takes effect at once.</p></li>
+      <li class="card"><h3>Rarely changing rows are held for 30 seconds</h3><p>Tenants, clients, scopes and the signing key.
+        A change made on an instance applies there immediately and on the others within the 30 seconds. Nothing about a
+        user is held: accounts, access and sessions are read on every request.</p></li>
+      <li class="card"><h3>Signing keys are loaded once</h3><p>Each token used to import the private key afresh, twice per
+        response, and never release it.</p></li>
+      <li class="card"><h3>Password hashing has a ceiling</h3><p>Half the cores by default. Sign-ins beyond that wait their
+        turn without holding a thread; after 20 seconds the page says the server is busy rather than hanging.</p></li>
+      <li class="card"><h3>One key ring for every instance</h3><p>The keys protecting the sign-in form and the console cookie
+        are kept in the provider's database on PostgreSQL and MySQL, so any instance can read what another wrote.</p></li>
+      <li class="card"><h3>Housekeeping keeps tables small</h3><p>The hourly purge now also removes refresh tokens whose
+        session has ended, and can trim the audit trail. Ending a session, a user or a client is one statement
+        instead of loading every row.</p></li>
+      <li class="card"><h3>Failed sign-ins are counted exactly</h3><p>Simultaneous wrong guesses at one account used to be
+        counted as one or two. Five at once are now counted as five, so the lockout engages when it should.</p></li>
+    </ul>
+  </section>
+
+  <section id="verified">
+    <div class="section-head">
+      <h2>Behaviour checked after the changes</h2>
+      <p>Speed that changes what the provider does would be a regression. The same 48 checks pass on PostgreSQL and on MySQL.</p>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Sign-in and sessions</h3>
+        <ul>
+          <li>Login identifiers match whatever their case.</li>
+          <li>Wrong password and unknown user give the same message.</li>
+          <li>Lockout after five failures, cleared by a good sign-in.</li>
+          <li>Single sign-on reuses the session, and refuses an application the user has no access to.</li>
+          <li>Sign-out ends the session and its refresh tokens.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Tokens, clients and operators</h3>
+        <ul>
+          <li>Refresh tokens rotate; replaying a spent one revokes the family.</li>
+          <li>A wrong client secret is refused; a new secret retires the old one on the next request.</li>
+          <li>Deactivating a user or a client takes effect on the next request.</li>
+          <li>A signing key rotated elsewhere is published at once and adopted within 30 seconds; older tokens still validate.</li>
+          <li>The audit trail is written, including error rows that were previously lost.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="operators">
+    <div class="section-head">
+      <h2>For operators</h2>
+    </div>
+    <article class="card callout">
+      <h3>To run 30,000 users</h3>
+      <ol>
+        <li>Use PostgreSQL or MySQL. SQLite is for a single small instance.</li>
+        <li>Upgrade and let the first start build its indexes. On a large database that start takes a little longer.</li>
+        <li>Run at least two instances for availability. They need the shared database and the same <code>BaseUrl</code>, nothing else; no session affinity.</li>
+        <li>Size for sign-in, the one expensive request: about 25 sign-ins a second per core given to hashing. 30,000 people arriving over fifteen minutes is 33 a second.</li>
+        <li>If <code>EnableLogTrace</code> stays on, set <code>Oidc:AuditRetentionDays</code>.</li>
+      </ol>
+    </article>
+    <div class="tablewrap card">
+      <table>
+        <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>DataProtectionKeys</code></td><td>auto</td><td>Keeps the key ring in the database on every provider but SQLite. <code>off</code> leaves it to the host.</td></tr>
+          <tr><td><code>Oidc:MaxConcurrentPasswordHashes</code></td><td>half the cores</td><td>Raise to sign people in faster at the expense of those already signed in.</td></tr>
+          <tr><td><code>Oidc:ReferenceCacheSeconds</code></td><td>30</td><td>How long another instance may take to see a change to a client, scope, tenant or key. 0 reads the database every time.</td></tr>
+          <tr><td><code>Oidc:ClientSecretCacheSeconds</code></td><td>300</td><td>How long a verified client secret is remembered. 0 hashes every time.</td></tr>
+          <tr><td><code>Oidc:AuditRetentionDays</code></td><td>0 (keep all)</td><td>Days of audit trail to keep.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">After the upgrade, operators sign in to the admin console once more, and a sign-in page left open across
+      the upgrade has to be reloaded. Users' single sign-on sessions are not affected.</p>
+  </section>
+
+  <section id="limits">
+    <div class="section-head">
+      <h2>What this test does not show</h2>
+    </div>
+    <div class="prose">
+      <p>Everything ran on one laptop. The combined run adds TLS, a load balancer, a second instance and network delay
+        to the database, but the instances, the database and the load generator still share ten cores, the
+        database serves nothing else, and that run is at one-third of the 30,000 users: the production-shaped
+        deployment has not been measured at full size. The longest run is seven minutes with sessions shortened to
+        match, which shows sessions expiring, people signing in again and the purge keeping up, but it is not a soak:
+        a leak that takes hours to show would not appear here. That run also contains one unexplained six-second
+        pause, described with its results. The laptop was on battery, which ruled out a longer or larger run, and
+        chasing the pause, on the day.
+        SQL Server was not tested. Treat the figures as evidence that the provider's own code is no longer the limit,
+        and run the same test, for a full day, on the hardware you deploy to; the generator and its instructions are
+        in <code>scripts/loadtest</code>.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>Measured on <time datetime="2026-11-21">21 November 2026</time> against a scratch provider and scratch databases.
+      Settings are documented under <a href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md#running-at-scale">Running at scale</a>.</p>
+    <p><a href="../index.html#reviews">← Back to all reports</a></p>
+  </footer>
+</main>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var save = function (v) { try { localStorage.setItem('ark-theme', v); } catch (e) {} };
+    document.getElementById('themeBtn').addEventListener('click', function () {
+      var dark = root.dataset.theme
+        ? root.dataset.theme === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.dataset.theme = dark ? 'light' : 'dark';
+      save(root.dataset.theme);
+    });
+  })();
+</script>
+</body>
+</html>

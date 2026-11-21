@@ -58,8 +58,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 });
             }
 
-            var client = await Ctx.clients.AsNoTracking().FirstOrDefaultAsync(c =>
-                c.tenant_id.ToLower() == tenant.tenant_id.ToLower() && c.client_id.ToLower() == client_id.ToLower());
+            var client = await FindClientAsync(tenant, client_id);
             if (client == null)
                 return View("~/Views/Oidc/Error.cshtml", new OidcErrorPageModel
                 {

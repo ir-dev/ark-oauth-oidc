@@ -87,6 +87,14 @@
         /// </summary>
         public int PasswordLinkLifetimeHours { get; set; } = 72;
         public bool EnableLogTrace { get; set; }
+        /// <summary>
+        /// Where the ASP.NET Core data-protection key ring is kept: <c>auto</c> (default),
+        /// <c>database</c> or <c>off</c>. In the database, every instance behind a load balancer
+        /// shares one ring, which is what lets a sign-in form drawn by one instance be accepted by
+        /// another; <c>auto</c> does that on every provider except SQLite. A host that configures
+        /// its own key storage always wins. See <see cref="ArkKeyRingConfigurator"/>.
+        /// </summary>
+        public string DataProtectionKeys { get; set; }
         public string BaseUrl { get; set; }
         public string CcList { get; set; }
         public string BccList { get; set; }

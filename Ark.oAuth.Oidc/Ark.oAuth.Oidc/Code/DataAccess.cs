@@ -22,10 +22,20 @@ namespace Ark.oAuth.Oidc
     {
         ArkDataContext _ctx;
         ArkUtil _util;
+        ArkAuditWriter? _audit;
         public DataAccess(ArkDataContext ctx, ArkUtil util)
         {
             _ctx = ctx;
             _util = util;
+        }
+        /// <summary>
+        /// The constructor the container uses: <paramref name="audit"/> takes the audit trail off
+        /// the request path (see <see cref="ArkAuditWriter"/>). Without it every row is written
+        /// inline, as it was.
+        /// </summary>
+        public DataAccess(ArkDataContext ctx, ArkUtil util, ArkAuditWriter audit) : this(ctx, util)
+        {
+            _audit = audit;
         }
         public ArkDataContext GetCtx()
         {
@@ -33,7 +43,11 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<ArkTenant?> GetTenant(string tenant_id)
         {
-            return await _ctx.tenants.FirstOrDefaultAsync(t => t.tenant_id.ToLower().Trim() == (tenant_id ?? "").ToLower().Trim());
+            // The id as stored first — an index lookup — and only then the forgiving comparison,
+            // which reads the table. Tracked, as before: callers go on to change what they get.
+            var id = (tenant_id ?? "").Trim();
+            return await _ctx.tenants.FirstOrDefaultAsync(t => t.tenant_id == id)
+                ?? await _ctx.tenants.FirstOrDefaultAsync(t => t.tenant_id.ToLower().Trim() == id.ToLower());
         }
         public async Task<List<ArkTenant>> GetTenants()
         {
@@ -41,7 +55,10 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<ArkClient?> GetClient(string tenant_id, string client_id) //cmposite key
         {
-            return await _ctx.clients.FirstOrDefaultAsync(t => t.tenant_id.ToLower().Trim() == (tenant_id ?? "").ToLower().Trim() &&  t.client_id.ToLower().Trim() == (client_id ?? "").ToLower().Trim());
+            var tenant = (tenant_id ?? "").Trim();
+            var client = (client_id ?? "").Trim();
+            return await _ctx.clients.FirstOrDefaultAsync(t => t.tenant_id == tenant && t.client_id == client)
+                ?? await _ctx.clients.FirstOrDefaultAsync(t => t.tenant_id.ToLower().Trim() == tenant.ToLower() && t.client_id.ToLower().Trim() == client.ToLower());
         }
         public async Task<ArkTenant> UpsertTenant(ArkTenant tenant)
         {
@@ -307,7 +324,7 @@ namespace Ark.oAuth.Oidc
         public async Task<dynamic> GetUserInfo(string email, string tenant_id, string client_id)
         {
             var cc = await GetClient(tenant_id, client_id);
-            var usr = await _ctx.users.FirstOrDefaultAsync(t => t.email.ToLower() == (email ?? "").ToLower());
+            var usr = await Protocol.ArkLookup.UserAsync(_ctx, email);
             var clms = await GetUsersClientClaims(email, tenant_id);
             return new
             {
@@ -323,8 +340,12 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<List<ArkUserClientClaim>> GetUsersClientClaims(string email, string tenatn_id)
         {
+            // lower(email) on its own, so the index ArkSchemaUpdater adds on that expression
+            // finds this person's rows; the tenant is then compared on those few.
+            var login = (email ?? "").ToLower();
+            var tenant = (tenatn_id ?? "").ToLower();
             return await _ctx.user_client_claims.Where(t1 =>
-                    (email ?? "").ToLower() == (t1.email ?? "").ToLower() && (tenatn_id ?? "").ToLower() == (t1.tenant_id ?? "").ToLower()).ToListAsync();
+                    t1.email.ToLower() == login && (t1.tenant_id ?? "").ToLower() == tenant).ToListAsync();
         }
         public async Task<ArkUserClientClaim> UpsertUsersClientClaims(ArkUserClientClaim us_cl)
         {
@@ -563,14 +584,21 @@ namespace Ark.oAuth.Oidc
         public async Task<ArkUser> ValidateUserCreds(string un, string pw, string client, string tenant_id)
         {
             var login_id = (un ?? "").ToLower().Trim();
-            var usr = _ctx.users.FirstOrDefault(t => (t.email ?? "").ToLower() == login_id);
-            var clnt = _ctx.clients.FirstOrDefault(t => (t.client_id ?? "").ToLower() == (client ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
+            // Three index lookups. These were three synchronous reads of whole tables — every
+            // account, then every access mapping — once per sign-in, on a request thread.
+            var usr = await Protocol.ArkLookup.UserAsync(_ctx, login_id);
+            var clnt = await Protocol.ArkIdpCache.ClientAsync(_ctx, tenant_id, client);
             var usr_cl_cl = usr == null || clnt == null ? null
-                : _ctx.user_client_claims.FirstOrDefault(t => (t.email ?? "").ToLower() == login_id && (t.client_id ?? "").ToLower() == (clnt.id ?? "").ToLower() && (t.tenant_id ?? "").ToLower() == (tenant_id ?? "").ToLower());
+                : await Protocol.ArkLookup.MappingAsync(_ctx, usr.email, clnt.tenant_id, clnt.id);
             // One hash on every path. Returning before it for an unknown account or a missing
             // mapping answered in a fraction of the time a wrong password took, which named the
             // accounts that exist even though the message is the same.
-            var verified = _util.VerifyPasswordPBKDF2(pw, usr_cl_cl != null ? usr!.hash_pw ?? "" : ArkUtil.DummyPasswordHash.Value);
+            //
+            // Through the gate: this is the expensive step of a sign-in, and a few hundred of them
+            // arriving together must not take every thread the server has (ArkHashGate).
+            Protocol.ArkHashGate.Configure(_util.ServerConfig.Oidc?.MaxConcurrentPasswordHashes ?? 0);
+            var stored = usr_cl_cl != null ? usr!.hash_pw ?? "" : ArkUtil.DummyPasswordHash.Value;
+            var verified = await Protocol.ArkHashGate.RunAsync(() => _util.VerifyPasswordPBKDF2(pw, stored));
             // Every failure counts towards the lockout, not only a wrong password for an account
             // that exists and is mapped. Counting only those made the lockout message itself the
             // account oracle the single error message exists to prevent: ten bad tries named a
@@ -659,27 +687,22 @@ namespace Ark.oAuth.Oidc
         async Task RevokeAccessForSubject(string subject)
         {
             _ctx.ChangeTracker.Clear();
-            var sessions = await _ctx.sessions.Where(s => s.subject == subject && !s.revoked).ToListAsync();
-            foreach (var s in sessions) s.revoked = true;
-            if (sessions.Count > 0) _ctx.sessions.UpdateRange(sessions);
-
-            var tokens = await _ctx.refresh_tokens.Where(t => t.subject == subject && !t.revoked).ToListAsync();
-            foreach (var t in tokens) t.revoked = true;
-            if (tokens.Count > 0) _ctx.refresh_tokens.UpdateRange(tokens);
-
-            if (sessions.Count > 0 || tokens.Count > 0) await _ctx.SaveChangesAsync();
+            // Two UPDATEs, each by an index on subject. Loading the rows first to flip a flag on
+            // each is what this did, and one account's rotated tokens run to hundreds of rows.
+            await _ctx.sessions.Where(s => s.subject == subject && !s.revoked)
+                .ExecuteUpdateAsync(u => u.SetProperty(s => s.revoked, true));
+            await _ctx.refresh_tokens.Where(t => t.subject == subject && !t.revoked)
+                .ExecuteUpdateAsync(u => u.SetProperty(t => t.revoked, true));
         }
         /// <summary>Revokes every live refresh token issued to one client.</summary>
         async Task RevokeRefreshTokensForClient(string tenant_id, string client_id)
         {
             _ctx.ChangeTracker.Clear();
-            var tokens = await _ctx.refresh_tokens
+            // One UPDATE. Deactivating an application everybody uses would otherwise pull a row
+            // per signed-in user, per refresh, into memory to write each one back.
+            await _ctx.refresh_tokens
                 .Where(t => t.tenant_id == tenant_id && t.client_id == client_id && !t.revoked)
-                .ToListAsync();
-            if (tokens.Count == 0) return;
-            foreach (var t in tokens) t.revoked = true;
-            _ctx.refresh_tokens.UpdateRange(tokens);
-            await _ctx.SaveChangesAsync();
+                .ExecuteUpdateAsync(u => u.SetProperty(t => t.revoked, true));
         }
         public async Task<PkceCodeFlow?> GetPkceCode(string code, bool invalidate = false)
         {
@@ -726,7 +749,7 @@ namespace Ark.oAuth.Oidc
             try
             {
                 if (!_util.IsTraceEnabled) return;
-                _ctx.audit_trace.Add(new ArkAudit()
+                var row = new ArkAudit()
                 {
                     ref_key = ref_key,
                     ref_val = ref_val,
@@ -736,7 +759,10 @@ namespace Ark.oAuth.Oidc
                     by = "ark_admin",
                     ip = "",
                     at = DateTime.UtcNow
-                });
+                };
+                // Queued and written in batches off the request path when the writer is running.
+                if (_audit != null && _audit.TryEnqueue(row)) return;
+                _ctx.audit_trace.Add(row);
                 _ctx.SaveChanges();
             }
             catch (Exception ex)
@@ -778,7 +804,7 @@ namespace Ark.oAuth.Oidc
         {
             try
             {
-                _ctx.audit_trace.Add(new ArkAudit()
+                var row = new ArkAudit()
                 {
                     ref_key = ref_key,
                     ref_val = ref_val,
@@ -788,8 +814,12 @@ namespace Ark.oAuth.Oidc
                     by = "ark_admin",
                     ip = "",
                     at = DateTime.UtcNow
-                });
+                };
+                if (_audit != null && _audit.TryEnqueue(row)) return;
+                // Cleared first, then added. It was the other way round, which threw the error row
+                // away with everything else in the tracker: no error was ever written.
                 _ctx.ChangeTracker.Clear();
+                _ctx.audit_trace.Add(row);
                 _ctx.SaveChanges();
             }
             catch (Exception ex)
@@ -797,30 +827,64 @@ namespace Ark.oAuth.Oidc
                 Console.WriteLine(ex.ToString());
             }
         }
+        /// <summary>The failed-sign-in counter for a login id, or null when it has never failed.</summary>
+        public async Task<ArkAuthStatusTrace?> GetAuthStatus(string? email)
+        {
+            var login = (email ?? "").ToLower().Trim();
+            if (login.Length == 0) return null;
+            // Written lower-case and trimmed by UpdateStatus, so the unique index answers this.
+            return await _ctx.auth_status.AsNoTracking().FirstOrDefaultAsync(s => s.email == login);
+        }
+
+        /// <summary>
+        /// Counts a failed sign-in ("increment") or clears the count after a good one ("reset").
+        ///
+        /// Each is one statement the database applies atomically. The count used to be read,
+        /// changed in memory and written back, so a burst of concurrent guesses at one account —
+        /// which is what a password-guessing run is — all read the same number and the lockout
+        /// counted a fraction of them. And a successful sign-in used to insert or rewrite a row
+        /// for every user every time; now it touches nothing unless there is a count to clear.
+        /// </summary>
         public async Task UpdateStatus(string email, string retry = "reset")
         {
             try
             {
-                var tt = await _ctx.auth_status.FirstOrDefaultAsync(t => (t.email ?? "").ToLower().Trim() == (email ?? "").ToLower().Trim());
-                var rtt = (tt?.retry_count ?? 0);
-                var retry_cnt = retry == "reset" ? 0 : retry == "increment" ? ++rtt : 0;
-                if (tt == null)
-                    _ctx.auth_status.Add(new ArkAuthStatusTrace()
-                    {
-                        email = email,
-                        retry_count = retry_cnt,
-                        complex_policy = true,
-                        ip = "IP",
-                        at = DateTime.UtcNow
-                    });
-                else
+                var login = (email ?? "").ToLower().Trim();
+                if (login.Length == 0) return;
+                var now = DateTime.UtcNow;
+
+                if (retry != "increment")
                 {
-                    _ctx.ChangeTracker.Clear();
-                    tt.retry_count = retry_cnt;
-                    tt.at = DateTime.UtcNow;
-                    _ctx.auth_status.Update(tt);
+                    await _ctx.auth_status.Where(t => t.email == login && t.retry_count != 0)
+                        .ExecuteUpdateAsync(s => s.SetProperty(t => t.retry_count, 0).SetProperty(t => t.at, now));
+                    return;
                 }
-                _ctx.SaveChanges();
+
+                var counted = await _ctx.auth_status.Where(t => t.email == login)
+                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.retry_count, t => t.retry_count + 1).SetProperty(t => t.at, now));
+                if (counted > 0) return;
+
+                var first = new ArkAuthStatusTrace()
+                {
+                    email = login,
+                    retry_count = 1,
+                    complex_policy = true,
+                    ip = "IP",
+                    at = now
+                };
+                _ctx.auth_status.Add(first);
+                try
+                {
+                    await _ctx.SaveChangesAsync();
+                }
+                catch (DbUpdateException)
+                {
+                    // Two first failures for one login raced and the other insert won (email is
+                    // unique). Count this one against the row that is now there.
+                    _ctx.Entry(first).State = EntityState.Detached;
+                    await _ctx.auth_status.Where(t => t.email == login)
+                        .ExecuteUpdateAsync(s => s.SetProperty(t => t.retry_count, t => t.retry_count + 1).SetProperty(t => t.at, now));
+                }
             }
             catch (Exception ex)
             {

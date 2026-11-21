@@ -86,6 +86,11 @@ namespace Ark.oAuth
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     [Index(nameof(family_id))]
     [Index(nameof(subject), nameof(client_id))]
+    // Ending a session revokes its tokens by session_id, and the hourly purge deletes by
+    // expires_at. Rotation adds a row per refresh, so this is the largest table the server keeps;
+    // without these two, every sign-out and every purge read all of it.
+    [Index(nameof(session_id))]
+    [Index(nameof(expires_at))]
     public class ArkRefreshToken
     {
         [Key]
@@ -105,6 +110,7 @@ namespace Ark.oAuth
     /// <summary>Device authorization grant state (RFC 8628).</summary>
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     [Index(nameof(user_code), IsUnique = true)]
+    [Index(nameof(expires_at))]
     public class ArkDeviceCode
     {
         [Key]
@@ -126,6 +132,7 @@ namespace Ark.oAuth
 
     /// <summary>A pushed authorization request (RFC 9126). Holds the parameter set until /authorize claims it.</summary>
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    [Index(nameof(expires_at))]
     public class ArkParRequest
     {
         [Key]
@@ -145,6 +152,7 @@ namespace Ark.oAuth
     /// a captured assertion be replayed against any other instance behind the load balancer.
     /// </summary>
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    [Index(nameof(expires_at))]
     public class ArkUsedAssertion
     {
         /// <summary>SHA-256 of <c>{client_id}:{jti}</c> — fixed length whatever the client sends.</summary>
@@ -184,6 +192,7 @@ namespace Ark.oAuth
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     [Index(nameof(subject))]
     [Index(nameof(browser_id))]
+    [Index(nameof(expires_at))]
     public class ArkSession
     {
         /// <summary>
@@ -254,6 +263,28 @@ namespace Ark.oAuth
         public DateTime created_at { get; set; } = DateTime.UtcNow;
 
         public static string KeyFor(string sessionId, string clientId) => $"{sessionId}.{clientId}";
+    }
+
+    /// <summary>
+    /// One key of the ASP.NET Core data-protection key ring, kept in the server's own database.
+    ///
+    /// The sign-in form's anti-forgery token and the admin console's cookie are both protected
+    /// with that key ring. By default it lives in a folder on the machine, so a second instance
+    /// behind the load balancer has a different one: the sign-in page is drawn by one instance,
+    /// posted to the other, and refused. The database is the one store every instance already
+    /// shares, so keeping the ring here is what lets the server run on more than one machine with
+    /// no further configuration — see <c>ark_oauth_server:DataProtectionKeys</c>.
+    ///
+    /// Each row is the XML element data protection hands to its repository, stored as given.
+    /// </summary>
+    [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    public class ArkDataProtectionKey
+    {
+        [Key]
+        public string id { get; set; } = default!;
+        public string? friendly_name { get; set; }
+        public string xml { get; set; } = default!;
+        public DateTime created_at { get; set; } = DateTime.UtcNow;
     }
 
     /// <summary>

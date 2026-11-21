@@ -347,6 +347,10 @@ namespace Ark.oAuth.Oidc
             var list = new List<TableMeta>();
             foreach (var et in _ctx.Model.GetEntityTypes().Where(e => !e.IsOwned() && e.GetTableName() != null))
             {
+                // The data-protection key ring belongs to the running deployment, not to its data:
+                // exporting it would put the keys behind every console cookie into a file, and a
+                // reset or a replace-import that emptied it would sign every operator out mid-way.
+                if (et.ClrType == typeof(ArkDataProtectionKey)) continue;
                 var name = et.GetTableName()!;
                 var pk = et.FindPrimaryKey();
                 if (pk == null) continue;
@@ -430,6 +434,14 @@ namespace Ark.oAuth.Oidc
                 .MakeGenericMethod(t.Clr).Invoke(this, null)!;
 
         int DeleteAllOf<T>() where T : class => _ctx.Set<T>().ExecuteDelete();
+
+        /// <summary>
+        /// The bulk deletes above go round the change tracker, which is what tells
+        /// <see cref="Protocol.ArkIdpCache"/> that a tenant, client, scope or key changed. Called
+        /// once the transaction is committed: any earlier and a request could refill the cache
+        /// from the rows the transaction is about to replace.
+        /// </summary>
+        static void ForgetCachedRows() => Protocol.ArkIdpCache.Reset();
 
         int Count(TableMeta t) =>
             (int)GetType().GetMethod(nameof(CountOf), BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -1496,6 +1508,7 @@ namespace Ark.oAuth.Oidc
                 // add this server's, and the scopes and machine client a file may lack.
                 ArkExtn.Reconcile(_services);
                 tx.Commit();
+                ForgetCachedRows();
             }
             _ctx.ChangeTracker.Clear();
 
@@ -1610,6 +1623,7 @@ namespace Ark.oAuth.Oidc
                 _ctx.ChangeTracker.Clear();
                 ArkExtn.Reconcile(_services);
                 await tx.CommitAsync();
+                ForgetCachedRows();
             }
             _ctx.ChangeTracker.Clear();
 

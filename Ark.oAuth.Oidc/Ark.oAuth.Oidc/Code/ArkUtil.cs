@@ -29,7 +29,7 @@ namespace Ark.oAuth
         // with nothing configured is configured later, by the setup wizard, without a restart:
         // a copy taken at construction would keep the empty one for the life of the process.
         private ArkAuthServerConfig _ser =>
-            _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
 
         private ark.net.util.EmailUtil _email
         {

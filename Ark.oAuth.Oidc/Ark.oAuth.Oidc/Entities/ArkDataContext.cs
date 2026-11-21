@@ -25,6 +25,8 @@ namespace Ark.oAuth.Oidc
         public virtual DbSet<ArkSession> sessions { get; set; }
         public virtual DbSet<ArkSessionClient> session_clients { get; set; }
         public virtual DbSet<ArkScope> scopes { get; set; }
+        /// <summary>The ASP.NET Core data-protection key ring, when it is kept here — see <see cref="ArkDataProtectionKey"/>.</summary>
+        public virtual DbSet<ArkDataProtectionKey> data_protection_keys { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -49,7 +51,7 @@ namespace Ark.oAuth.Oidc
             // A context built with explicit options keeps them — the setup wizard tests a
             // connection string before it is anybody's configuration.
             if (options.IsConfigured) return;
-            var ser = _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? throw new ApplicationException("server config missing");
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
             if (string.IsNullOrEmpty(ser.Provider) || ser.Provider.ToLower() == "sqlite")
                 options.UseSqlite(_config.GetConnectionString("ArkAuthConnection"));
             else if (ser.Provider.ToLower() == "mysql")
@@ -65,5 +67,45 @@ namespace Ark.oAuth.Oidc
             _config = config;
         }
         IConfiguration _config;
+
+        /// <summary>The configuration this context was built with.</summary>
+        internal IConfiguration Configuration => _config;
+
+        /// <summary>Which database this context is on; part of every <see cref="Protocol.ArkIdpCache"/> key.</summary>
+        internal string CacheScope => _cacheScope ??= Database.GetConnectionString() ?? "";
+        string? _cacheScope;
+
+        // ------------------------------------------------------------------
+        // Tenants, clients, scopes and signing keys are answered from ArkIdpCache. Whatever writes
+        // one of them — the console, provisioning, dynamic registration, key rotation, an import —
+        // comes through one of these two methods, so this is the one place that can promise a
+        // write on this instance is visible to the very next request.
+        // ------------------------------------------------------------------
+
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            var cached = TouchesCachedRows();
+            var written = base.SaveChanges(acceptAllChangesOnSuccess);
+            if (cached) Protocol.ArkIdpCache.Reset();
+            return written;
+        }
+
+        public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        {
+            var cached = TouchesCachedRows();
+            var written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+            if (cached) Protocol.ArkIdpCache.Reset();
+            return written;
+        }
+
+        private bool TouchesCachedRows()
+        {
+            foreach (var entry in ChangeTracker.Entries())
+            {
+                if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted)) continue;
+                if (entry.Entity is ArkTenant or ArkClient or ArkScope or ArkSigningKey) return true;
+            }
+            return false;
+        }
     }
 }

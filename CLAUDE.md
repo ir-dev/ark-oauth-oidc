@@ -84,6 +84,14 @@ These apply in every language and are the source of most "it just says the passw
   In a container, point `Setup:DataPath` at persistent storage before the first start (App Service:
   under `/home`), and read the setup code from the container log: nothing there is loopback.
   Wizard code: `Code/ArkSetup.cs`, `Code/ArkIdpHosting.cs`, `wwwroot/setup/`.
+* **A second IdP instance needs PostgreSQL or MySQL and nothing else.** The data-protection key
+  ring (sign-in form anti-forgery token, console cookie) is kept in the IdP's own database unless the
+  provider is SQLite or the host configured its own store (`ark_oauth_server:DataProtectionKeys`).
+  Before that, a form drawn by one instance was refused by the next with a bare 400.
+* **Look users and access mappings up through `ArkLookup`, never with `x.ToLower() == y.ToLower()`.**
+  That comparison reads the whole table; with 30,000 accounts it was most of the server's load.
+  Tenants, clients, scopes and the signing key come from `ArkIdpCache` (30 s, reset on any save that
+  touches them); nothing about a user is ever cached.
 * **.NET only:** keep the `Microsoft.IdentityModel.*` package graph on one version. A mixed graph
   fails only at runtime, on the first challenge, with a message that names none of this.
 * **Python only:** `ArkClientCredentials` always authenticates with `client_secret_post`. The server
@@ -115,4 +123,8 @@ These apply in every language and are the source of most "it just says the passw
   that mirrors the real server's wire behaviour — prefer it to a live server when changing a client.
   **The .NET side has no automated tests**, so `dotnet test` finds nothing. Verify .NET changes
   against a running `Ark.oAuth.Oidc.Host`.
+* **Load test:** `scripts/loadtest` (seed + generator) against a scratch host and database, never a
+  real one. Results are published as a dated page under `site/performance/`. On a laptop, wrap a
+  long run in `caffeinate -dimsu`: on battery the machine sleeps after a minute idle and the run
+  reports a stall that never happened.
 * Getting started end to end, including running the IdP locally: `GETTINGSTARTED.md`.

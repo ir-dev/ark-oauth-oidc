@@ -21,6 +21,34 @@ namespace Ark.oAuth.Oidc.Protocol
             _ctx = ctx;
         }
 
+        // One request asks about the same account and the same access mapping several times over —
+        // a refresh checks the account is active, checks it still has access, reads its claims
+        // for the access token and its profile for the ID token. This service lives for one
+        // request, so what it has already read it does not read again. Only rows that were found
+        // are remembered, and nothing outlives the request: the next one reads the database.
+        private readonly Dictionary<string, ArkUser> _users = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, ArkUserClientClaim> _mappings = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The account behind a login id or token subject, or null. Read once per request.</summary>
+        public async Task<ArkUser?> FindUserAsync(string? subject)
+        {
+            var key = (subject ?? "").Trim();
+            if (key.Length == 0) return null;
+            if (_users.TryGetValue(key, out var held)) return held;
+            var user = await ArkLookup.UserAsync(_ctx, key);
+            if (user != null) _users[key] = user;
+            return user;
+        }
+
+        private async Task<ArkUserClientClaim?> FindMappingAsync(string? subject, string? tenantId, ArkClient client)
+        {
+            var key = $"{(subject ?? "").Trim()}\n{tenantId}\n{client.id}";
+            if (_mappings.TryGetValue(key, out var held)) return held;
+            var mapping = await ArkLookup.MappingAsync(_ctx, subject, tenantId, client.id);
+            if (mapping != null) _mappings[key] = mapping;
+            return mapping;
+        }
+
         /// <summary>The OIDC standard scope-to-claim mapping (OIDC Core §5.4).</summary>
         public static readonly IReadOnlyDictionary<string, string[]> StandardScopeClaims =
             new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
@@ -40,16 +68,18 @@ namespace Ark.oAuth.Oidc.Protocol
         public async Task<Dictionary<string, object>> GetIdentityClaimsAsync(string subject, List<string> scopes)
         {
             var result = new Dictionary<string, object>();
-            var user = await _ctx.users.AsNoTracking().FirstOrDefaultAsync(u => u.email.ToLower() == (subject ?? "").ToLower());
+            var user = await FindUserAsync(subject);
             if (user == null) return result;
 
+            // One read of the catalogue (cached) instead of a query per granted scope.
+            var catalogue = await ArkIdpCache.ScopesAsync(_ctx);
             var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var scope in scopes)
             {
                 if (StandardScopeClaims.TryGetValue(scope, out var std))
                     foreach (var c in std) allowed.Add(c);
 
-                var custom = await _ctx.scopes.AsNoTracking().FirstOrDefaultAsync(s => s.name == scope);
+                var custom = catalogue.FirstOrDefault(s => s.name == scope);
                 if (custom != null)
                     foreach (var c in custom.claims) allowed.Add(c);
             }
@@ -79,10 +109,7 @@ namespace Ark.oAuth.Oidc.Protocol
         /// <summary>The tenant's per-user-per-client authorization claim strings.</summary>
         public async Task<List<string>> GetAuthorizationClaimsAsync(string subject, string tenantId, ArkClient client)
         {
-            var mapping = await _ctx.user_client_claims.AsNoTracking().FirstOrDefaultAsync(m =>
-                (m.email ?? "").ToLower() == (subject ?? "").ToLower() &&
-                (m.tenant_id ?? "").ToLower() == (tenantId ?? "").ToLower() &&
-                (m.client_id ?? "").ToLower() == (client.id ?? "").ToLower());
+            var mapping = await FindMappingAsync(subject, tenantId, client);
             return mapping?.claims ?? new List<string>();
         }
 
@@ -92,10 +119,7 @@ namespace Ark.oAuth.Oidc.Protocol
         /// </summary>
         public async Task<bool> HasClientAccessAsync(string subject, string tenantId, ArkClient client)
         {
-            return await _ctx.user_client_claims.AsNoTracking().AnyAsync(m =>
-                (m.email ?? "").ToLower() == (subject ?? "").ToLower() &&
-                (m.tenant_id ?? "").ToLower() == (tenantId ?? "").ToLower() &&
-                (m.client_id ?? "").ToLower() == (client.id ?? "").ToLower());
+            return await FindMappingAsync(subject, tenantId, client) != null;
         }
 
         /// <summary>
@@ -105,7 +129,7 @@ namespace Ark.oAuth.Oidc.Protocol
         /// </summary>
         public async Task<List<string>> ResolveScopesAsync(string? requested, ArkClient client)
         {
-            var known = await _ctx.scopes.AsNoTracking().ToListAsync();
+            var known = await ArkIdpCache.ScopesAsync(_ctx);
             var clientScopes = new HashSet<string>(client.EffectiveScopes, StringComparer.OrdinalIgnoreCase);
 
             var requestedList = (requested ?? "")
@@ -131,7 +155,7 @@ namespace Ark.oAuth.Oidc.Protocol
         /// <summary>Scopes advertised in discovery.</summary>
         public async Task<List<string>> GetSupportedScopesAsync()
         {
-            var known = await _ctx.scopes.AsNoTracking().Select(s => s.name).ToListAsync();
+            var known = (await ArkIdpCache.ScopesAsync(_ctx)).Select(s => s.name).ToList();
             return known.Count > 0 ? known : DefaultScopes().Select(s => s.name).ToList();
         }
 
@@ -144,7 +168,7 @@ namespace Ark.oAuth.Oidc.Protocol
             };
             foreach (var set in StandardScopeClaims.Values)
                 foreach (var c in set) claims.Add(c);
-            foreach (var s in await _ctx.scopes.AsNoTracking().ToListAsync())
+            foreach (var s in await ArkIdpCache.ScopesAsync(_ctx))
                 foreach (var c in s.claims) claims.Add(c);
             return claims.ToList();
         }

@@ -326,9 +326,7 @@ namespace Ark.oAuth.Oidc.Endpoints
 
             if (!string.IsNullOrEmpty(postLogoutRedirectUri))
             {
-                var client = await Ctx.clients.AsNoTracking().FirstOrDefaultAsync(c =>
-                    c.tenant_id.ToLower() == tenant.tenant_id.ToLower() &&
-                    c.client_id.ToLower() == (clientId ?? "").ToLower());
+                var client = await FindClientAsync(tenant, (clientId ?? ""));
 
                 // Only redirect to a URI the client registered — otherwise this is an open redirect.
                 if (client != null && RedirectUriValidator.Matches(client.EffectivePostLogoutRedirectUris, postLogoutRedirectUri!)

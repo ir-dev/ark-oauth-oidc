@@ -22,8 +22,9 @@ namespace Ark.oAuth.Oidc.Endpoints
             Config = config;
         }
 
+        // Bound once per configuration reload, not once per read: see ArkConfigSnapshot.
         protected ArkAuthServerConfig ServerConfig =>
-            Config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>()
+            ArkConfigSnapshot.Server(Config)
             ?? throw new ApplicationException("the 'ark_oauth_server' configuration section is missing.");
 
         protected ArkOidcOptions Options => ServerConfig.Oidc ?? new ArkOidcOptions();
@@ -33,8 +34,7 @@ namespace Ark.oAuth.Oidc.Endpoints
 
         protected async Task<ArkTenant> ResolveTenantAsync(string tenantId)
         {
-            var tenant = await Ctx.tenants.AsNoTracking()
-                .FirstOrDefaultAsync(t => t.tenant_id.ToLower() == (tenantId ?? "").ToLower());
+            var tenant = await ArkIdpCache.TenantAsync(Ctx, tenantId);
             if (tenant == null)
                 throw OAuthException.InvalidRequest($"unknown tenant '{tenantId}'.");
             return tenant;
@@ -68,6 +68,13 @@ namespace Ark.oAuth.Oidc.Endpoints
                 return OAuthError(OAuthException.ServerError("the authorization server encountered an unexpected condition."));
             }
         }
+
+        /// <summary>
+        /// A client of this tenant by client_id, case-insensitively, or null. Shared with other
+        /// requests and not tracked — see <see cref="ArkIdpCache"/>.
+        /// </summary>
+        protected Task<ArkClient?> FindClientAsync(ArkTenant tenant, string? clientId) =>
+            ArkIdpCache.ClientAsync(Ctx, tenant.tenant_id, clientId);
 
         protected void NoStore()
         {

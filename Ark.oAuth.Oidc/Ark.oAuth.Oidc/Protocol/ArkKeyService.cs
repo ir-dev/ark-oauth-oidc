@@ -27,10 +27,14 @@ namespace Ark.oAuth.Oidc.Protocol
         /// </summary>
         public async Task<ArkSigningKey> GetActiveKeyAsync(string tenantId)
         {
-            var key = await _ctx.signing_keys
+            // Read for every token signed, and changed only by a rotation — which resets the
+            // cache on this instance, and which every other instance picks up within the cache's
+            // time-to-live. Until it does, that instance goes on signing with the previous key,
+            // which rotation leaves published, so those tokens verify all the same.
+            var key = await ArkIdpCache.GetOrLoadAsync(_ctx, "active-key", tenantId, () => _ctx.signing_keys.AsNoTracking()
                 .Where(k => k.tenant_id == tenantId && k.status == "active")
                 .OrderByDescending(k => k.created_at)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync());
             if (key != null) return key;
 
             var tenant = await _ctx.tenants.FirstOrDefaultAsync(t => t.tenant_id == tenantId)
@@ -76,13 +80,36 @@ namespace Ark.oAuth.Oidc.Protocol
         }
 
         /// <summary>Every key that should appear in JWKS: the signing key plus any still in rollover.</summary>
+        /// <remarks>
+        /// Always read from the database. This is what /jwks.json serves, and a client that has
+        /// just met a key id it does not know fetches it precisely to find the newest key —
+        /// answering that from a copy made before a rotation would fail the one request the
+        /// endpoint exists for. Clients cache the document themselves, so it is rarely asked.
+        /// </remarks>
         public async Task<List<ArkSigningKey>> GetPublishedKeysAsync(string tenantId)
         {
             await GetActiveKeyAsync(tenantId); // ensure at least one key exists
-            return await _ctx.signing_keys
+            return await _ctx.signing_keys.AsNoTracking()
                 .Where(k => k.tenant_id == tenantId && (k.status == "active" || k.status == "rollover"))
                 .OrderByDescending(k => k.created_at)
                 .ToListAsync();
+        }
+
+        /// <summary>
+        /// The keys a token this server issued may have been signed with — the published set, kept
+        /// between requests because /userinfo and /introspect ask on every call.
+        ///
+        /// <paramref name="kid"/> is the key id of the token being checked. When it is not in the
+        /// set held, the database is read again: another instance may have rotated a key in since
+        /// the copy was made, and a token it signed has to verify here straight away rather than
+        /// once the copy expires. That re-read happens at most once every few seconds per key id.
+        /// </summary>
+        public async Task<List<ArkSigningKey>> GetValidationKeySetAsync(string tenantId, string? kid)
+        {
+            var keys = await ArkIdpCache.GetOrLoadAsync(_ctx, "published-keys", tenantId,
+                async () => await GetPublishedKeysAsync(tenantId)) ?? new List<ArkSigningKey>();
+            if (string.IsNullOrEmpty(kid) || keys.Any(k => k.kid == kid)) return keys;
+            return ArkIdpCache.ShouldRecheckUnknownKid(tenantId, kid!) ? await GetPublishedKeysAsync(tenantId) : keys;
         }
 
         /// <summary>
@@ -91,7 +118,13 @@ namespace Ark.oAuth.Oidc.Protocol
         /// </summary>
         public async Task<ArkSigningKey> RotateAsync(string tenantId)
         {
-            var current = await GetActiveKeyAsync(tenantId);
+            // Its own copy: the one GetActiveKeyAsync hands out is shared with requests that are
+            // signing with it right now, and this is about to change it.
+            await GetActiveKeyAsync(tenantId);
+            var current = await _ctx.signing_keys
+                .Where(k => k.tenant_id == tenantId && k.status == "active")
+                .OrderByDescending(k => k.created_at)
+                .FirstAsync();
             current.status = "rollover";
             current.not_after = DateTime.UtcNow;
             _ctx.signing_keys.Update(current);
@@ -134,17 +167,11 @@ namespace Ark.oAuth.Oidc.Protocol
             await _ctx.SaveChangesAsync();
         }
 
-        public SigningCredentials GetSigningCredentials(ArkSigningKey key)
-        {
-            var rsa = ArkCrypto.ImportPrivateKey(key.private_key);
-            return new SigningCredentials(new RsaSecurityKey(rsa) { KeyId = key.kid }, SecurityAlgorithms.RsaSha256)
-            {
-                CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false }
-            };
-        }
+        /// <summary>Built once per key and reused — see <see cref="ArkIdpCache.SigningCredentialsFor"/>.</summary>
+        public SigningCredentials GetSigningCredentials(ArkSigningKey key) => ArkIdpCache.SigningCredentialsFor(key);
 
         public IEnumerable<SecurityKey> GetValidationKeys(IEnumerable<ArkSigningKey> keys) =>
-            keys.Select(k => new RsaSecurityKey(ArkCrypto.ImportPublicKey(k.public_key)) { KeyId = k.kid });
+            keys.Select(ArkIdpCache.ValidationKeyFor).ToList();
 
         /// <summary>Renders keys as an RFC 7517 JWK Set.</summary>
         public object BuildJwks(IEnumerable<ArkSigningKey> keys)

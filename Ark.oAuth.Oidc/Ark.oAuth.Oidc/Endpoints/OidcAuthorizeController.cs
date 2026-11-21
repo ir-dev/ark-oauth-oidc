@@ -72,8 +72,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             if (string.IsNullOrWhiteSpace(clientId))
                 return ErrorPage(OAuthErrorCodes.InvalidRequest, "client_id is required.", brand, tenant);
 
-            var client = await Ctx.clients.FirstOrDefaultAsync(c =>
-                c.tenant_id.ToLower() == tenant.tenant_id.ToLower() && c.client_id.ToLower() == clientId.ToLower());
+            var client = await FindClientAsync(tenant, clientId);
             if (client == null)
                 return ErrorPage(OAuthErrorCodes.InvalidRequest, "unknown client_id.", brand, tenant);
             if (!client.is_active)
@@ -185,8 +184,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 // the switch is for.
                 if (session != null)
                 {
-                    var holder = await Ctx.users.AsNoTracking()
-                        .FirstOrDefaultAsync(u => u.email.ToLower() == session.subject.ToLower());
+                    var holder = await _claims.FindUserAsync(session.subject);
                     if (holder != null && !holder.is_active)
                     {
                         var dropped = await _grants.RevokeSessionsAsync(new[] { session.session_id });
@@ -338,8 +336,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             var opt = Options;
             if (opt.MaxFailedSignIns > 0)
             {
-                var status = await Ctx.auth_status.AsNoTracking()
-                    .FirstOrDefaultAsync(s => s.email.ToLower() == username.ToLower());
+                var status = await _da.GetAuthStatus(username);
                 if (status != null && status.retry_count >= opt.MaxFailedSignIns
                     && (DateTime.UtcNow - status.at).TotalMinutes < opt.LockoutMinutes)
                 {
@@ -368,6 +365,12 @@ namespace Ark.oAuth.Oidc.Endpoints
                 _da.Log("signin_inactive", tenant.tenant_id, $"sign-in refused: {ex.Level} deactivated",
                     $"user: {username}, client: {client.client_id}", "warn");
                 return (null, ex.FriendlyMessage);
+            }
+            catch (ArkBusyException ex)
+            {
+                // Nothing was verified, so this is neither a failed attempt nor a reason to retype.
+                _da.Log("signin_busy", tenant.tenant_id, "sign-in not attempted: password hashing queue full", $"user: {username}", "warn");
+                return (null, ex.Message);
             }
             catch (Exception ex)
             {
@@ -482,7 +485,7 @@ namespace Ark.oAuth.Oidc.Endpoints
 
         private async Task<IActionResult> ConsentPageAsync(OidcBrandModel brand, ArkClient client, string subject, List<string> scopes, ArkTenant tenant)
         {
-            var catalogue = await Ctx.scopes.AsNoTracking().ToListAsync();
+            var catalogue = await ArkIdpCache.ScopesAsync(Ctx);
             var models = scopes.Select(s =>
             {
                 var known = catalogue.FirstOrDefault(c => string.Equals(c.name, s, StringComparison.OrdinalIgnoreCase));

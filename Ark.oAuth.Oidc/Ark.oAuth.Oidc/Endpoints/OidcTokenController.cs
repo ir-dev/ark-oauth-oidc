@@ -169,8 +169,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             // this normally never fires; it is what makes the switch hold when the flag is set
             // some other way, and it costs one indexed lookup on a grant that runs hourly at most.
             // (A deactivated *client* never reaches here — ArkClientAuthenticator refuses it.)
-            var holder = await Ctx.users.AsNoTracking()
-                .FirstOrDefaultAsync(u => u.email.ToLower() == entry.subject.ToLower());
+            var holder = await _claims.FindUserAsync(entry.subject);
             if (holder != null && !holder.is_active)
             {
                 await _grants.RevokeFamilyAsync(entry.family_id);

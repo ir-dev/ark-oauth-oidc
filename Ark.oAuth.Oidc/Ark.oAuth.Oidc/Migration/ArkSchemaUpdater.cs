@@ -61,7 +61,11 @@ namespace Ark.oAuth.Oidc
             public List<string> Skipped { get; } = new();
             /// <summary>Tables ("session_clients") and columns ("clients.backchannel_logout_uri") added from the model.</summary>
             public List<string> Added { get; } = new();
-            public bool Any => Applied.Count > 0 || Baselined.Count > 0 || Added.Count > 0;
+            /// <summary>Indexes created on tables that already existed.</summary>
+            public List<string> Indexed { get; } = new();
+            /// <summary>Indexes that could not be created, with the reason. Never fatal.</summary>
+            public List<string> IndexWarnings { get; } = new();
+            public bool Any => Applied.Count > 0 || Baselined.Count > 0 || Added.Count > 0 || Indexed.Count > 0;
         }
 
         /// <summary>
@@ -93,6 +97,8 @@ namespace Ark.oAuth.Oidc
                 // probing for their columns — which the model step would otherwise add first.
                 ApplyScripts(connection, folder, result);
                 AddMissingFromModel(ctx, connection, folder, result);
+                // Last: the tables and columns the indexes sit on exist by now.
+                EnsureIndexes(ctx, connection, folder, result);
             }
             finally
             {
@@ -198,6 +204,191 @@ namespace Ark.oAuth.Oidc
             foreach (var command in ctx.GetService<IMigrationsSqlGenerator>().Generate(pending, model))
                 Execute(connection, command.CommandText, transaction);
             transaction.Commit();
+        }
+
+        /// <summary>
+        /// Makes sure one entity's table is there, for something that needs it before the
+        /// start-up bootstrap has run: true when the table exists, creating it first on a database
+        /// that has the rest of the schema and not this table. A database with no schema at all is
+        /// left to the bootstrap, which creates it whole, and answers false; so does any failure.
+        ///
+        /// Probed over the plain connection, so "not there yet" is an answer and not an error in
+        /// the log.
+        /// </summary>
+        internal static bool EnsureTable(ArkDataContext ctx, Type entity)
+        {
+            try
+            {
+                var folder = ProviderFolder(ctx.Database.ProviderName);
+                var model = ctx.GetService<IDesignTimeModel>().Model;
+                var name = model.FindEntityType(entity)?.GetTableName();
+                if (folder == null || name == null) return false;
+
+                var connection = ctx.Database.GetDbConnection();
+                var wasClosed = connection.State != ConnectionState.Open;
+                if (wasClosed) connection.Open();
+                try
+                {
+                    if (TableExists(connection, folder, name)) return true;
+                    if (!TableExists(connection, folder, "tenants")) return false;
+
+                    var operations = ctx.GetService<IMigrationsModelDiffer>().GetDifferences(null, model.GetRelationalModel());
+                    var pending = new List<MigrationOperation>();
+                    pending.AddRange(operations.OfType<CreateTableOperation>().Where(t => t.Name == name));
+                    pending.AddRange(operations.OfType<CreateIndexOperation>().Where(i => i.Table == name));
+                    if (pending.Count == 0) return false;
+                    foreach (var command in ctx.GetService<IMigrationsSqlGenerator>().Generate(pending, model))
+                        Execute(connection, command.CommandText);
+                    return true;
+                }
+                finally
+                {
+                    if (wasClosed) connection.Close();
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // ------------------------------------------------------------ index sync
+
+        /// <summary>
+        /// The <c>lower(column)</c> indexes behind the case-insensitive lookups — see
+        /// <see cref="Protocol.ArkLookup"/>. They are not in the entity model, because an index
+        /// over an expression has no provider-neutral spelling there.
+        /// </summary>
+        private static readonly (string Name, string Table, string Column)[] LowerIndexes =
+        {
+            ("IX_users_email_lower", "users", "email"),
+            ("IX_user_client_claims_email_lower", "user_client_claims", "email"),
+        };
+
+        /// <summary>
+        /// Creates the indexes the entity model declares and an existing database does not have.
+        ///
+        /// <see cref="AddMissingFromModel"/> only indexes what it has just added, so an index
+        /// declared later on a column that was already there — <c>refresh_tokens.session_id</c>,
+        /// the <c>expires_at</c> columns the purge deletes by — reached new databases and no
+        /// existing one. Those are exactly the databases that have grown large enough to need it.
+        ///
+        /// Three limits keep this as harmless as the rest of the class:
+        ///
+        ///   * <b>Never a unique index.</b> Whether existing rows satisfy a constraint is not
+        ///     something to find out at start-up; a missing unique index stays missing.
+        ///   * <b>Never fatal.</b> An index is an optimisation. One that cannot be built — an
+        ///     account without the privilege, a column type the provider will not index — is
+        ///     reported in <see cref="Result.IndexWarnings"/> and the server starts without it.
+        ///   * <b>One statement each, outside any transaction</b>, so a failure leaves the others
+        ///     in place and nothing half-done.
+        ///
+        /// Building an index reads the whole table once. On a table with millions of rows that is
+        /// a few seconds of the first start after the upgrade, and never again.
+        /// </summary>
+        private static void EnsureIndexes(ArkDataContext ctx, DbConnection connection, string folder, Result result)
+        {
+            HashSet<string> live;
+            try
+            {
+                live = LiveIndexes(connection, folder);
+            }
+            catch (Exception ex)
+            {
+                result.IndexWarnings.Add($"could not list existing indexes: {ex.GetBaseException().Message}");
+                return;
+            }
+
+            var model = ctx.GetService<IDesignTimeModel>().Model;
+            var operations = ctx.GetService<IMigrationsModelDiffer>().GetDifferences(null, model.GetRelationalModel());
+            var generator = ctx.GetService<IMigrationsSqlGenerator>();
+
+            foreach (var create in operations.OfType<CreateIndexOperation>())
+            {
+                if (create.IsUnique || live.Contains(create.Name)) continue;
+                try
+                {
+                    var prefixed = folder == "Mysql" ? MySqlPrefixIndex(connection, create) : null;
+                    if (prefixed != null)
+                        Execute(connection, prefixed);
+                    else
+                        foreach (var command in generator.Generate(new MigrationOperation[] { create }, model))
+                            Execute(connection, command.CommandText);
+                    result.Indexed.Add(create.Name);
+                }
+                catch (Exception ex)
+                {
+                    result.IndexWarnings.Add($"{create.Name}: {ex.GetBaseException().Message}");
+                }
+            }
+
+            foreach (var (name, table, column) in LowerIndexes)
+            {
+                if (live.Contains(name)) continue;
+                var sql = folder switch
+                {
+                    "Postgres" or "Sqlite" => $"CREATE INDEX IF NOT EXISTS \"{name}\" ON \"{table}\" (lower(\"{column}\"))",
+                    // MySQL 8.0.13+: an index over an expression takes a second pair of brackets.
+                    "Mysql" => $"CREATE INDEX `{name}` ON `{table}` ((lower(`{column}`)))",
+                    _ => null
+                };
+                if (sql == null) continue;
+                try
+                {
+                    Execute(connection, sql);
+                    result.Indexed.Add(name);
+                }
+                catch (Exception ex)
+                {
+                    result.IndexWarnings.Add($"{name}: {ex.GetBaseException().Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// MySQL will not index a TEXT column without being told how much of it to index, and that
+        /// is what a string column is there when it was created before anything indexed it — the
+        /// provider only makes a column <c>varchar(255)</c> when the model has an index on it at
+        /// the time. So <c>refresh_tokens.session_id</c> is <c>varchar</c> on a new database and
+        /// <c>longtext</c> on every existing one. For those, the index is created over a prefix;
+        /// 191 characters is more than any value these columns hold and fits every row format.
+        /// Null when no column needs it, and the provider's own statement is used.
+        /// </summary>
+        private static string? MySqlPrefixIndex(DbConnection connection, CreateIndexOperation create)
+        {
+            var parts = new List<string>();
+            var any = false;
+            foreach (var column in create.Columns)
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText =
+                    "SELECT data_type FROM information_schema.columns " +
+                    "WHERE table_schema = DATABASE() AND lower(table_name) = lower(@t) AND lower(column_name) = lower(@c)";
+                command.Parameters.Add(Parameter(command, "@t", create.Table));
+                command.Parameters.Add(Parameter(command, "@c", column));
+                var type = Convert.ToString(command.ExecuteScalar()) ?? "";
+                var text = type.EndsWith("text", StringComparison.OrdinalIgnoreCase) || type.EndsWith("blob", StringComparison.OrdinalIgnoreCase);
+                any |= text;
+                parts.Add(text ? $"`{column}`(191)" : $"`{column}`");
+            }
+            return any ? $"CREATE INDEX `{create.Name}` ON `{create.Table}` ({string.Join(", ", parts)})" : null;
+        }
+
+        private static HashSet<string> LiveIndexes(DbConnection connection, string folder)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = folder switch
+            {
+                "Sqlite" => "SELECT name FROM sqlite_master WHERE type = 'index'",
+                "Postgres" => "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()",
+                "Mysql" => "SELECT DISTINCT index_name FROM information_schema.statistics WHERE table_schema = DATABASE()",
+                _ => "SELECT name FROM sys.indexes WHERE name IS NOT NULL"
+            };
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                if (!reader.IsDBNull(0)) names.Add(reader.GetString(0));
+            return names;
         }
 
         /// <summary>

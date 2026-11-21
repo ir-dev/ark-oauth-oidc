@@ -251,13 +251,10 @@ namespace Ark.oAuth.Oidc.Protocol
 
         public async Task RevokeFamilyAsync(string familyId)
         {
-            var family = await _ctx.refresh_tokens.Where(t => t.family_id == familyId && !t.revoked).ToListAsync();
-            foreach (var t in family) t.revoked = true;
-            if (family.Count > 0)
-            {
-                _ctx.refresh_tokens.UpdateRange(family);
-                await _ctx.SaveChangesAsync();
-            }
+            // One UPDATE. A family grows by a row per refresh, so loading it to flip a flag meant
+            // reading back every token the user had ever rotated through.
+            await _ctx.refresh_tokens.Where(t => t.family_id == familyId && !t.revoked)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.revoked, true));
         }
 
         /// <summary>Revokes a refresh token by value. Returns false when the token is unknown.</summary>
@@ -281,9 +278,10 @@ namespace Ark.oAuth.Oidc.Protocol
         public async Task RevokeTokensForSessionAsync(string? sessionId)
         {
             if (string.IsNullOrEmpty(sessionId)) return;
-            var tokens = await _ctx.refresh_tokens.Where(t => t.session_id == sessionId && !t.revoked).ToListAsync();
-            foreach (var t in tokens) t.revoked = true;
-            if (tokens.Count > 0) _ctx.refresh_tokens.UpdateRange(tokens);
+            // Applied at once, by the index on session_id — it no longer waits for the caller's
+            // SaveChanges, and no longer loads the rows to change one column.
+            await _ctx.refresh_tokens.Where(t => t.session_id == sessionId && !t.revoked)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.revoked, true));
         }
 
         // -----------------------------------------------------------------
@@ -674,10 +672,20 @@ namespace Ark.oAuth.Oidc.Protocol
         /// has been live for months holds every code, PAR payload, session and assertion it ever
         /// stored, and the first run must not pull all of that into memory.
         /// </summary>
-        public async Task<int> CleanupExpiredAsync()
+        /// <param name="auditRetentionDays">
+        /// Deletes audit rows older than this many days; 0 leaves the audit trail alone
+        /// (<see cref="ArkOidcOptions.AuditRetentionDays"/>).
+        /// </param>
+        public async Task<int> CleanupExpiredAsync(int auditRetentionDays = 0)
         {
             var now = DateTime.UtcNow;
             var removed = 0;
+
+            if (auditRetentionDays > 0)
+            {
+                var cutoff = now.AddDays(-auditRetentionDays);
+                removed += await _ctx.audit_trace.Where(a => a.at < cutoff).ExecuteDeleteAsync();
+            }
 
             removed += await _ctx.auth_codes.Where(c => c.expires_at <= now).ExecuteDeleteAsync();
             removed += await _ctx.refresh_tokens.Where(t => t.expires_at <= now).ExecuteDeleteAsync();
@@ -691,6 +699,18 @@ namespace Ark.oAuth.Oidc.Protocol
             removed += await _ctx.session_clients
                 .Where(sc => _ctx.sessions.Any(s => s.session_id == sc.session_id && s.expires_at <= now))
                 .ExecuteDeleteAsync();
+
+            // The same goes for the refresh tokens issued under a session that has run out. A
+            // refresh token outlives its own expiry check — 14 days against a session's 8 hours —
+            // but it is only ever honoured while its session is alive (the token endpoint checks),
+            // so once the session is gone every token of every rotation under it is dead weight.
+            // Rotation writes a row per refresh; left to their own expiry these pile up to a
+            // fortnight of rows for every signed-in user, in the table the token endpoint reads
+            // on every refresh.
+            removed += await _ctx.refresh_tokens
+                .Where(t => _ctx.sessions.Any(s => s.session_id == t.session_id && s.expires_at <= now))
+                .ExecuteDeleteAsync();
+
             removed += await _ctx.sessions.Where(s => s.expires_at <= now).ExecuteDeleteAsync();
             return removed;
         }

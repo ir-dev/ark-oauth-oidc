@@ -40,7 +40,7 @@ namespace Ark.oAuth.Oidc.Controllers
         }
 
         private ArkAuthServerConfig ServerConfig =>
-            _config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>()
+            Protocol.ArkConfigSnapshot.Server(_config)
             ?? throw new ApplicationException("the 'ark_oauth_server' configuration section is missing.");
 
         /// <summary>Convenience entry point: sends the operator to their own tenant's console.</summary>

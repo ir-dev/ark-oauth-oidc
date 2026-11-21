@@ -58,7 +58,7 @@ namespace Ark.oAuth.Oidc.Protocol
         }
 
         private ArkOidcOptions Options =>
-            (_config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>() ?? new ArkAuthServerConfig()).Oidc
+            (Protocol.ArkConfigSnapshot.Server(_config) ?? new ArkAuthServerConfig()).Oidc
             ?? new ArkOidcOptions();
 
         /// <summary>
