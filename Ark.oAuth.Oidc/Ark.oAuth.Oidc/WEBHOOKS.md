@@ -7,6 +7,10 @@ they are sent, retried with back-off, moved to a dead-letter queue when they can
 and can be replayed by hand. Each endpoint chooses where its deliveries are stored (its **shard
 plan**), and an endpoint that keeps failing is switched off for its tenant automatically.
 
+New to webhooks? The [developer guide](https://ir-dev.github.io/ark-oauth-oidc/webhooks.html) has a
+first signed event arriving in a RequestBin in ten minutes, a signature checker that runs in the
+browser, and experiments that show retries, dead letters and recovery.
+
 The module is **opt-in**. A host that does not ask for it gets none of it: no tables, no background
 work, no console link, and its routes answer 404.
 

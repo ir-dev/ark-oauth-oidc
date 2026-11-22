@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Webhooks guide · ARK Identity</title>
+<meta name="description" content="Developer guide to ARK Identity webhooks: see your first signed event in ten minutes with RequestBin, verify the signature in your browser, write a receiver, and manage endpoints, retries and dead letters.">
+<meta name="theme-color" content="#0b1533">
+<meta name="robots" content="index, follow">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand: #2450d8; --brand-strong: #1b3fb0; --brand-soft: #e9eefc; --ink: #0b1533; --text: #24304d; --muted: #5d6883;
+    --line: #e1e6f0; --bg: #f5f7fb; --surface: #ffffff; --code-bg: #0b1226; --code-ink: #dbe4ff; --code-muted: #8090b8;
+    --ok: #12805a; --warn: #a16207; --bad: #b4232c; --info: #2f6f8f;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(11, 21, 51, .05), 0 8px 28px rgba(11, 21, 51, .07);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --brand: #7fa2ff; --brand-strong: #9db8ff; --brand-soft: #13214a; --ink: #eef3ff; --text: #ccd5ea; --muted: #8e9ab7;
+      --line: #1d2a4b; --bg: #060c1d; --surface: #0d1630; --code-bg: #050a18; --code-ink: #dbe4ff; --code-muted: #7d8bb0;
+      --ok: #4cc38a; --warn: #f2c14e; --bad: #ff7a82; --info: #6cc4e8;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --brand: #7fa2ff; --brand-strong: #9db8ff; --brand-soft: #13214a; --ink: #eef3ff; --text: #ccd5ea; --muted: #8e9ab7;
+    --line: #1d2a4b; --bg: #060c1d; --surface: #0d1630; --code-bg: #050a18; --code-ink: #dbe4ff; --code-muted: #7d8bb0;
+    --ok: #4cc38a; --warn: #f2c14e; --bad: #ff7a82; --info: #6cc4e8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: .86em; background: var(--brand-soft); color: var(--ink); padding: .1em .38em; border-radius: 6px; overflow-wrap: anywhere; }
+  kbd { font-family: Inter, system-ui, sans-serif; font-size: .85em; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: .05em .45em; white-space: nowrap; }
+  h1, h2, h3 { color: var(--ink); line-height: 1.2; margin: 0; }
+  h1, h2 { font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif; letter-spacing: -.02em; }
+  h1 { font-size: clamp(1.9rem, 4.6vw, 2.9rem); font-weight: 800; color: #fff; }
+  h2 { font-size: clamp(1.4rem, 3vw, 1.9rem); font-weight: 800; }
+  h3 { font-size: 1.04rem; font-weight: 600; }
+  p { margin: 10px 0 0; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 720px) { .wrap { padding: 0 32px; } }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- nav ---------- */
+  .nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  .nav .wrap { display: flex; align-items: center; gap: 16px; height: 58px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 700; font-family: "Plus Jakarta Sans", Inter, sans-serif; white-space: nowrap; }
+  .brand:hover { text-decoration: none; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .nav-links { margin-left: auto; display: flex; align-items: center; gap: 18px; font-size: .9rem; }
+  .nav-links a { color: var(--muted); font-weight: 500; white-space: nowrap; }
+  .nav-links a:hover { color: var(--ink); text-decoration: none; }
+  .hide-sm { display: none; }
+  @media (min-width: 900px) { .hide-sm { display: inline; } }
+  .theme-btn { border: 1px solid var(--line); background: var(--surface); color: var(--muted); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; display: grid; place-items: center; flex: none; }
+  .theme-btn:hover { color: var(--ink); }
+
+  /* ---------- hero ---------- */
+  .hero { background: radial-gradient(800px 420px at 90% -20%, rgba(36, 80, 216, .55), transparent 62%), radial-gradient(600px 360px at -10% 120%, rgba(18, 128, 90, .35), transparent 62%), #050b1d; color: #c3cde6; }
+  .hero .wrap { padding-top: 48px; padding-bottom: 52px; }
+  .kicker { font-size: .78rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--brand); margin-bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .hero .kicker { color: #8fb0ff; }
+  .pill { font-size: .72rem; letter-spacing: .02em; text-transform: none; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid currentColor; }
+  .hero .pill { color: #f2c14e; }
+  .hero .lead { font-size: 1.05rem; max-width: 760px; margin: 16px 0 0; }
+  .hero .lead b { color: #fff; font-weight: 600; }
+  .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+  @media (min-width: 720px) { .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .tile { border-radius: 12px; padding: 14px 16px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .12); }
+  .tile .n { font: 800 1.7rem/1.05 "Plus Jakarta Sans", Inter, sans-serif; color: #fff; }
+  .tile .l { font-size: .82rem; color: #aab6d3; margin-top: 6px; }
+  .hero-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: .92rem; border: 1px solid transparent; cursor: pointer; font-family: inherit; }
+  .btn:hover { text-decoration: none; }
+  .btn-primary { background: #2f5ff0; color: #fff; }
+  .btn-primary:hover { background: #4370ff; }
+  .btn-ghost { color: #e7edfb; border-color: rgba(255, 255, 255, .22); background: transparent; }
+  .btn-ghost:hover { background: rgba(255, 255, 255, .06); }
+
+  /* ---------- sections ---------- */
+  main section { padding: 48px 0 8px; scroll-margin-top: 58px; }
+  .section-head p { color: var(--muted); max-width: 780px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .callout { padding: 16px 20px; border-left: 4px solid var(--brand); margin-top: 18px; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout h3 { margin-bottom: 4px; }
+  .callout p:first-of-type { margin-top: 4px; }
+  .callout ul, .callout ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+  .note { font-size: .9rem; color: var(--muted); }
+
+  /* ---------- flow diagram ---------- */
+  .flow-card { padding: 22px 20px; margin-top: 22px; }
+  .flow { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+  @media (min-width: 900px) { .flow { flex-direction: row; align-items: stretch; } }
+  .node { flex: 1 1 0; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--bg); min-width: 0; }
+  .node b { display: block; color: var(--ink); font-size: .93rem; }
+  .node > span { display: block; font-size: .82rem; color: var(--muted); margin-top: 3px; }
+  .node.you { border-color: color-mix(in srgb, var(--ok) 60%, var(--line)); background: color-mix(in srgb, var(--ok) 8%, var(--bg)); }
+  .node.fail { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: color-mix(in srgb, var(--warn) 7%, var(--bg)); }
+  .node.dead { border-color: color-mix(in srgb, var(--bad) 55%, var(--line)); background: color-mix(in srgb, var(--bad) 7%, var(--bg)); }
+  .arr { display: grid; place-items: center; color: var(--muted); font-size: 1.1rem; padding: 4px 0; flex: none; }
+  .arr::before { content: "↓"; }
+  @media (min-width: 900px) { .arr { padding: 0 8px; } .arr::before { content: "→"; } }
+  .flow-label { font-size: .76rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; margin: 18px 0 8px; }
+  .flow-label:first-child { margin-top: 0; }
+
+  /* ---------- quick start steps ---------- */
+  .steps { list-style: none; margin: 22px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; counter-reset: step; }
+  .step { padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; position: relative; }
+  @media (min-width: 720px) { .step { grid-template-columns: 52px minmax(0, 1fr); column-gap: 16px; } }
+  .step-body, .grid2 > *, .verifier > * { min-width: 0; }
+  .step-num { counter-increment: step; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); font: 800 1.1rem "Plus Jakarta Sans", Inter, sans-serif; margin-bottom: 6px; }
+  .step-num::before { content: counter(step); }
+  .step-body > p:first-of-type { margin-top: 6px; }
+  .step-body ol, .step-body ul { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+  .see { margin-top: 12px; font-size: .9rem; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--ok) 9%, transparent); border: 1px solid color-mix(in srgb, var(--ok) 30%, var(--line)); }
+  .see b { color: var(--ok); }
+  .time { font-size: .76rem; color: var(--muted); font-weight: 500; margin-left: 6px; }
+
+  .formtable { width: 100%; border-collapse: collapse; font-size: .9rem; margin-top: 10px; }
+  .formtable th, .formtable td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .formtable th { width: 38%; font-weight: 600; color: var(--ink); }
+
+  /* ---------- code ---------- */
+  .code { position: relative; margin-top: 12px; }
+  pre { margin: 0; background: var(--code-bg); color: var(--code-ink); border-radius: 12px; padding: 16px 18px; overflow-x: auto; font: 13px/1.6 "JetBrains Mono", ui-monospace, Menlo, monospace; border: 1px solid color-mix(in srgb, var(--line) 40%, transparent); }
+  pre .c { color: var(--code-muted); }
+  pre .k { color: #8fb0ff; }
+  pre .s { color: #7ee2b8; }
+  .copy { position: absolute; top: 8px; right: 8px; font: 600 .74rem Inter, sans-serif; color: #cdd7f5; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .16); border-radius: 7px; padding: 4px 9px; cursor: pointer; }
+  .copy:hover { background: rgba(255, 255, 255, .14); }
+
+  /* ---------- tables ---------- */
+  .tablewrap { overflow-x: auto; margin-top: 16px; }
+  table.ref { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 620px; }
+  table.ref th, table.ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.ref th { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  table.ref td:first-child { white-space: nowrap; }
+  .card > .tablewrap { margin-top: 0; padding: 6px 8px; }
+
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 20px; }
+  @media (min-width: 860px) { .grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+  .grid2 > .card { padding: 18px 20px; }
+  .grid2 ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: .93rem; }
+
+  .st { display: inline-block; font: 600 .74rem "JetBrains Mono", monospace; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .st.ok { color: var(--ok); } .st.warn { color: var(--warn); } .st.bad { color: var(--bad); } .st.info { color: var(--info); } .st.muted { color: var(--muted); }
+
+  /* ---------- tabs ---------- */
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; }
+  .tab { font: 600 .88rem Inter, sans-serif; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 7px 14px; cursor: pointer; }
+  .tab[aria-selected="true"] { color: #fff; background: var(--brand); border-color: var(--brand); }
+  :root[data-theme="dark"] .tab[aria-selected="true"] { color: #071030; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tab[aria-selected="true"] { color: #071030; } }
+
+  /* ---------- verifier ---------- */
+  .verifier { padding: 20px; margin-top: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  @media (min-width: 940px) { .verifier { grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); } }
+  .field { display: grid; gap: 4px; margin-top: 12px; }
+  .field:first-child { margin-top: 0; }
+  .field label { font-size: .84rem; font-weight: 600; color: var(--ink); }
+  .field small { font-size: .78rem; color: var(--muted); }
+  input[type="text"], textarea { width: 100%; font: 13px/1.5 "JetBrains Mono", ui-monospace, Menlo, monospace; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; }
+  input[type="text"]:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--brand) 55%, transparent); outline-offset: 1px; border-color: var(--brand); }
+  textarea { resize: vertical; min-height: 84px; }
+  .row3 { display: grid; gap: 12px; margin-top: 12px; }
+  @media (min-width: 640px) { .row3 { grid-template-columns: 1fr 1fr; } .row3 .wide { grid-column: 1 / -1; } }
+  .row3 .field { margin-top: 0; }
+  .btnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .btn-solid { background: var(--brand); color: #fff; }
+  .btn-solid:hover { background: var(--brand-strong); }
+  :root[data-theme="dark"] .btn-solid { color: #071030; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn-solid { color: #071030; } }
+  .btn-line { background: transparent; color: var(--ink); border-color: var(--line); }
+  .btn-line:hover { background: var(--bg); }
+  .result { border-radius: 12px; border: 1px dashed var(--line); padding: 16px; min-height: 160px; font-size: .92rem; }
+  .result.ok { border: 1px solid color-mix(in srgb, var(--ok) 50%, var(--line)); background: color-mix(in srgb, var(--ok) 7%, transparent); }
+  .result.bad { border: 1px solid color-mix(in srgb, var(--bad) 50%, var(--line)); background: color-mix(in srgb, var(--bad) 6%, transparent); }
+  .result.warn { border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line)); background: color-mix(in srgb, var(--warn) 7%, transparent); }
+  .verdict { font: 800 1.2rem "Plus Jakarta Sans", Inter, sans-serif; color: var(--ink); }
+  .result.ok .verdict { color: var(--ok); } .result.bad .verdict { color: var(--bad); } .result.warn .verdict { color: var(--warn); }
+  .result dl { margin: 12px 0 0; display: grid; gap: 8px; }
+  .result dt { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
+  .result dd { margin: 1px 0 0; font: 12.5px/1.5 "JetBrains Mono", monospace; overflow-wrap: anywhere; color: var(--ink); }
+  .result ul { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+  .result .empty { color: var(--muted); }
+
+  /* after every font shorthand, which would reset it: no => or === ligatures in code */
+  pre, code, input[type="text"], textarea { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+
+  footer { margin-top: 64px; border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--muted); font-size: .88rem; }
+  footer p { margin: 6px 0 0; }
+</style>
+<script>
+  (function () {
+    try { var t = localStorage.getItem('ark-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="ARK Identity, back to the home page">
+      <img src="assets/img/ark-shield-64.png" alt="" width="30" height="30">
+      ARK Identity
+    </a>
+    <nav class="nav-links" aria-label="Guide sections">
+      <a class="hide-sm" href="#quickstart">Quick start</a>
+      <a class="hide-sm" href="#verify">Verify</a>
+      <a class="hide-sm" href="#receiver">Receiver</a>
+      <a class="hide-sm" href="#manage">Manage</a>
+      <a class="hide-sm" href="#experiments">Experiments</a>
+      <a class="hide-sm" href="#api">API</a>
+      <a href="#reference">Reference</a>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle colour theme">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="kicker">Webhooks · developer guide <span class="pill">new in the next release</span></div>
+    <h1>Your first signed event in ten minutes.</h1>
+    <p class="lead">
+      The identity server can POST a signed JSON event to your systems whenever something happens on it:
+      a user signed in, a sign-in failed, an account was locked out, tokens were issued, an application changed.
+      This guide gets a <b>throwaway RequestBin URL</b> receiving real events before you write any code.
+      It then shows you how to check a signature, write a receiver, and manage retries and dead letters.
+    </p>
+    <div class="tiles">
+      <div class="tile"><div class="n">1 line</div><div class="l">turns the module on in the host</div></div>
+      <div class="tile"><div class="n">0 code</div><div class="l">to see your first event, with RequestBin</div></div>
+      <div class="tile"><div class="n">8 tries</div><div class="l">with back-off, then the dead-letter queue</div></div>
+      <div class="tile"><div class="n">HMAC</div><div class="l">signed per Standard Webhooks</div></div>
+    </div>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#quickstart">Start the quick start →</a>
+      <a class="btn btn-ghost" href="#verify">Check a signature</a>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- ===== How it works ===== -->
+  <section id="how">
+    <div class="section-head">
+      <div class="kicker">How it works</div>
+      <h2>An event is stored before it is sent, and never slows a sign-in.</h2>
+      <p>
+        The server raises an event with one call that cannot fail and does not wait. A background writer
+        stores it as a <em>delivery</em> a moment later, and a dispatcher on every instance sends it.
+        Delivery is <strong>at least once</strong> and <strong>not ordered</strong>, so a receiver de-duplicates
+        on <code>webhook-id</code> and orders by <code>created_at</code> when order matters.
+      </p>
+    </div>
+    <div class="card flow-card" role="img" aria-label="Delivery flow: an IdP request raises an event, it is queued in memory, stored as a delivery row, claimed by the dispatcher and POSTed to your endpoint. A failure is retried with back-off. A delivery that runs out of attempts, or gets a 4xx, goes to the dead-letter queue, from where it can be replayed.">
+      <div class="flow-label">When it works</div>
+      <div class="flow">
+        <div class="node"><b>Something happens</b><span>a sign-in, a token, an app or user change</span></div>
+        <div class="arr" aria-hidden="true"></div>
+        <div class="node"><b>In-memory queue</b><span>bounded; the request does not wait</span></div>
+        <div class="arr" aria-hidden="true"></div>
+        <div class="node"><b>Delivery row</b><span>stored in the endpoint's shard tables</span></div>
+        <div class="arr" aria-hidden="true"></div>
+        <div class="node"><b>Dispatcher</b><span>claims it, signs it, POSTs it</span></div>
+        <div class="arr" aria-hidden="true"></div>
+        <div class="node you"><b>Your endpoint</b><span>any 2xx = <span class="st ok">delivered</span></span></div>
+      </div>
+      <div class="flow-label">When it does not</div>
+      <div class="flow">
+        <div class="node fail"><b>Timeout, 408, 429, 5xx</b><span><span class="st warn">retrying</span>, waiting 30 s, 60 s, 120 s… (up to 1 h)</span></div>
+        <div class="arr" aria-hidden="true"></div>
+        <div class="node dead"><b>Out of attempts, or another 4xx / 3xx</b><span><span class="st bad">dead</span>, with the exact body and the last answer</span></div>
+        <div class="arr" aria-hidden="true"></div>
+        <div class="node"><b>Replay</b><span>a new delivery with the <em>same</em> <code>webhook-id</code> and body</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Quick start ===== -->
+  <section id="quickstart">
+    <div class="section-head">
+      <div class="kicker">Quick start · about ten minutes</div>
+      <h2>See real events with RequestBin, then check the signature.</h2>
+      <p>
+        <a href="https://requestbin.net" target="_blank" rel="noopener">RequestBin</a> gives you a public URL that
+        records every request sent to it and shows each one live in your browser. You can see exactly what
+        the identity server sends without running a server of your own. Any request inspector does the same job.
+      </p>
+    </div>
+
+    <div class="card callout">
+      <h3>Before you start</h3>
+      <ul>
+        <li>An ARK identity server you can restart: your own, the repository's <code>Ark.oAuth.Oidc.Host</code>, or <code>Ark.oAuth.Oidc.QuickStart</code> (both already turn webhooks on).</li>
+        <li>The <strong>operator account</strong>. Only the operator can configure webhooks, because an endpoint receives who signed in and from where. If you are not the operator, ask them to create the endpoint from step 3 and send you the signing secret.</li>
+        <li>A <strong>test tenant and test users</strong>. Events carry email addresses and IP addresses, and a bin is a third-party service on the public internet.</li>
+      </ul>
+    </div>
+
+    <ol class="steps">
+      <li class="card step">
+        <div class="step-num" aria-hidden="true"></div>
+        <div class="step-body">
+          <h3>Turn the module on <span class="time">1 min</span></h3>
+          <p>One line in the host's <code>Program.cs</code>, beside the IdP's own registration, then restart:</p>
+          <div class="code"><pre>builder.AddArkIdp();                    <span class="c">// or builder.Services.AddArkOidcServer(builder.Environment);</span>
+builder.Services.AddArkWebhooks();      <span class="c">// ← this line</span></pre></div>
+          <div class="see"><b>You'll see:</b> a <strong>Webhooks</strong> link in the admin console's top bar, opening <code>/{tenant}/admin/webhooks</code>. Two small control tables (<code>ark_wh_endpoints</code>, <code>ark_wh_shards</code>) appear in the IdP's database. Nothing is sent until you create an endpoint.</div>
+        </div>
+      </li>
+
+      <li class="card step">
+        <div class="step-num" aria-hidden="true"></div>
+        <div class="step-body">
+          <h3>Get a test URL from RequestBin <span class="time">1 min</span></h3>
+          <ol>
+            <li>Open <a href="https://requestbin.net" target="_blank" rel="noopener">requestbin.net</a> and choose <strong>Start Testing Now</strong>. A bin opens in your browser.</li>
+            <li>Copy the bin's <strong>endpoint URL</strong>, the address that requests are sent <em>to</em>. RequestBin's docs give its form as <code>https://&lt;bin-id&gt;.d.requestbin.net</code>.</li>
+            <li>Keep the bin's tab open. That page is the <em>viewer</em>: captured requests appear there live, with their headers and body.</li>
+          </ol>
+          <p class="note">The endpoint is HTTPS, which the server requires for anything that is not <code>localhost</code>. Free bins are limited in size and expire, which is fine for a test. Check <a href="https://requestbin.net/pricing" target="_blank" rel="noopener">their current limits</a> if you plan to leave one running.</p>
+        </div>
+      </li>
+
+      <li class="card step">
+        <div class="step-num" aria-hidden="true"></div>
+        <div class="step-body">
+          <h3>Create the webhook in the console <span class="time">2 min</span></h3>
+          <p>Sign in to the console as the operator, open <strong>Webhooks</strong>, choose <kbd>New webhook</kbd> and fill in:</p>
+          <table class="formtable">
+            <tr><th scope="row">Tenant</th><td>your test tenant. To catch your own console sign-ins, choose the operator tenant (<code>ark_idp</code> unless you named it otherwise).</td></tr>
+            <tr><th scope="row">Name</th><td><code>RequestBin test</code></td></tr>
+            <tr><th scope="row">Endpoint URL</th><td>the bin's endpoint URL from step 2</td></tr>
+            <tr><th scope="row">Events</th><td>tick <strong>Every event (<code>*</code>)</strong> while you explore. Narrow it to, say, <code>user.*</code> later.</td></tr>
+            <tr><th scope="row">Start</th><td><strong>Active</strong></td></tr>
+            <tr><th scope="row">Authentication</th><td><strong>None — signature only</strong></td></tr>
+            <tr><th scope="row">Retries, storage</th><td>leave the defaults (8 attempts, <strong>Shared</strong> on <code>main</code>)</td></tr>
+          </table>
+          <p>Press <kbd>Save</kbd>.</p>
+          <div class="see"><b>You'll see:</b> the <strong>signing secret</strong>, <code>whsec_…</code>, <strong>shown this once</strong>. Copy it somewhere safe; step 6 needs it. If you lose it, <kbd>Rotate secret</kbd> issues a new one.</div>
+        </div>
+      </li>
+
+      <li class="card step">
+        <div class="step-num" aria-hidden="true"></div>
+        <div class="step-body">
+          <h3>Send a test <span class="time">1 min</span></h3>
+          <p>Select the webhook in the <strong>Endpoints</strong> table and press <kbd>Send test</kbd>. It sends a <code>webhook.test</code> event at once and waits for the answer.</p>
+          <div class="see"><b>You'll see:</b> the console shows RequestBin's status code and how long it took. In the bin, a <code>POST</code> arrives with these headers and a JSON body:
+            <div class="code"><pre>Content-Type: application/json; charset=utf-8
+User-Agent: Ark-Webhooks/&lt;version&gt;
+webhook-id: evt_…                 <span class="c">← the event: the same on every retry and replay</span>
+webhook-timestamp: 1795251600     <span class="c">← when this attempt was signed (Unix seconds)</span>
+webhook-signature: v1,…           <span class="c">← HMAC-SHA256, see step 6</span>
+X-Ark-Event: webhook.test
+X-Ark-Delivery: dlv_…             <span class="c">← this delivery; a replay gets a new one</span>
+X-Ark-Attempt: 1
+X-Ark-Tenant: acme</pre></div>
+          </div>
+        </div>
+      </li>
+
+      <li class="card step">
+        <div class="step-num" aria-hidden="true"></div>
+        <div class="step-body">
+          <h3>Make a real event happen <span class="time">2 min</span></h3>
+          <p>Sign in to any application of the webhook's tenant with a test user. With the operator tenant, signing out of the console and back in is enough. Then try a wrong password once.</p>
+          <div class="see"><b>You'll see,</b> within a few seconds: <code>user.signed_in</code> and <code>token.issued</code> for the sign-in, <code>user.signed_out</code> for a sign-out through the app, and <code>user.signin_failed</code> for the wrong password. Each one is a separate POST with its own <code>webhook-id</code>. Back in the console, the endpoint's <strong>Delivery history</strong> lists them as <span class="st ok">delivered</span>.</div>
+          <p class="note">Nothing arriving? User and tenant changes, such as <code>user.updated</code> and <code>tenant.updated</code>, are raised in the operator tenant because accounts are server-wide. Sign-ins are raised in the tenant of the application signed in to. See <a href="#trouble">Troubleshooting</a>.</p>
+        </div>
+      </li>
+
+      <li class="card step">
+        <div class="step-num" aria-hidden="true"></div>
+        <div class="step-body">
+          <h3>Check the signature <span class="time">2 min</span></h3>
+          <p>From one captured request in the bin, copy the three <code>webhook-*</code> headers and the <strong>raw</strong> body. Paste them, with the signing secret, into the <a href="#verify">signature checker</a> below. If the body has been re-formatted, the check fails, so use the bin's raw view.</p>
+          <div class="see"><b>You'll see:</b> <strong>Signature valid</strong>. You have now done by hand what your receiver will do on every request. The checker also flags the timestamp as too old once five minutes have passed. That is the replay protection a live receiver applies.</div>
+        </div>
+      </li>
+
+      <li class="card step">
+        <div class="step-num" aria-hidden="true"></div>
+        <div class="step-body">
+          <h3>Clean up <span class="time">1 min</span></h3>
+          <p>Delete the webhook (<kbd>Delete</kbd>, and tick <em>Also delete its delivery history and dead letters</em> if you want none of it kept), or <kbd>Pause</kbd> it to keep it for the <a href="#experiments">experiments</a>. Delete the bin in RequestBin as well. Do not reuse a secret you pasted into a web page for a real receiver: real endpoints get their own secret when they are created.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ===== Verify ===== -->
+  <section id="verify">
+    <div class="section-head">
+      <div class="kicker">Signature checker · runs only in this page</div>
+      <h2>Check a captured request against its secret.</h2>
+      <p>
+        Signatures follow <a href="https://www.standardwebhooks.com/" target="_blank" rel="noopener">Standard Webhooks</a>:
+        HMAC-SHA256 over <code>{webhook-id}.{webhook-timestamp}.{raw body}</code>, keyed with the base64-decoded part
+        of the secret after <code>whsec_</code>, sent as <code>v1,{base64}</code>. This checker does that with your
+        browser's Web Crypto. Nothing you type leaves the page. Even so, use it with test secrets only.
+      </p>
+    </div>
+
+    <div class="card verifier">
+      <form id="vf" autocomplete="off" novalidate>
+        <div class="field">
+          <label for="vf-secret">Signing secret</label>
+          <input type="text" id="vf-secret" spellcheck="false" placeholder="whsec_…">
+          <small>Shown once, when the webhook was created or its secret rotated.</small>
+        </div>
+        <div class="field">
+          <label for="vf-paste">Paste the headers here to fill the three fields below</label>
+          <textarea id="vf-paste" spellcheck="false" rows="3" placeholder="Paste the captured headers block as you copied it (lines, a table or JSON). The webhook-* values are picked out."></textarea>
+        </div>
+        <div class="row3">
+          <div class="field"><label for="vf-id">webhook-id</label><input type="text" id="vf-id" spellcheck="false" placeholder="evt_…"></div>
+          <div class="field"><label for="vf-ts">webhook-timestamp</label><input type="text" id="vf-ts" spellcheck="false" inputmode="numeric" placeholder="1795251600"></div>
+          <div class="field wide"><label for="vf-sig">webhook-signature</label><input type="text" id="vf-sig" spellcheck="false" placeholder="v1,…"></div>
+        </div>
+        <div class="field">
+          <label for="vf-body">Raw body</label>
+          <textarea id="vf-body" spellcheck="false" rows="6" placeholder='{"id":"evt_…","type":"webhook.test",…}'></textarea>
+          <small>Exactly as sent: compact JSON, escapes such as <code>&#92;u0027</code> left as they are.</small>
+        </div>
+        <div class="btnrow">
+          <button class="btn btn-solid" type="submit">Check signature</button>
+          <button class="btn btn-line" type="button" id="vf-sample">Load a sample</button>
+          <button class="btn btn-line" type="button" id="vf-clear">Clear</button>
+        </div>
+      </form>
+      <div class="result" id="vf-result" aria-live="polite">
+        <p class="empty" style="margin:0">The result appears here. Not sure what to paste? <strong>Load a sample</strong> fills in a real <code>webhook.test</code> request signed with a demo secret.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Receiver ===== -->
+  <section id="receiver">
+    <div class="section-head">
+      <div class="kicker">Write the receiver</div>
+      <h2>Verify, de-duplicate, answer fast.</h2>
+      <p>
+        A receiver needs only these lines. Each one checks the signature on the raw bytes before it parses anything,
+        refuses timestamps more than five minutes away, skips an event it has already handled, and answers
+        <code>204</code> at once. Any slow work happens after the answer. The secret comes from the environment,
+        never from a tracked file. Any Standard Webhooks library can replace the <code>verify</code> function.
+      </p>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Receiver language">
+      <button class="tab" role="tab" id="tab-py" aria-controls="pane-py" aria-selected="true">Python · Flask</button>
+      <button class="tab" role="tab" id="tab-node" aria-controls="pane-node" aria-selected="false" tabindex="-1">Node · Express</button>
+      <button class="tab" role="tab" id="tab-net" aria-controls="pane-net" aria-selected="false" tabindex="-1">.NET · minimal API</button>
+    </div>
+
+    <div role="tabpanel" id="pane-py" aria-labelledby="tab-py">
+      <div class="code"><pre><span class="k">import</span> base64, hashlib, hmac, os, time
+<span class="k">from</span> flask <span class="k">import</span> Flask, abort, request
+
+app = Flask(__name__)
+SECRET = os.environ[<span class="s">"ARK_WEBHOOK_SECRET"</span>]   <span class="c"># whsec_… from the console; never in git</span>
+seen = set()                                 <span class="c"># in production: a table with a unique key</span>
+
+<span class="k">def</span> verify(secret, headers, body: bytes) -> bool:
+    msg_id, ts, sig = headers.get(<span class="s">"webhook-id"</span>), headers.get(<span class="s">"webhook-timestamp"</span>), headers.get(<span class="s">"webhook-signature"</span>)
+    <span class="k">if not</span> (msg_id <span class="k">and</span> sig <span class="k">and</span> ts <span class="k">and</span> ts.isdigit()) <span class="k">or</span> abs(time.time() - int(ts)) > 300:
+        <span class="k">return</span> False
+    key = base64.b64decode(secret.removeprefix(<span class="s">"whsec_"</span>))
+    expected = base64.b64encode(hmac.new(key, f<span class="s">"{msg_id}.{ts}."</span>.encode() + body, hashlib.sha256).digest()).decode()
+    <span class="k">return</span> any(hmac.compare_digest(expected, p[3:]) <span class="k">for</span> p <span class="k">in</span> sig.split() <span class="k">if</span> p.startswith(<span class="s">"v1,"</span>))
+
+@app.post(<span class="s">"/ark/webhooks"</span>)
+<span class="k">def</span> ark_webhook():
+    body = request.get_data()                <span class="c"># the raw bytes, before any JSON parsing</span>
+    <span class="k">if not</span> verify(SECRET, request.headers, body):
+        abort(401)
+    event_id = request.headers[<span class="s">"webhook-id"</span>]
+    <span class="k">if</span> event_id <span class="k">in</span> seen:                     <span class="c"># a retry or replay you already handled</span>
+        <span class="k">return</span> <span class="s">""</span>, 204
+    seen.add(event_id)
+    event = request.get_json()
+    app.logger.info(<span class="s">"%s %s %s"</span>, event[<span class="s">"type"</span>], event[<span class="s">"tenant_id"</span>], event.get(<span class="s">"subject"</span>))
+    <span class="k">return</span> <span class="s">""</span>, 204                           <span class="c"># answer fast; queue slow work</span></pre></div>
+    </div>
+
+    <div role="tabpanel" id="pane-node" aria-labelledby="tab-node" hidden>
+      <div class="code"><pre><span class="k">import</span> crypto <span class="k">from</span> <span class="s">"node:crypto"</span>;
+<span class="k">import</span> express <span class="k">from</span> <span class="s">"express"</span>;
+
+<span class="k">const</span> SECRET = process.env.ARK_WEBHOOK_SECRET;    <span class="c">// whsec_… from the console; never in git</span>
+<span class="k">const</span> seen = <span class="k">new</span> Set();                           <span class="c">// in production: a table with a unique key</span>
+<span class="k">const</span> app = express();
+
+<span class="k">function</span> verify(secret, headers, rawBody) {
+  <span class="k">const</span> id = headers[<span class="s">"webhook-id"</span>], ts = headers[<span class="s">"webhook-timestamp"</span>], sig = headers[<span class="s">"webhook-signature"</span>];
+  <span class="k">if</span> (!id || !ts || !sig || !Buffer.isBuffer(rawBody)) <span class="k">return</span> false;
+  <span class="k">if</span> (!(Math.abs(Date.now() / 1000 - Number(ts)) &lt;= 300)) <span class="k">return</span> false;   <span class="c">// NaN fails too</span>
+  <span class="k">const</span> key = Buffer.from(secret.replace(<span class="s">/^whsec_/</span>, <span class="s">""</span>), <span class="s">"base64"</span>);
+  <span class="k">const</span> expected = crypto.createHmac(<span class="s">"sha256"</span>, key).update(<span class="s">`${id}.${ts}.`</span>).update(rawBody).digest(<span class="s">"base64"</span>);
+  <span class="k">return</span> sig.split(<span class="s">" "</span>).some(p => p.startsWith(<span class="s">"v1,"</span>) &amp;&amp; p.length - 3 === expected.length &amp;&amp;
+    crypto.timingSafeEqual(Buffer.from(p.slice(3)), Buffer.from(expected)));
+}
+
+<span class="c">// express.raw keeps the exact bytes; express.json() would parse them and the signature could not be checked</span>
+app.post(<span class="s">"/ark/webhooks"</span>, express.raw({ type: <span class="s">"application/json"</span> }), (req, res) => {
+  <span class="k">if</span> (!verify(SECRET, req.headers, req.body)) <span class="k">return</span> res.sendStatus(401);
+  <span class="k">const</span> id = req.headers[<span class="s">"webhook-id"</span>];
+  <span class="k">if</span> (seen.has(id)) <span class="k">return</span> res.sendStatus(204);   <span class="c">// a retry or replay you already handled</span>
+  seen.add(id);
+  <span class="k">const</span> event = JSON.parse(req.body.toString(<span class="s">"utf8"</span>));
+  console.log(event.type, event.tenant_id, event.subject);
+  res.sendStatus(204);                            <span class="c">// answer fast; queue slow work</span>
+});
+
+app.listen(5005);</pre></div>
+    </div>
+
+    <div role="tabpanel" id="pane-net" aria-labelledby="tab-net" hidden>
+      <div class="code"><pre><span class="k">using</span> System.Collections.Concurrent;
+<span class="k">using</span> System.Security.Cryptography;
+<span class="k">using</span> System.Text;
+<span class="k">using</span> System.Text.Json;
+
+<span class="k">var</span> builder = WebApplication.CreateBuilder(args);
+<span class="k">var</span> app = builder.Build();
+<span class="k">var</span> secret = builder.Configuration[<span class="s">"ArkWebhookSecret"</span>]!;   <span class="c">// whsec_… from user secrets / key vault</span>
+<span class="k">var</span> seen = <span class="k">new</span> ConcurrentDictionary&lt;<span class="k">string</span>, <span class="k">bool</span>&gt;();      <span class="c">// in production: a table with a unique key</span>
+
+app.MapPost(<span class="s">"/ark/webhooks"</span>, <span class="k">async</span> (HttpRequest req) =>
+{
+    <span class="k">using var</span> reader = <span class="k">new</span> StreamReader(req.Body, Encoding.UTF8);
+    <span class="k">var</span> body = <span class="k">await</span> reader.ReadToEndAsync();               <span class="c">// the exact body, before any JSON binding</span>
+    <span class="k">var</span> id = req.Headers[<span class="s">"webhook-id"</span>].ToString();
+    <span class="k">if</span> (!Verify(secret, id, req.Headers[<span class="s">"webhook-timestamp"</span>].ToString(), req.Headers[<span class="s">"webhook-signature"</span>].ToString(), body))
+        <span class="k">return</span> Results.Unauthorized();
+    <span class="k">if</span> (!seen.TryAdd(id, <span class="k">true</span>)) <span class="k">return</span> Results.NoContent();   <span class="c">// a retry or replay you already handled</span>
+    <span class="k">var</span> evt = JsonDocument.Parse(body).RootElement;
+    app.Logger.LogInformation(<span class="s">"{Type} {Tenant}"</span>, evt.GetProperty(<span class="s">"type"</span>), evt.GetProperty(<span class="s">"tenant_id"</span>));
+    <span class="k">return</span> Results.NoContent();                             <span class="c">// answer fast; queue slow work</span>
+});
+
+app.Run();
+
+<span class="k">static bool</span> Verify(<span class="k">string</span> secret, <span class="k">string</span> id, <span class="k">string</span> timestamp, <span class="k">string</span> signatureHeader, <span class="k">string</span> body)
+{
+    <span class="k">if</span> (id.Length == 0 || !<span class="k">long</span>.TryParse(timestamp, <span class="k">out var</span> unix) ||
+        Math.Abs(DateTimeOffset.UtcNow.ToUnixTimeSeconds() - unix) > 300) <span class="k">return false</span>;
+    <span class="k">var</span> key = Convert.FromBase64String(secret.StartsWith(<span class="s">"whsec_"</span>) ? secret[6..] : secret);
+    <span class="k">var</span> expected = Convert.ToBase64String(HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(<span class="s">$"{id}.{timestamp}.{body}"</span>)));
+    <span class="k">return</span> signatureHeader.Split(<span class="s">' '</span>).Any(p => p.StartsWith(<span class="s">"v1,"</span>) &amp;&amp;
+        CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(p[3..]), Encoding.ASCII.GetBytes(expected)));
+}</pre></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Point the webhook at it</h3>
+        <ul>
+          <li><strong>On your machine:</strong> if the identity server runs there too, <code>http://localhost:5005/ark/webhooks</code> is accepted as it is. Loopback addresses are always allowed over plain HTTP.</li>
+          <li><strong>Anywhere else:</strong> the URL must be <code>https://</code>. Plain HTTP to another host is refused unless the operator sets <code>ark_oauth_server:Webhooks:AllowInsecureHttp</code>, which a production server should never do.</li>
+          <li>After changing the URL, press <kbd>Send test</kbd>. It shows your receiver's answer right away.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>What your status code tells the server</h3>
+        <ul>
+          <li><span class="st ok">2xx</span> delivered. Only the first 4 KB of your answer is kept, in the history.</li>
+          <li><span class="st warn">5xx</span> <span class="st warn">408</span> <span class="st warn">429</span>, a timeout or a refused connection: retried with back-off. A <code>Retry-After</code> header is honoured, up to the longest wait.</li>
+          <li><span class="st bad">other 4xx</span> <span class="st bad">3xx</span>: <em>never send this again</em>. It goes to the dead-letter queue after one attempt. Redirects are not followed.</li>
+          <li>Answer within the endpoint's timeout (15 s by default). Slow work belongs in a queue on your side.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Manage ===== -->
+  <section id="manage">
+    <div class="section-head">
+      <div class="kicker">Manage · the console</div>
+      <h2>Everything about an endpoint, on one page.</h2>
+      <p>
+        <code>/{tenant}/admin/webhooks</code>, for the operator account. The top of the page shows deliveries,
+        success rate and backlog for the last 24 hours, 7 days or 30 days, by tenant. Below that, the
+        <strong>Endpoints</strong> table shows each webhook's status, events, deliveries, success rate, backlog,
+        dead letters, storage and last delivery. Select a row for its detail panel.
+      </p>
+    </div>
+
+    <div class="card tablewrap" style="margin-top:20px">
+      <table class="ref">
+        <thead><tr><th>Button</th><th>What it does</th><th>Use it when</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Send test</kbd></td><td>Sends <code>webhook.test</code> now and shows the answer. It works on a disabled endpoint and never counts towards the failure threshold.</td><td>after any change to the URL, the receiver or its authentication</td></tr>
+          <tr><td><kbd>Pause</kbd> / <kbd>Resume</kbd></td><td>Pause stops sending but keeps queuing; Resume delivers what built up.</td><td>a planned receiver outage</td></tr>
+          <tr><td><kbd>Enable</kbd></td><td>Re-opens an endpoint that was <span class="st bad">disabled</span> after repeated failures, and resets its failure count.</td><td>once the receiver is fixed and a test passes</td></tr>
+          <tr><td><kbd>Edit</kbd></td><td>Change anything on the form: URL, events, authentication, custom headers, retry policy, storage. A new storage plan applies to new deliveries.</td><td>any time</td></tr>
+          <tr><td><kbd>Rotate secret</kbd></td><td>Issues a new signing secret, shown once. Signatures made with the old one stop verifying immediately.</td><td>a secret was exposed, or on your rotation schedule. Update the receiver right away.</td></tr>
+          <tr><td><kbd>Delete</kbd></td><td>Removes the endpoint. Optionally deletes its delivery history and dead letters too.</td><td>the receiver is retired</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Delivery history</h3>
+        <p class="note">Newest first, filtered by status. Open a row to see the exact body, every attempt and the answer to each. Replay any finished delivery, or cancel one that is still waiting.</p>
+        <div class="tablewrap" style="margin-top:8px">
+          <table class="ref" style="min-width:0">
+            <tbody>
+              <tr><td><span class="st info">pending</span></td><td>stored, waiting for its first attempt</td></tr>
+              <tr><td><span class="st info">in_flight</span></td><td>claimed by a worker; the request is under way</td></tr>
+              <tr><td><span class="st warn">retrying</span></td><td>failed; see <em>Next attempt</em></td></tr>
+              <tr><td><span class="st ok">delivered</span></td><td>your endpoint answered 2xx</td></tr>
+              <tr><td><span class="st bad">dead</span></td><td>moved to the dead-letter queue</td></tr>
+              <tr><td><span class="st muted">cancelled</span></td><td>cancelled by hand before it was sent</td></tr>
+              <tr><td><span class="st muted">test_failed</span></td><td>a <kbd>Send test</kbd> that did not get a 2xx (tests are never retried)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Dead letters</h3>
+        <p class="note">Each dead letter keeps the exact body, the number of attempts, the last answer and the reason it is there:</p>
+        <ul>
+          <li><code>max_attempts</code>: it ran out of retries.</li>
+          <li><code>non_retryable</code>: a 4xx (other than 408 and 429) or a 3xx, so the server did not try again.</li>
+          <li><code>endpoint_disabled</code>: it was waiting when the endpoint was disabled.</li>
+        </ul>
+        <p class="note"><kbd>Replay selected</kbd> or <kbd>Replay all open</kbd> sends them again as new deliveries with the same <code>webhook-id</code> and body. The original is kept and marked with who replayed it. <kbd>Purge selected</kbd> deletes them for good. Dead letters are kept for 90 days and other history for 30.</p>
+      </div>
+      <div class="card">
+        <h3>Disabled after repeated failures</h3>
+        <p class="note">Every failed attempt adds one to the endpoint's count of failures in a row, and any success resets it. At 15 (the default; 0 means never), the endpoint is <span class="st bad">disabled</span>. New events stop being queued for it, and anything waiting moves to the dead-letter queue rather than retrying against a receiver that is down. The detail panel says why and when.</p>
+        <p class="note"><strong>To recover:</strong> fix the receiver → <kbd>Send test</kbd> → <kbd>Enable</kbd> → <kbd>Replay all open</kbd>.</p>
+      </div>
+      <div class="card">
+        <h3>Authentication and storage, when you need them</h3>
+        <ul>
+          <li><strong>Authentication</strong> goes on top of the signature: HTTP Basic, a static token in any header, a JWT minted for each request (HS256 shared secret, or RS256 verifiable against the tenant's JWKS), or an OAuth 2.0 access token from your own token endpoint. Up to 20 custom headers. All secrets are stored encrypted and never shown again.</li>
+          <li><strong>Storage</strong>: <em>Shared</em> suits most endpoints. Choose <em>Dedicated</em> for a busy or unreliable receiver, <em>Hashed</em> to spread high volume over tables or databases, and <em>Monthly</em> for long retention. The form lists every table a plan will create before you save.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Experiments ===== -->
+  <section id="experiments">
+    <div class="section-head">
+      <div class="kicker">Experiments · learn failure handling in 15 minutes</div>
+      <h2>Make it fail on purpose, then recover.</h2>
+      <p>
+        RequestBin shows you success. To see retries, dead letters and automatic disabling, point a second
+        webhook at a URL that answers with the status you want. The public service
+        <a href="https://httpbin.org" target="_blank" rel="noopener">httpbin.org</a> does this:
+        <code>/status/503</code> answers 503 to any POST. Each experiment needs a real event, so sign a test user
+        in once after saving.
+      </p>
+    </div>
+
+    <div class="card callout">
+      <h3>Settings that make an experiment take seconds, not an hour</h3>
+      <p>The default policy (8 attempts, from 30 s, doubling) takes about an hour to run out. For a lab webhook, set <strong>Events</strong> <code>user.*</code>, <strong>Attempts, in all</strong> <code>4</code>, <strong>First retry after</strong> <code>5</code>, <strong>Longest wait</strong> <code>60</code>. Its retries then come about 5, 10 and 20 seconds apart, each ±20%.</p>
+    </div>
+
+    <div class="card tablewrap" style="margin-top:14px">
+      <table class="ref">
+        <thead><tr><th>Experiment</th><th>Endpoint URL</th><th>What you will see in the console</th></tr></thead>
+        <tbody>
+          <tr><td>Retries, then a dead letter</td><td><code>https://httpbin.org/status/503</code></td><td><span class="st warn">retrying</span> with a <em>Next attempt</em> time, then <span class="st bad">dead</span> after 4 attempts, reason <code>max_attempts</code></td></tr>
+          <tr><td>Not worth retrying</td><td><code>https://httpbin.org/status/400</code></td><td><span class="st bad">dead</span> after 1 attempt, reason <code>non_retryable</code>. Tick <em>Retry 4xx answers too</em> and it is retried instead.</td></tr>
+          <tr><td>Rate limited</td><td><code>https://httpbin.org/status/429</code></td><td>retried even with <em>Retry 4xx</em> off: 408 and 429 always are</td></tr>
+          <tr><td>A redirect</td><td><code>https://httpbin.org/status/302</code></td><td>not followed; counted as a failure and dead-lettered as <code>non_retryable</code></td></tr>
+          <tr><td>Too slow</td><td><code>https://httpbin.org/delay/10</code>, timeout <code>3</code> s</td><td>each attempt fails as a timeout and is retried</td></tr>
+          <tr><td>Disabled automatically</td><td><code>https://httpbin.org/status/503</code>, <em>Disable after</em> <code>3</code>, attempts <code>10</code></td><td>after the third failure in a row the endpoint shows <span class="st bad">disabled</span> with the reason. What was waiting moves to dead letters as <code>endpoint_disabled</code>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card callout ok">
+      <h3>The recovery drill: do it once and you will know what to do when it happens</h3>
+      <ol>
+        <li>On the disabled webhook, press <kbd>Edit</kbd> and change the URL back to your RequestBin endpoint.</li>
+        <li><kbd>Send test</kbd>. It works while the endpoint is disabled, and the bin receives it.</li>
+        <li><kbd>Enable</kbd>. The failure count goes back to zero.</li>
+        <li>Open <strong>Dead letters</strong> and press <kbd>Replay all open</kbd>.</li>
+        <li>In the bin, compare a replayed request with the original attempt. <code>webhook-id</code> is the <em>same</em>; <code>X-Ark-Delivery</code> is new and <code>X-Ark-Attempt</code> is back to 1. That is why a receiver de-duplicates on <code>webhook-id</code>.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ===== API ===== -->
+  <section id="api">
+    <div class="section-head">
+      <div class="kicker">Automate · management API</div>
+      <h2>Script the same steps.</h2>
+      <p>
+        Everything the console does goes through <code>/api/oauth/v1/webhooks/…</code>, so a pipeline can do
+        it too. It accepts the operator's console session, or a token issued to the machine client
+        <code>{operator tenant}_machine</code> with the <code>client.register</code> scope. Writes are
+        <code>POST</code> with a JSON body. Answers are <code>{ error, code, msg, data }</code> with a real HTTP status.
+      </p>
+    </div>
+
+    <div class="code"><pre>ARK=https://idp.example.com            <span class="c"># the identity server's base URL</span>
+OP=ark_idp                              <span class="c"># the operator tenant</span>
+<span class="c"># ARK_MACHINE_SECRET: the machine client's secret, from your secret store (Clients → ark_idp_machine → Regenerate secret)</span>
+
+TOKEN=$(curl -s -X POST "$ARK/$OP/oauth2/token" -d grant_type=client_credentials \
+  -d client_id="${OP}_machine" --data-urlencode client_secret="$ARK_MACHINE_SECRET" \
+  -d scope=client.register | jq -r .access_token)
+api() { curl -s -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
+
+<span class="c"># 1. create: the signing secret is in this answer and nowhere else</span>
+api "$ARK/api/oauth/v1/webhooks/upsert" -d '{
+  "tenant_id": "acme", "name": "RequestBin test",
+  "url": "https://&lt;bin-id&gt;.d.requestbin.net", "events": ["*"] }' \
+  | jq '{id: .data.endpoint.id, secret: .data.signing_secret}'
+WH=wh_…                                 <span class="c"># the id printed above</span>
+
+<span class="c"># 2. send a test and see the receiver's answer</span>
+api "$ARK/api/oauth/v1/webhooks/test" -d "{\"id\": \"$WH\"}" | jq '.data | {success, status_code, duration_ms}'
+
+<span class="c"># 3. delivery history, newest first</span>
+api "$ARK/api/oauth/v1/webhooks/deliveries?endpoint_id=$WH&amp;limit=20" | jq '.data'
+
+<span class="c"># 4. after an outage: re-enable, then replay every open dead letter</span>
+api "$ARK/api/oauth/v1/webhooks/status" -d "{\"id\": \"$WH\", \"action\": \"enable\"}"
+api "$ARK/api/oauth/v1/webhooks/deadletters/replay" -d "{\"endpoint_id\": \"$WH\"}"
+
+<span class="c"># 5. clean up, history included</span>
+api "$ARK/api/oauth/v1/webhooks/delete" -d "{\"id\": \"$WH\", \"purge\": true}"</pre></div>
+
+    <div class="card tablewrap" style="margin-top:16px">
+      <table class="ref">
+        <thead><tr><th>Route (base <code>/api/oauth/v1/webhooks</code>)</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET meta</code></td><td>event catalogue, databases, storage strategies, defaults and limits, and this instance's dispatcher status</td></tr>
+          <tr><td><code>GET list?tenant_id=</code> · <code>GET get?id=</code></td><td>endpoints, without secrets (<code>has_…</code> flags instead)</td></tr>
+          <tr><td><code>POST upsert</code></td><td>create (no <code>id</code>) or update. In a request, a secret field set to <code>null</code> keeps the stored value, <code>""</code> clears it, and anything else replaces it.</td></tr>
+          <tr><td><code>POST status</code></td><td><code>{ id, action: pause | resume | enable | disable }</code></td></tr>
+          <tr><td><code>POST test</code> · <code>POST secret/rotate</code> · <code>POST delete</code></td><td>as the console buttons. <code>delete</code> takes <code>purge: true</code>.</td></tr>
+          <tr><td><code>GET deliveries</code> · <code>GET delivery?shard=&amp;id=</code></td><td>history, and one delivery with its body, attempts and dead letter</td></tr>
+          <tr><td><code>POST delivery/replay</code> · <code>POST delivery/cancel</code></td><td><code>{ shard, id }</code></td></tr>
+          <tr><td><code>GET deadletters</code> · <code>POST deadletters/replay</code> · <code>POST deadletters/purge</code></td><td>the queue. Writes take <code>{ items: [{ shard, id }] }</code> or <code>{ endpoint_id }</code>.</td></tr>
+          <tr><td><code>GET analytics?hours=</code> · <code>GET shards</code></td><td>counts, success rate, latency (avg, p95), backlog; the shard registry</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Every configuration change is written to the identity server's audit trail with who made it. Only the URL's host is recorded, because some receivers carry a secret in the path.</p>
+  </section>
+
+  <!-- ===== Troubleshooting ===== -->
+  <section id="trouble">
+    <div class="section-head">
+      <div class="kicker">Troubleshooting</div>
+      <h2>When it does not do what you expect.</h2>
+    </div>
+    <div class="card tablewrap" style="margin-top:20px">
+      <table class="ref">
+        <thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+        <tbody>
+          <tr><td>No <strong>Webhooks</strong> link; the page or API answers 404</td><td>The host does not call <code>builder.Services.AddArkWebhooks()</code>, or you are not signed in as the operator.</td></tr>
+          <tr><td>Save refused: <em>plain http is allowed only to localhost…</em></td><td>Use an <code>https://</code> URL. RequestBin and any public receiver should have one.</td></tr>
+          <tr><td>Save refused: <em>credentials do not belong in the URL</em></td><td>Remove <code>user:pass@</code> from the URL and choose <strong>HTTP Basic</strong> authentication instead.</td></tr>
+          <tr><td><kbd>Send test</kbd> answers 301, 302 or 308</td><td>Redirects are not followed. Use the final URL; check for a missing trailing slash or <code>http</code> instead of <code>https</code>.</td></tr>
+          <tr><td>The test arrives, real events do not</td><td>The event is not in the subscription, or it is raised in another tenant. Sign-ins use the application's tenant; user and tenant changes use the operator tenant. Also check that the endpoint is not paused or disabled, and that <code>Webhooks:Enabled</code> is not <code>false</code>.</td></tr>
+          <tr><td>The signature does not match</td><td>The body was changed before it was checked. Verify the raw bytes before parsing JSON (in Express, <code>express.raw</code>, not <code>express.json</code>). Other causes: the secret was rotated, or the headers came from a different attempt (each attempt has its own timestamp and signature).</td></tr>
+          <tr><td>The same event arrives twice</td><td>That is expected: delivery is at least once. De-duplicate on <code>webhook-id</code>.</td></tr>
+          <tr><td>Events arrive out of order</td><td>Also expected. Sort on the body's <code>created_at</code> when order matters.</td></tr>
+          <tr><td>The endpoint shows <span class="st bad">disabled</span></td><td>It failed 15 times in a row (or the threshold you set). Follow the <a href="#experiments">recovery drill</a>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===== Reference ===== -->
+  <section id="reference">
+    <div class="section-head">
+      <div class="kicker">Reference</div>
+      <h2>Events, body and defaults.</h2>
+      <p>
+        An endpoint subscribes with types and patterns: <code>user.signed_in</code>, <code>user.*</code>, or <code>*</code>
+        for everything, including types added later. Your host can publish its own events with
+        <code>IArkWebhookPublisher.Publish(tenant, "billing.order_placed", data, subject)</code>, and they reach every
+        endpoint whose patterns match. The full specification, covering configuration keys, the dispatcher and
+        storage plans, is in
+        <a href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/WEBHOOKS.md" target="_blank" rel="noopener">WEBHOOKS.md</a>.
+      </p>
+    </div>
+
+    <div class="card tablewrap" style="margin-top:20px">
+      <table class="ref">
+        <thead><tr><th>Event type</th><th>Raised when</th><th>Tenant</th></tr></thead>
+        <tbody>
+          <tr><td><code>user.signed_in</code></td><td>a user signed in with a password</td><td>the application's</td></tr>
+          <tr><td><code>user.signin_failed</code></td><td>wrong password, unknown user or no access</td><td>the application's</td></tr>
+          <tr><td><code>user.locked_out</code></td><td>the failed-attempt lockout blocked a sign-in</td><td>the application's</td></tr>
+          <tr><td><code>user.signin_refused</code></td><td>a verified user was refused: user or application deactivated, no access mapping</td><td>the application's</td></tr>
+          <tr><td><code>user.signed_out</code></td><td>a session ended through RP-initiated logout (one event per session)</td><td>the session's</td></tr>
+          <tr><td><code>token.issued</code> · <code>token.revoked</code></td><td>tokens issued for an authorization code or client credentials; a client revoked a token</td><td>the application's</td></tr>
+          <tr><td><code>device.approved</code></td><td>a user approved a device authorization</td><td>the application's</td></tr>
+          <tr><td><code>client.updated</code> · <code>client.deleted</code> · <code>client.registered</code></td><td>an application changed in the console or API; dynamic client registration</td><td>the application's</td></tr>
+          <tr><td><code>client.secret_reset</code></td><td>a client secret was regenerated (the secret is never sent)</td><td>the application's</td></tr>
+          <tr><td><code>client.activation_changed</code> · <code>client.provisioned</code></td><td>activation switch; provisioning</td><td>the application's</td></tr>
+          <tr><td><code>user.updated</code> · <code>user.password_changed</code> · <code>user.activation_changed</code></td><td>account changes</td><td>operator</td></tr>
+          <tr><td><code>user.access_changed</code> · <code>user.provisioned</code></td><td>an access mapping added, changed or removed</td><td>the mapping's</td></tr>
+          <tr><td><code>tenant.updated</code></td><td>a tenant was created or changed</td><td>operator</td></tr>
+          <tr><td><code>webhook.test</code></td><td>the <kbd>Send test</kbd> button</td><td>the endpoint's</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>The body</h3>
+        <p class="note">The same envelope for every event. <code>data</code> depends on the type. No event carries a password, secret or token.</p>
+        <div class="code"><pre>{
+  "id": "evt_8f3c…",                  <span class="c">// = webhook-id</span>
+  "type": "user.signed_in",
+  "tenant_id": "acme",
+  "subject": "ana@acme.test",         <span class="c">// who or what it is about</span>
+  "created_at": "2026-11-22T09:14:51.120Z",
+  "data": { "user": "ana@acme.test", "name": "Ana",
+            "client_id": "portal", "session_id": "…",
+            "ip": "203.0.113.7" }
+}</pre></div>
+      </div>
+      <div class="card">
+        <h3>Per-endpoint defaults</h3>
+        <div class="tablewrap" style="margin-top:8px">
+          <table class="ref" style="min-width:0">
+            <tbody>
+              <tr><td>Attempts, in all</td><td><code>8</code> (1–50)</td></tr>
+              <tr><td>Back-off</td><td>exponential (doubling); linear or fixed</td></tr>
+              <tr><td>First retry after</td><td><code>30 s</code></td></tr>
+              <tr><td>Longest wait</td><td><code>1 h</code>, ±20% jitter</td></tr>
+              <tr><td>Retry 4xx</td><td>off (408 and 429 always retried)</td></tr>
+              <tr><td>Timeout per attempt</td><td><code>15 s</code> (1–120)</td></tr>
+              <tr><td>Parallel requests</td><td><code>4</code> per instance</td></tr>
+              <tr><td>Disable after</td><td><code>15</code> failures in a row (0 = never)</td></tr>
+              <tr><td>Retention</td><td>30 days; dead letters 90 days</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Using RequestBin or httpbin.org? They are third-party services on the public internet. Send them test tenants and test accounts only, and delete the bin when you are done.</p>
+    <p><a href="index.html">← ARK Identity home</a> · <a href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/WEBHOOKS.md" target="_blank" rel="noopener">WEBHOOKS.md</a> · <a href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/GETTINGSTARTED.md" target="_blank" rel="noopener">Getting started</a></p>
+  </footer>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var root = document.documentElement;
+
+  // ----- theme toggle (kept per browser; the page works without storage) -----
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    var dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('ark-theme', root.dataset.theme); } catch (e) {}
+  });
+
+  // ----- receiver tabs -----
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  function select(t, focus) {
+    tabs.forEach(function (x) {
+      var on = x === t;
+      x.setAttribute('aria-selected', on ? 'true' : 'false');
+      x.tabIndex = on ? 0 : -1;
+      document.getElementById(x.getAttribute('aria-controls')).hidden = !on;
+    });
+    if (focus) t.focus();
+  }
+  tabs.forEach(function (t, i) {
+    t.addEventListener('click', function () { select(t); });
+    t.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight') select(tabs[(i + 1) % tabs.length], true);
+      if (e.key === 'ArrowLeft') select(tabs[(i - 1 + tabs.length) % tabs.length], true);
+    });
+  });
+
+  // ----- copy buttons on code blocks -----
+  document.querySelectorAll('.code').forEach(function (block) {
+    var pre = block.querySelector('pre');
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'copy'; btn.textContent = 'Copy';
+    btn.setAttribute('aria-label', 'Copy this code');
+    btn.addEventListener('click', function () {
+      var done = function (ok) { btn.textContent = ok ? 'Copied' : 'Select and copy'; setTimeout(function () { btn.textContent = 'Copy'; }, 1600); };
+      try { navigator.clipboard.writeText(pre.innerText).then(function () { done(true); }, function () { done(false); }); }
+      catch (e) { done(false); }
+    });
+    block.appendChild(btn);
+  });
+
+  // ----- signature checker -----
+  // A webhook.test request signed with a demo secret made only for this page.
+  var SAMPLE = {
+    secret: 'whsec_C9NIhM7ryzYU5bHRfx71cHbuEU4/qlD3kPSWSGY+53Y=',
+    headers: 'webhook-id: evt_f4c78f27b6cd694de004b27e9faa068b\nwebhook-timestamp: 1795251600\nwebhook-signature: v1,tFEeFtZI8JTMGfHvx9tfSMS6SxOGXOQAy37tYgVgoY0=\nX-Ark-Event: webhook.test\nX-Ark-Attempt: 1\nX-Ark-Tenant: acme',
+    body: '{"id":"evt_f4c78f27b6cd694de004b27e9faa068b","type":"webhook.test","tenant_id":"acme","subject":"ops@acme.test","created_at":"2026-11-21T08:59:59.870Z","data":{"message":"Test event sent from the Ark identity server\\u0027s webhook console.","endpoint_id":"wh_k3m7q2xv9tbn4rpa","endpoint_name":"RequestBin test","sent_by":"ops@acme.test"}}'
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var form = $('vf'), out = $('vf-result');
+  var enc = new TextEncoder();
+
+  function pick(text, name) {
+    // Accepts "name: value", "name<TAB>value" (a copied table) and "\"name\": \"value\"" (JSON).
+    var re = new RegExp('["\']?' + name + '["\']?\\s*[:=\\t ]\\s*["\']?([^"\'\\r\\n,]+(?:,[^"\'\\r\\n]+)?)', 'i');
+    var m = re.exec(text);
+    return m ? m[1].trim() : '';
+  }
+  $('vf-paste').addEventListener('input', function () {
+    var t = this.value;
+    var id = pick(t, 'webhook-id'), ts = pick(t, 'webhook-timestamp'), sig = pick(t, 'webhook-signature');
+    if (id) $('vf-id').value = id;
+    if (ts) $('vf-ts').value = ts;
+    if (sig) $('vf-sig').value = sig;
+  });
+
+  function keyBytes(secret) {
+    var raw = secret.indexOf('whsec_') === 0 ? secret.slice(6) : secret;
+    try {
+      var bin = atob(raw);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    } catch (e) {
+      return enc.encode(raw);   // the server does the same with a secret that is not base64
+    }
+  }
+  function toB64(buf) {
+    var s = '', b = new Uint8Array(buf);
+    for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+    return btoa(s);
+  }
+  function sign(key, id, ts, body) {
+    return crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+      .then(function (k) { return crypto.subtle.sign('HMAC', k, enc.encode(id + '.' + ts + '.' + body)); })
+      .then(toB64);
+  }
+  // Removes whitespace outside JSON strings without re-serialising, so escapes like ' survive.
+  function compact(json) {
+    var out = '', inStr = false, esc = false;
+    for (var i = 0; i < json.length; i++) {
+      var c = json[i];
+      if (inStr) { out += c; if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; }
+      else if (c === '"') { inStr = true; out += c; }
+      else if (!/\s/.test(c)) out += c;
+    }
+    return out;
+  }
+  function age(ts) {
+    var s = Math.round(Date.now() / 1000 - ts), a = Math.abs(s), u;
+    if (a < 90) u = a + ' s';
+    else if (a < 5400) u = Math.round(a / 60) + ' min';
+    else if (a < 172800) u = Math.round(a / 3600) + ' h';
+    else u = Math.round(a / 86400) + ' days';
+    return s >= 0 ? u + ' ago' : 'in ' + u + ' (in the future)';
+  }
+  function el(tag, text, cls) { var e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
+  function show(kind, verdict, rows, tips) {
+    out.className = 'result ' + kind;
+    out.textContent = '';
+    out.appendChild(el('div', verdict, 'verdict'));
+    if (rows && rows.length) {
+      var dl = el('dl');
+      rows.forEach(function (r) { dl.appendChild(el('dt', r[0])); dl.appendChild(el('dd', r[1])); });
+      out.appendChild(dl);
+    }
+    if (tips && tips.length) {
+      var ul = el('ul');
+      tips.forEach(function (t) { ul.appendChild(el('li', t)); });
+      out.appendChild(ul);
+    }
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var secret = $('vf-secret').value.trim(), id = $('vf-id').value.trim(), ts = $('vf-ts').value.trim();
+    var sigHeader = $('vf-sig').value.trim(), body = $('vf-body').value;
+    var missing = [];
+    if (!secret) missing.push('the signing secret');
+    if (!id) missing.push('webhook-id');
+    if (!ts) missing.push('webhook-timestamp');
+    if (!sigHeader) missing.push('webhook-signature');
+    if (!body) missing.push('the raw body');
+    if (missing.length) { show('warn', 'Something is missing', [], ['Fill in ' + missing.join(', ') + '.']); return; }
+    if (!/^\d+$/.test(ts)) { show('bad', 'That timestamp is not Unix seconds', [], ['webhook-timestamp is a whole number of seconds, such as 1795251600.']); return; }
+    if (!window.crypto || !crypto.subtle) { show('warn', 'This browser cannot compute HMAC here', [], ['Web Crypto needs a secure context: open the page over https or from localhost.']); return; }
+
+    var key = keyBytes(secret);
+    if (!key.length) { show('bad', 'The secret is empty after whsec_', [], []); return; }
+    var received = sigHeader.split(/\s+/).filter(function (p) { return p.indexOf('v1,') === 0; }).map(function (p) { return p.slice(3); });
+    var tsNum = parseInt(ts, 10), old = Math.abs(Date.now() / 1000 - tsNum) > 300;
+    var when = new Date(tsNum * 1000).toISOString().replace('.000Z', 'Z') + ' · ' + age(tsNum);
+
+    sign(key, id, ts, body).then(function (expected) {
+      var rows = [['Expected', 'v1,' + expected], ['Received', received.length ? received.map(function (r) { return 'v1,' + r; }).join(' ') : sigHeader], ['Timestamp', when], ['Signed content', id + '.' + ts + '.' + (body.length > 120 ? body.slice(0, 120) + '…' : body)]];
+      if (received.indexOf(expected) >= 0) {
+        show(old ? 'warn' : 'ok', old ? 'Signature valid, but too old for a live receiver' : 'Signature valid', rows,
+          old ? ['The HMAC matches, so the secret, the headers and the body are right.', 'The timestamp is more than five minutes away from now, so a live receiver must refuse it. That is expected for a request you captured earlier. It is the replay protection working.']
+              : ['The secret, the headers and the body are exactly what the server signed. Your receiver can do the same.']);
+        return;
+      }
+      if (!received.length) { show('bad', 'No v1 signature found', rows, ['webhook-signature should look like "v1,<base64>". Paste the whole header value.']); return; }
+      // Not a match: find out whether a copy-and-paste change to the body explains it.
+      var trimmed = body.replace(/\s+$/, ''), packed = compact(body);
+      var tries = [];
+      if (trimmed !== body) tries.push(sign(key, id, ts, trimmed).then(function (s) { return received.indexOf(s) >= 0 ? 'trailing' : null; }));
+      if (packed !== body && packed !== trimmed) tries.push(sign(key, id, ts, packed).then(function (s) { return received.indexOf(s) >= 0 ? 'pretty' : null; }));
+      Promise.all(tries).then(function (found) {
+        if (found.indexOf('trailing') >= 0) {
+          show('warn', 'Matches once the trailing newline is removed', rows, ['Your copy added whitespace at the end of the body. The server signed it without, and a receiver reading the raw body sees it without, so this is a copying artefact rather than a problem.']);
+        } else if (found.indexOf('pretty') >= 0) {
+          show('warn', 'Matches only after re-compacting the JSON', rows, ['The viewer pretty-printed the body. The signature covers the exact bytes sent, so copy the raw body instead. A receiver must verify before it parses or re-formats anything.']);
+        } else {
+          show('bad', 'Signature does not match', rows, [
+            'Is it this endpoint\'s current secret? Each endpoint has its own, and Rotate secret replaces it.',
+            'Are the three headers from the same attempt? Each attempt has its own timestamp and signature.',
+            'Is the body exactly as sent? Any change, even \\u0027 turned into an apostrophe, breaks the signature.'
+          ]);
+        }
+      });
+    }).catch(function (err) {
+      show('bad', 'Could not compute the signature', [], [String(err && err.message || err)]);
+    });
+  });
+
+  $('vf-sample').addEventListener('click', function () {
+    $('vf-secret').value = SAMPLE.secret;
+    $('vf-paste').value = SAMPLE.headers;
+    $('vf-paste').dispatchEvent(new Event('input'));
+    $('vf-body').value = SAMPLE.body;
+    form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { cancelable: true }));
+  });
+  $('vf-clear').addEventListener('click', function () {
+    form.reset();
+    out.className = 'result';
+    out.textContent = '';
+    var p = el('p', 'The result appears here.', 'empty'); p.style.margin = '0';
+    out.appendChild(p);
+  });
+})();
+</script>
+</body>
+</html>

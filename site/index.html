@@ -142,6 +142,8 @@
   .nav-links a:hover { color: var(--ink); text-decoration: none; }
   .nav-links .hide-sm { display: none; }
   @media (min-width: 980px) { .nav-links .hide-sm { display: inline; } }
+  .nav-links .hide-md { display: none; }   /* one link more than fits from 980 px */
+  @media (min-width: 1100px) { .nav-links .hide-md { display: inline; } }
   .theme-btn {
     border: 1px solid var(--line); background: var(--surface); color: var(--muted);
     width: 34px; height: 34px; border-radius: 9px; cursor: pointer; display: grid; place-items: center;
@@ -443,6 +445,12 @@
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn-report { color: #06102a; } }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+  /* webhooks teaser */
+  #webhooks { padding-top: 0; }
+  .webhooks-teaser { padding: 24px; display: grid; gap: 18px; align-items: center; }
+  @media (min-width: 860px) { .webhooks-teaser { grid-template-columns: 1fr auto; padding: 28px 32px; } }
+  .webhooks-teaser p { color: var(--muted); margin: 12px 0 0; max-width: 760px; }
+
   /* standards */
   .specs { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
   @media (min-width: 720px) { .specs { grid-template-columns: repeat(2, 1fr); } }
@@ -524,6 +532,7 @@
       <a class="hide-sm" href="#setup">Set up</a>
       <a class="hide-sm" href="#onboard">Onboard</a>
       <a class="hide-sm" href="#govern">Govern</a>
+      <a class="hide-md" href="webhooks.html">Webhooks</a>
       <a class="hide-sm" href="#quickstart">Quickstart</a>
       <a class="hide-sm" href="#agents">AI agents</a>
       <a class="hide-sm" href="#try">Try it</a>
@@ -845,6 +854,20 @@ curl -s -X POST https://idp.example.com/api/oauth/v1/activation/user \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{ "user_name": "leaver@example.com", "is_active": false }'</pre>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Webhooks ===== -->
+  <section id="webhooks">
+    <div class="wrap">
+      <div class="card webhooks-teaser">
+        <div>
+          <div class="kicker">Webhooks <span class="pill">next release</span></div>
+          <h2>Tell your systems what happens on the IdP.</h2>
+          <p>Sign-ins, failed and refused sign-ins, lockouts, issued tokens, and changes to apps and users are POSTed to your endpoints as signed JSON (Standard Webhooks), with retries, a dead-letter queue and replay. Opt in with one line, <code>builder.Services.AddArkWebhooks()</code>. The guide gets a RequestBin URL receiving real events in ten minutes, before you write a receiver.</p>
+        </div>
+        <a class="btn-report" href="webhooks.html">Webhooks guide <span aria-hidden="true">→</span></a>
       </div>
     </div>
   </section>
