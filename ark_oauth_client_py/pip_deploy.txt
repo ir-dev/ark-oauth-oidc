@@ -224,7 +224,7 @@ PATHS
         grep -m1 '^version' pyproject.toml
         grep -m1 '__version__' src/ark_oauth_client/__init__.py
 
-     Those two must agree. They are both 2.4.0 today.
+     Those two must agree. They are both 2.4.1 today.
 
   c. Working tree clean, on the branch you mean to release from:
 

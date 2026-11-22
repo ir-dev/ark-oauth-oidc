@@ -85,7 +85,7 @@ app.MapPost("/orders", async (IArkWebhookPublisher webhooks, Order order) =>
 ```http
 POST /your/endpoint HTTP/1.1
 Content-Type: application/json; charset=utf-8
-User-Agent: Ark-Webhooks/2.4.0
+User-Agent: Ark-Webhooks/2.4.1
 webhook-id: evt_8f3c…                    ← the event id: the same on every retry and replay
 webhook-timestamp: 1795310591
 webhook-signature: v1,K5oZfzN95Z9UVu1EsfQmfVNQhnkZ2pj9o9NDN/H/pI4=

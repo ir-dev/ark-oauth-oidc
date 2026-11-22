@@ -84,7 +84,7 @@ from .session import (
 )
 from .tokens import TokenSet
 
-__version__ = "2.4.0"
+__version__ = "2.4.1"
 
 #: The PKCE helpers under the name the .NET package gives them.
 PkceHelper = type(

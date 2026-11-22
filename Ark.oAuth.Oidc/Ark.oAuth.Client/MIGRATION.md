@@ -7,10 +7,12 @@
 
 ## Current version
 
-- **`2.4.0`** (`<Version>` in `Ark.oAuth.Client.csproj`), `net10.0`.
-- Ships in lockstep with **`Ark.oAuth.Oidc 2.4.0`** — the client and server packages deliberately
+- **`2.4.1`** (`<Version>` in `Ark.oAuth.Client.csproj`), `net10.0`.
+- Ships in lockstep with **`Ark.oAuth.Oidc 2.4.1`** — the client and server packages deliberately
   carry the **same version number**. Upgrade both together.
-- **2.4.0 changes nothing in this package.** It is 2.3.0 published at the family's version,
+- **2.4.1 changes nothing in this package.** It is 2.4.0 published at the family's version,
+  alongside the provider's opt-in webhooks module, which changes nothing on the wire.
+- **2.4.0 changed nothing in this package.** It is 2.3.0 published at the family's version,
   alongside the provider's scale release, which changes nothing on the wire.
 - **2.3.0 moved to .NET 10 (LTS); no API, option or behaviour change.** 2.2.1 is the last `net9.0`
   release (it is 2.2.0 republished, no code change), and .NET 9 left support on 2026-11-10.
@@ -43,6 +45,9 @@ downward.
 
 ## Changelog (from the .csproj, newest first)
 
+- **2.4.1**: no change to this package; the same code, API, options and dependencies as 2.4.0,
+  published alongside `Ark.oAuth.Oidc` 2.4.1 (the provider's opt-in webhooks module). App and
+  provider upgrade in either order.
 - **2.4.0**: no change to this package; the same code, API, options and dependencies as 2.3.0,
   published alongside `Ark.oAuth.Oidc` 2.4.0 (the provider's scale release). App and provider
   upgrade in either order.

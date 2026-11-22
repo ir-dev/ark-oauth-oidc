@@ -30,9 +30,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.4.0</Version>
-		<AssemblyVersion>2.4.0.0</AssemblyVersion>
-		<FileVersion>2.4.0.0</FileVersion>
+		<Version>2.4.1</Version>
+		<AssemblyVersion>2.4.1.0</AssemblyVersion>
+		<FileVersion>2.4.1.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -54,7 +54,10 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
-Next release — webhooks, opt-in. Nothing changes for a host that does not ask for them.
+2.4.1 — webhooks, opt-in. Nothing changes for a host that does not ask for them.
+
+Endpoints, discovery, tokens, pages and existing configuration are as in 2.4.0, so every client that
+works with a 2.4.0 provider works with 2.4.1, and the four client packages are unchanged.
 * **`builder.Services.AddArkWebhooks()`** adds a Webhooks page to the admin console (operator only)
   and an API under /api/oauth/v1/webhooks. Without the call nothing of it runs: no tables, no
   background work, no console link, and its routes answer 404.
@@ -75,6 +78,7 @@ Next release — webhooks, opt-in. Nothing changes for a host that does not ask 
 * Event hooks were added beside existing audit calls in the sign-in, token, revocation, logout,
   registration, device, management and provisioning endpoints; each is one call that does nothing
   unless the module is registered.
+
 2.4.0 — built to hold 30,000 signed-in users, and to run on more than one instance.
 
 Measured, not estimated: with 30,000 accounts in PostgreSQL the same test went from 78 to 159

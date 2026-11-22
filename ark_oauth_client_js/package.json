@@ -1,6 +1,6 @@
 {
   "name": "ark-oauth-client-js",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "The OpenID Connect client for browser apps signing in against Ark.oAuth.Oidc. Framework-agnostic, with adapters for React, Next.js, Vue and Angular (and a Svelte-compatible store). Authorization code + PKCE as a public client, ID token verification in the browser (signature, nonce, at_hash, c_hash, iss), rotating refresh tokens coordinated across tabs, popup or redirect sign-in, RP-initiated logout, account switching on a shared browser, and an authorised fetch. No runtime dependencies.",
   "keywords": [
     "oauth",

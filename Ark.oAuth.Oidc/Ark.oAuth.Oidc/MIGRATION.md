@@ -8,9 +8,14 @@
 
 ## Current version
 
-- **`2.4.0`** (`<Version>` in `Ark.oAuth.Oidc.csproj`), `net10.0`, EF Core `10.0.x`.
-- Ships in lockstep with **`Ark.oAuth.Client 2.4.0`** — deliberately the **same version number** —
-  and with the Python, Node and browser clients at 2.4.0. Upgrade both .NET packages together.
+- **`2.4.1`** (`<Version>` in `Ark.oAuth.Oidc.csproj`), `net10.0`, EF Core `10.0.x`.
+- Ships in lockstep with **`Ark.oAuth.Client 2.4.1`** — deliberately the **same version number** —
+  and with the Python, Node and browser clients at 2.4.1. Upgrade both .NET packages together.
+- **2.4.1 adds webhooks, an opt-in module.** A host that does not call `AddArkWebhooks()` sees no
+  change: no tables, no background work, no console link, and the module's routes answer 404.
+  Endpoints, discovery, tokens, pages and existing configuration are as in 2.4.0, so every client
+  that works with a 2.4.0 provider works with 2.4.1, and the four client packages are unchanged.
+  See the 2.4.1 entry under "Behavioural changes by version" and `WEBHOOKS.md`.
 - **2.4.0 is the scale release: built to hold 30,000 signed-in users and to run on more than one
   instance.** Endpoints, discovery, tokens, pages and existing configuration are as in 2.3.0, so
   every client that works with a 2.3.0 provider works with 2.4.0, and the four client packages are
@@ -127,6 +132,21 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
 ```
 
 ## Behavioural changes by version (from the .csproj notes)
+
+- **2.4.1 — webhooks, opt-in; nothing changes for a host that does not ask for them.**
+  `builder.Services.AddArkWebhooks()` adds an operator-only Webhooks page to the console
+  (`/{tenant}/admin/webhooks`), an API under `/api/oauth/v1/webhooks`, and a database-backed
+  dispatcher on every instance. Events (sign-ins, token issuance and revocation, device approval,
+  user, client and tenant changes, and the host's own through `IArkWebhookPublisher`) are stored,
+  signed per Standard Webhooks, retried, dead-lettered and replayable. Each event hook is one call
+  beside an existing audit line that does nothing unless the module is registered.
+  - **Schema:** none in the IdP's own tables. With the module on, the next start creates two control
+    tables, `ark_wh_endpoints` and `ark_wh_shards`, beside the IdP's schema; the shard tables an
+    endpoint's plan needs are created when it is saved, in the IdP's database or one named under
+    `ark_oauth_server:Webhooks:Databases`. The start-up schema sync, export/import and factory reset
+    never touch `ark_wh_*`.
+  - **Upgrade action:** none. To use webhooks, add the line and configure an endpoint; nothing is
+    sent until one exists. Removing the line turns the module off; its tables stay until dropped.
 
 - **2.4.0 — scale: 30,000 signed-in users, more than one instance; nothing changes on the wire.**
   Sign-in and token lookups ask for the stored value first and fall back to a `lower()` index

@@ -16,7 +16,7 @@ task-oriented walkthrough see [`AI-RECIPES.md`](AI-RECIPES.md); for the full API
 | | |
 |---|---|
 | **Package** | `Ark.oAuth.Client` (nuget.org) |
-| **Current version** | `2.4.0` (moves in lockstep with `Ark.oAuth.Oidc`) |
+| **Current version** | `2.4.1` (moves in lockstep with `Ark.oAuth.Oidc`) |
 | **Root namespace** | `Ark.oAuth` — **not** `Ark.oAuth.Client`. `using Ark.oAuth;` |
 | **Target framework** | `net10.0` (`net9.0` up to 2.2.1) |
 | **Purpose** | Turns an ASP.NET Core app into an OAuth 2.1 / OIDC **relying party** (client). One call in `Program.cs` + two settings and `[Authorize]` works. |
@@ -170,7 +170,7 @@ DO NOT:
 ## 6. Version & compatibility
 
 - Target framework `net10.0` (`net9.0` up to 2.2.1); the app must be an ASP.NET Core (`Microsoft.NET.Sdk.Web`) app.
-- Current version **2.4.0**; ships alongside `Ark.oAuth.Oidc 2.4.0`. No API change since 2.2.1: 2.3.0 moved the package to .NET 10, and 2.4.0 is 2.3.0 published at the family's version.
+- Current version **2.4.1**; ships alongside `Ark.oAuth.Oidc 2.4.1`. No API change since 2.2.1: 2.3.0 moved the package to .NET 10, and 2.4.0 and 2.4.1 are 2.3.0 published at the family's version.
 - **2.0.0** made the standards flow the default (was hand-rolled). `UseLegacyFlow` preserves the old
   cookie/bearer middleware for migration only.
 - **Account switching** (the changelog's "2.1.0" heading) is present from 2.0.11 on and is **off by default**.
