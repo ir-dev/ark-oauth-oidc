@@ -128,6 +128,33 @@ namespace Ark.oAuth.Oidc.Controllers
         private bool DataToolsEnabled => ServerConfig.Admin?.DataTools?.Enabled ?? true;
 
         /// <summary>
+        /// Webhooks: endpoints, their shard plans, delivery history, analytics and the dead-letter
+        /// queue (see <see cref="global::Ark.oAuth.Oidc.Webhooks.ArkWebhookService"/>).
+        ///
+        /// Operator only, like provisioning: an endpoint sends identity events — who signed in,
+        /// from which address — to a URL of the caller's choosing. Answers 404 unless the host
+        /// called <c>AddArkWebhooks()</c>, so a host that did not opt in has neither the link nor the page.
+        /// </summary>
+        [HttpGet("/{tenant_id}/admin/webhooks")]
+        public async Task<IActionResult> Webhooks([FromRoute] string tenant_id)
+        {
+            var tenant = await _da.GetTenant(tenant_id);
+            if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
+            if (!WebhooksEnabled) return NotFound();
+            if (!IsOperator())
+                return StatusCode(403, "Webhooks are restricted to the administrator account.");
+
+            BuildConsoleView(tenant, "webhooks");
+            ViewBag.WebhooksCss = AssetUrl((string)ViewBag.AppRoot, WebhooksCssAsset);
+            ViewBag.WebhooksJs = AssetUrl((string)ViewBag.AppRoot, WebhooksJsAsset);
+            return View();
+        }
+
+        /// <summary>Whether the host registered the webhook module (<c>AddArkWebhooks()</c>).</summary>
+        private bool WebhooksEnabled =>
+            HttpContext.RequestServices.GetService(typeof(global::Ark.oAuth.Oidc.Webhooks.ArkWebhookRegistry)) != null;
+
+        /// <summary>
         /// The view data both console pages share: branding, endpoints, asset URLs and identity.
         /// </summary>
         private void BuildConsoleView(ArkTenant tenant, string page)
@@ -188,6 +215,8 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.ProvisioningUrl = $"{appRoot}/{tenant.tenant_id}/admin/provisioning";
             ViewBag.DataUrl = $"{appRoot}/{tenant.tenant_id}/admin/data";
             ViewBag.DataToolsEnabled = DataToolsEnabled;
+            ViewBag.WebhooksUrl = $"{appRoot}/{tenant.tenant_id}/admin/webhooks";
+            ViewBag.WebhooksEnabled = WebhooksEnabled;
         }
 
         /// <summary>Whether the signed-in principal is the operator account — see <see cref="ArkOperator"/>.</summary>
@@ -205,6 +234,9 @@ namespace Ark.oAuth.Oidc.Controllers
         public const string ShieldAsset = "ark-shield-64.png";
         /// <summary>The Ark shield, full size, for touch icons and anywhere it is drawn large.</summary>
         public const string ShieldLargeAsset = "ark-shield-512.png";
+        /// <summary>The webhooks page's script and styles — only that page loads them.</summary>
+        public const string WebhooksJsAsset = "ark-webhooks.js";
+        public const string WebhooksCssAsset = "ark-webhooks.css";
 
         /// <summary>
         /// The files the console and the sign-in pages are built from, as embedded resources.
@@ -221,7 +253,9 @@ namespace Ark.oAuth.Oidc.Controllers
                 [ThemeCssAsset] = ("Ark.oAuth.Oidc.wwwroot.css.ark-theme.css", "text/css; charset=utf-8"),
                 [ThemeJsAsset] = ("Ark.oAuth.Oidc.wwwroot.js.ark-theme.js", "text/javascript; charset=utf-8"),
                 [ShieldAsset] = ("Ark.oAuth.Oidc.wwwroot.img.ark-shield-64.png", "image/png"),
-                [ShieldLargeAsset] = ("Ark.oAuth.Oidc.wwwroot.img.ark-shield-512.png", "image/png")
+                [ShieldLargeAsset] = ("Ark.oAuth.Oidc.wwwroot.img.ark-shield-512.png", "image/png"),
+                [WebhooksJsAsset] = ("Ark.oAuth.Oidc.wwwroot.js.ark-webhooks.js", "text/javascript; charset=utf-8"),
+                [WebhooksCssAsset] = ("Ark.oAuth.Oidc.wwwroot.css.ark-webhooks.css", "text/css; charset=utf-8")
             };
 
         /// <summary>The package version, used to bust the cache of the URLs below on upgrade.</summary>

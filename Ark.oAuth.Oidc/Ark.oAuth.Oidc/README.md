@@ -432,6 +432,29 @@ be read and edited on disk; the served copies always come from the assembly.
 The v1 console at `/oauth/{tenant}/v1/server/{client_id}/manage` is still served for existing
 deployments and is no longer developed.
 
+## Webhooks
+
+Opt-in, with one line beside the server's own registration:
+
+```csharp
+builder.Services.AddArkWebhooks();
+```
+
+The console then has a **Webhooks** page (operator only) where endpoints are configured: the URL,
+which events (`user.signed_in`, `token.issued`, `client.*`, …), how to authenticate (Basic, a static
+token, a JWT minted per request with HS256 or the tenant's RS256 key, or an OAuth 2.0 access token
+from a refresh token or client credentials), custom headers, the retry policy, the
+consecutive-failure threshold that disables the endpoint for its tenant, and its **shard plan** —
+shared, dedicated, hashed over one or more databases, or monthly tables. Deliveries are stored
+before they are sent, signed per Standard Webhooks, retried with back-off, dead-lettered when they
+cannot be delivered, and replayable; the page shows delivery history and analytics. A database-backed
+dispatcher runs on every instance with bounded concurrency and compare-and-swap claims, so several
+instances share the work safely.
+
+Without the line nothing of it runs: no tables, no background work, no link, and its routes answer
+404. Everything — events, payload, signature verification, configuration, the API — is in
+[WEBHOOKS.md](WEBHOOKS.md).
+
 ## Export, import and factory reset
 
 The operator account gets a **Data** page at `/{tenant_id}/admin/data`, over an API at

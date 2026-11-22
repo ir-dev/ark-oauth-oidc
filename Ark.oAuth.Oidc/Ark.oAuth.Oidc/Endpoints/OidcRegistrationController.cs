@@ -87,6 +87,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                 await Ctx.SaveChangesAsync();
 
                 _da.Log("client_register", tenant.tenant_id, "client registered dynamically", $"client: {client.client_id}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.ClientRegistered,
+                    new { client_id = client.client_id, client_name = client.client_name, method = "dynamic_registration" }, client.client_id);
 
                 var body = BuildClientResponse(client, ep);
                 if (secret != null)
@@ -128,6 +130,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                 Ctx.clients.Remove(client);
                 await Ctx.SaveChangesAsync();
                 _da.Log("client_deregister", tenant.tenant_id, "client registration deleted", $"client: {client_id}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.ClientDeleted,
+                    new { client_id, method = "dynamic_registration" }, client_id);
                 return NoContent();
             }, _da, "register_delete");
         }

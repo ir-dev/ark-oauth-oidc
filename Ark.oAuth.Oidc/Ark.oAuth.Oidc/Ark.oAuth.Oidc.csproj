@@ -54,6 +54,27 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+Next release — webhooks, opt-in. Nothing changes for a host that does not ask for them.
+* **`builder.Services.AddArkWebhooks()`** adds a Webhooks page to the admin console (operator only)
+  and an API under /api/oauth/v1/webhooks. Without the call nothing of it runs: no tables, no
+  background work, no console link, and its routes answer 404.
+* **Events** for sign-ins (succeeded, failed, locked out, refused, signed out), token issuance and
+  revocation, device approval, and user, client and tenant changes, plus your own through
+  IArkWebhookPublisher. Raising one never blocks a request and never fails it.
+* **Delivery** is database-backed: stored, signed per Standard Webhooks, retried with exponential,
+  linear or fixed back-off, moved to a dead-letter queue when it cannot be delivered, and replayable
+  by hand. An endpoint that fails a configured number of times in a row is disabled for its tenant
+  and what was waiting is dead-lettered.
+* **Authentication** to the receiver: Basic, a static token, a JWT minted per request (HS256, or
+  RS256 with the tenant's signing key), or an OAuth 2.0 access token from a refresh token or client
+  credentials, refreshed once across all instances. Custom headers. Secrets encrypted at rest.
+* **Shard plan per endpoint**: shared, dedicated, hashed over 2-32 table sets and one or more
+  databases, or monthly tables. Tables live beside, never inside, the IdP's schema.
+* **Dispatcher**: a BackgroundService on every instance, compare-and-swap claims with leases,
+  bounded concurrency per instance and per endpoint, retention housekeeping. See WEBHOOKS.md.
+* Event hooks were added beside existing audit calls in the sign-in, token, revocation, logout,
+  registration, device, management and provisioning endpoints; each is one call that does nothing
+  unless the module is registered.
 2.4.0 — built to hold 30,000 signed-in users, and to run on more than one instance.
 
 Measured, not estimated: with 30,000 accounts in PostgreSQL the same test went from 78 to 159
@@ -511,6 +532,7 @@ projects, and now carries a readme, an SPDX license expression and a symbol pack
 		<None Include="API-GUIDE.md" Pack="true" PackagePath="" />
 		<None Include="TROUBLESHOOTING.md" Pack="true" PackagePath="" />
 		<None Include="MIGRATION.md" Pack="true" PackagePath="" />
+		<None Include="WEBHOOKS.md" Pack="true" PackagePath="" />
 	</ItemGroup>
 
 	<!-- ==============================================================================

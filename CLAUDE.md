@@ -125,6 +125,11 @@ These apply in every language and are the source of most "it just says the passw
   that mirrors the real server's wire behaviour — prefer it to a live server when changing a client.
   **The .NET side has no automated tests**, so `dotnet test` finds nothing. Verify .NET changes
   against a running `Ark.oAuth.Oidc.Host`.
+* **Webhooks are an opt-in module** (`AddArkWebhooks()`, code in `Ark.oAuth.Oidc/Webhooks/`, spec in
+  `WEBHOOKS.md`). Keep it that way: its tables live in its own two contexts, never in
+  `ArkDataContext`, and the IdP raises events only through `ArkWebhookEvents.Raise(HttpContext, …)` —
+  one call beside an existing audit line, which must never throw, block or touch the database.
+  A host without the call must see no tables, no link and 404s.
 * **Load test:** `scripts/loadtest` (seed + generator) against a scratch host and database, never a
   real one. Results are published as a dated page under `site/performance/`. On a laptop, wrap a
   long run in `caffeinate -dimsu`: on battery the machine sleeps after a minute idle and the run

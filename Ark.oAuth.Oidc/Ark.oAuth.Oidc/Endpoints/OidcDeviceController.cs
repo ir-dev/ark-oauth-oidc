@@ -136,6 +136,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                 await _grants.TrackSessionClientAsync(tenant.tenant_id, session.session_id, entry.client_id, session.subject);
                 _da.Log("device_approved", tenant.tenant_id, "device authorization approved",
                     $"client: {entry.client_id}, sub: {session.subject}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.DeviceApproved,
+                    new { client_id = entry.client_id, user = session.subject, scopes }, session.subject);
                 return DevicePage(tenant, "done", null, entry.user_code,
                     "You're all set — return to your device, it will continue automatically.");
             }

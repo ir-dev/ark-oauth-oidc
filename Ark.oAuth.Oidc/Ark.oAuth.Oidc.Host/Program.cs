@@ -1,11 +1,17 @@
 using Ark.oAuth;
 using Ark.oAuth.Oidc;
+using Ark.oAuth.Oidc.Webhooks;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // The identity provider. Everything it serves is tenant-scoped under the issuer
 // {BaseUrl}/{TenantId} — see /{tenant}/.well-known/openid-configuration.
 builder.Services.AddArkOidcServer(builder.Environment);
+
+// Webhooks: identity events (sign-ins, token issuance, user and client changes) delivered to
+// endpoints configured in the console under Webhooks, with retries, a dead-letter queue and a
+// shard plan per endpoint. Opt-in: without this line none of it runs and the console has no link.
+builder.Services.AddArkWebhooks();
 
 // The admin console signs in through this same server, so the host is also an OIDC client.
 // This is the standard ASP.NET Core handler: real PKCE, state, nonce and JWKS rollover.

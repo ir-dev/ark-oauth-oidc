@@ -1,4 +1,5 @@
 using Ark.oAuth.Oidc;
+using Ark.oAuth.Oidc.Webhooks;
 
 // The whole identity provider. Nothing has to be configured first: started with no tenant and no
 // database, it serves a setup wizard at /ark-idp/setup, and once that is finished this same
@@ -6,6 +7,8 @@ using Ark.oAuth.Oidc;
 // admin console unless another page was chosen). No restart.
 var builder = WebApplication.CreateBuilder(args);
 builder.AddArkIdp();
+// Optional: the Webhooks page in the console and the dispatcher behind it. Remove to opt out.
+builder.Services.AddArkWebhooks();
 
 var app = builder.Build();
 

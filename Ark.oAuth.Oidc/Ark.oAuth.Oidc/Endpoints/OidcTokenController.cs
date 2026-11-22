@@ -125,6 +125,8 @@ namespace Ark.oAuth.Oidc.Endpoints
 
             _da.Log("token", $"{tenant.tenant_id}/oauth2/token", "authorization_code redeemed",
                 $"client: {client.client_id}, sub: {entry.subject}");
+            Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.TokenIssued,
+                new { grant_type = "authorization_code", client_id = client.client_id, subject = entry.subject, scopes, refresh_token_issued = refreshToken != null, id_token_issued = idToken != null }, entry.subject);
 
             return Ok(BuildResponse(accessToken, expiresAt, scopes, refreshToken, idToken));
         }
@@ -242,6 +244,8 @@ namespace Ark.oAuth.Oidc.Endpoints
 
             var (accessToken, expiresAt, _) = await _tokens.IssueAccessTokenAsync(ctx);
             _da.Log("token", $"{tenant.tenant_id}/oauth2/token", "client_credentials issued", $"client: {client.client_id}");
+            Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.TokenIssued,
+                new { grant_type = "client_credentials", client_id = client.client_id, subject = client.client_id, scopes }, client.client_id);
 
             // §4.4.3: a refresh token SHOULD NOT be issued — the client can just ask again.
             return Ok(BuildResponse(accessToken, expiresAt, scopes, null, null));

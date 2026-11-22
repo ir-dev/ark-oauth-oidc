@@ -70,6 +70,10 @@ namespace Ark.oAuth.Oidc
                     : request!.tenant_id!.Trim();
                 var endpoints = Protocol.ArkOidcEndpoints.For(Request, util.ServerConfig, tenantId);
                 var result = await provisioning.ProvisionAsync(request, endpoints);
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, result.tenant_id, Webhooks.ArkWebhookEvents.ClientProvisioned,
+                    new { result.client_id, result.client_name, result.client_created, user = result.user_name, result.user_created, result.mapping_created, result.claims }, result.client_id);
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, result.tenant_id, Webhooks.ArkWebhookEvents.UserProvisioned,
+                    new { user = result.user_name, result.user_created, result.client_id, result.mapping_created, result.claims }, result.user_name);
                 var what = result.user_created
                     ? (result.user_credential == "activation_email"
                         ? "an activation link has been emailed to the new user"
@@ -129,6 +133,8 @@ namespace Ark.oAuth.Oidc
             try
             {
                 var result = await provisioning.ProvisionUserAsync(request);
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, result.tenant_id, Webhooks.ArkWebhookEvents.UserProvisioned,
+                    new { user = result.user_name, result.user_created, result.client_id, result.mapping_created, result.claims }, result.user_name);
                 var what = result.user_created
                     ? (result.user_credential == "activation_email"
                         ? "the account was created and an activation link emailed"
@@ -192,6 +198,8 @@ namespace Ark.oAuth.Oidc
                 da.Log("client_activation", client.client_id,
                     request.is_active ? "client activated" : "client deactivated",
                     $"details : ci: {client.client_id}, ti: {client.tenant_id}, reason: {request.reason}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, client.tenant_id, Webhooks.ArkWebhookEvents.ClientActivationChanged,
+                    new { client_id = client.client_id, is_active = request.is_active, reason = request.reason }, client.client_id);
                 return Ok(new
                 {
                     error = false,
@@ -229,6 +237,8 @@ namespace Ark.oAuth.Oidc
                 da.Log("user_activation", user.email,
                     request.is_active ? "user activated" : "user deactivated",
                     $"details : e: {user.email}, reason: {request.reason}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, Webhooks.ArkWebhookEvents.OperatorTenant(HttpContext), Webhooks.ArkWebhookEvents.UserActivationChanged,
+                    new { user = user.email, is_active = request.is_active, reason = request.reason }, user.email);
                 return Ok(new
                 {
                     error = false,

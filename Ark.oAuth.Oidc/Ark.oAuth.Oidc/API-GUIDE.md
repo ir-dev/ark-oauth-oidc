@@ -20,6 +20,7 @@ configuration) and by *calling* its HTTP endpoints (protocol + management APIs).
 | `void IServiceCollection.AddArkOidcServer(IWebHostEnvironment environment)` | Register the DbContext, protocol services, CORS configurator, controllers/views, antiforgery. Unpacks embedded assets to the content root in Development. | in `ConfigureServices` |
 | `void IApplicationBuilder.UseArkAuthData()` | Setup wizard while unconfigured (see below), then the one-time DB bootstrap: create + seed on first run, apply pending schema scripts, reconcile the admin/machine clients and scope catalogue. Latched (runs once per process). | after `UseRouting` |
 | `void IApplicationBuilder.UseArkOidcCors()` | Enables the CORS middleware for endpoints marked `[EnableCors(ArkCors.PolicyName)]`. | after `UseRouting`, **before** `UseAuthorization` |
+| `IServiceCollection IServiceCollection.AddArkWebhooks()` | **Opt-in** webhook subsystem (namespace `Ark.oAuth.Oidc.Webhooks`): the console's Webhooks page, the API below, and three hosted services (registry, ingestor, dispatcher). Without it nothing of the module runs and its routes answer 404. Idempotent. See [WEBHOOKS.md](WEBHOOKS.md). | in `ConfigureServices`, any order relative to `AddArkOidcServer` / `AddArkIdp` |
 
 The host also calls **`AddArkOidcClient(configuration)`** and **`UseArkOidcClient()`** from
 `Ark.oAuth.Client` (the admin console is itself an OIDC client). Full pipeline order:
@@ -490,6 +491,29 @@ operator's browser cookie stays valid until it expires, but should sign out and 
 - **Across providers.** The file is provider-neutral: export from SQLite, import into PostgreSQL or
   MySQL, and back.
 
+## Webhooks API (`ArkWebhooksController`, operator policy, base `/api/oauth/v1/webhooks`)
+
+Present only when the host called `AddArkWebhooks()`; 404 otherwise. Writes are `POST` with a JSON
+body; answers are `{ error, code, msg, data }`. Secrets in a body: `null` keeps, `""` clears.
+
+| Method + route | Purpose |
+|---|---|
+| `GET meta` | Event catalogue, configured databases, strategies, defaults, limits, this instance's dispatcher status. |
+| `GET list?tenant_id=` / `GET get?id=` | Endpoints, without secrets (`has_…` flags instead). |
+| `POST upsert` | `ArkWebhookUpsertRequest`: create (no `id`; answers `signing_secret` once) or update. Shard tables are created before the save. |
+| `POST status` | `{ id, action: pause \| resume \| enable \| disable }`. `enable` resets the failure count; `disable` dead-letters what is waiting. |
+| `POST secret/rotate` / `POST delete` | `delete` takes `purge: true` to remove the endpoint's history and dead letters. |
+| `POST test` | Sends `webhook.test` now; answers status, latency and the response. Never counts towards the threshold. |
+| `POST plan` | `{ shard: { strategy, databases, count, partition_key } }` → the tables it would create and whether each database answers. |
+| `GET deliveries?endpoint_id=&tenant_id=&status=&limit=&before=` / `GET delivery?shard=&id=` | History across every shard the endpoint used; one delivery with body, attempts and dead letter. |
+| `POST delivery/replay` / `POST delivery/cancel` | `{ shard, id }`. |
+| `GET deadletters?…&include_replayed=` / `POST deadletters/replay` / `POST deadletters/purge` | `{ items: [{ shard, id }] }` or `{ endpoint_id }` for all open letters. |
+| `GET analytics?tenant_id=&endpoint_id=&hours=` | Per-endpoint delivered, dead, backlog, attempts, success rate, avg/p95 latency, open dead letters; time series. |
+| `GET shards` | Shard registry (`{database}:{suffix}`) with row counts per table set. |
+
+Inject `IArkWebhookPublisher` to raise events of your own (`Publish` — non-blocking, never throws;
+`PublishAndWaitAsync` — stores the deliveries before returning).
+
 ## Migration API (`MigrationController`, base `/api/migration`)
 
 | Method + route | Purpose |
@@ -508,7 +532,8 @@ operator's browser cookie stays valid until it expires, but should sign out and 
 | Console | `/{tenant_id}/admin` (`/admin` → configured tenant) |
 | Provisioning page (admin-only) | `/{tenant_id}/admin/provisioning` |
 | Data page — export, import, factory reset (admin-only; `DataTools:Enabled`) | `/{tenant_id}/admin/data` |
-| Assets (from assembly) | `/ark-admin/asset/ark-admin.css`, `/ark-admin/asset/ark-admin.js` |
+| Webhooks page (admin-only; only with `AddArkWebhooks()`) | `/{tenant_id}/admin/webhooks` |
+| Assets (from assembly) | `/ark-admin/asset/ark-admin.css`, `/ark-admin/asset/ark-admin.js` (+ `ark-webhooks.css`, `ark-webhooks.js` on the Webhooks page) |
 
 Restricted to the administrator account (`AdminUser:Username`, or a principal carrying an `admin`
 claim). Override a page by placing your own `Views/Admin/Manage.cshtml` in the host. The v1 console at

@@ -98,6 +98,8 @@ namespace Ark.oAuth.Oidc
                 }
                 await da.UpsertTenant(tenant);
                 da.Log("tenant_upsert", $"{tenant.tenant_id}", "Tenant updated success", $"details : ti: {tenant.tenant_id}, n: {tenant.name}, d: {tenant.display}, em: {tenant.expire_mins}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, Webhooks.ArkWebhookEvents.OperatorTenant(HttpContext), Webhooks.ArkWebhookEvents.TenantUpdated,
+                    new { tenant_id = tenant.tenant_id, name = tenant.name, display = tenant.display }, tenant.tenant_id);
                 return new
                 {
                     error = false,
@@ -149,6 +151,8 @@ namespace Ark.oAuth.Oidc
             {
                 await da.UpsertClient(client);
                 da.Log("client_upsert", $"{client.client_id}", "Client updated success", $"deails : d: {client.display}, ci: {client.client_id}, name: {client.name}, do: {client.domain}, ru: {client.redirect_url}, em: {client.expire_mins}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, client.tenant_id, Webhooks.ArkWebhookEvents.ClientUpdated,
+                    new { client_id = client.client_id, name = client.name, display = client.display, is_active = client.is_active }, client.client_id);
                 return Ok(new
                 {
                     error = false,
@@ -187,6 +191,8 @@ namespace Ark.oAuth.Oidc
             {
                 await da.DeleteClient(client);
                 da.Log("client_delete", $"{client.client_id}", "Client deleted success", $"details : d: {client.display}, ci: {client.client_id}, name: {client.name}, do: {client.domain}, ru: {client.redirect_url}, em: {client.expire_mins}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, client.tenant_id, Webhooks.ArkWebhookEvents.ClientDeleted,
+                    new { client_id = client.client_id, method = "management_api" }, client.client_id);
                 return new
                 {
                     error = false,
@@ -240,6 +246,8 @@ namespace Ark.oAuth.Oidc
                 stored.client_secret_expires_at = null; // 0 == does not expire, per RFC 7591
                 await da.UpsertClient(stored);
                 da.Log("client_secret_reset", $"{stored.client_id}", "Client secret reset success", $"details : ci: {stored.client_id}, ti: {stored.tenant_id}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, stored.tenant_id, Webhooks.ArkWebhookEvents.ClientSecretReset,
+                    new { client_id = stored.client_id }, stored.client_id);
                 return new
                 {
                     error = false,
@@ -470,6 +478,8 @@ namespace Ark.oAuth.Oidc
             {
                 await da.UpsertUsersClientClaims(us_cl);
                 da.Log("user_cl_cl_upsert", "v1/user/client/claims/upsert", "user client claims updated", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, claims: {us_cl?.claims_}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, us_cl?.tenant_id ?? Webhooks.ArkWebhookEvents.OperatorTenant(HttpContext), Webhooks.ArkWebhookEvents.UserAccessChanged,
+                    new { user = us_cl?.email, client_id = us_cl?.client_id, change = "granted", claims = JsonList.Read(us_cl?.claims_) }, us_cl?.email);
                 return new
                 {
                     error = false,
@@ -496,6 +506,8 @@ namespace Ark.oAuth.Oidc
             {
                 await da.DeleteUsersClientClaims(us_cl);
                 da.Log("user_cl_cl_delete", "v1/user/client/claims/delete", "delete client claims updated", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, claims: {us_cl?.claims_}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, us_cl?.tenant_id ?? Webhooks.ArkWebhookEvents.OperatorTenant(HttpContext), Webhooks.ArkWebhookEvents.UserAccessChanged,
+                    new { user = us_cl?.email, client_id = us_cl?.client_id, change = "removed" }, us_cl?.email);
                 return new
                 {
                     error = false,
@@ -523,6 +535,8 @@ namespace Ark.oAuth.Oidc
                 var existing = await da.GetUser((user?.email ?? "").ToLower().Trim());
                 var saved = await da.UpsertUser(user);
                 da.Log("user_upsert", "v1/user/upsert", "user updated", $"deails : e: {user?.email}, name: {user?.name}, rm: {user?.reset_mode}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, Webhooks.ArkWebhookEvents.OperatorTenant(HttpContext), Webhooks.ArkWebhookEvents.UserUpdated,
+                    new { user = saved?.email ?? user?.email, name = saved?.name ?? user?.name, created = existing == null }, saved?.email ?? user?.email);
                 // A new account is usable in one of two ways, and which one it is decides what the
                 // operator has to do next — so say so rather than reporting a bare "user updated."
                 var msg = existing != null
@@ -582,6 +596,8 @@ namespace Ark.oAuth.Oidc
             {
                 var saved = await da.SetUserPassword(request?.email, request?.password);
                 da.Log("user_password_set", "v1/user/pw/set", "user password updated", $"details : e: {saved?.email}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, Webhooks.ArkWebhookEvents.OperatorTenant(HttpContext), Webhooks.ArkWebhookEvents.UserPasswordChanged,
+                    new { user = saved?.email, by = "administrator" }, saved?.email);
                 return new
                 {
                     error = false,

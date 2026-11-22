@@ -204,6 +204,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                         var inactive = new ArkAccountInactiveException(ArkActivationLevel.User, holder.name ?? holder.email);
                         _da.Log("signin_inactive", tenant.tenant_id, "session dropped: user deactivated",
                             $"user: {session.subject}, client: {client.client_id}", "warn");
+                        Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.UserSignInRefused,
+                            new { user = session.subject, client_id = client.client_id, reason = "user_deactivated", ip = Webhooks.ArkWebhookEvents.Ip(HttpContext) }, session.subject);
                         return LoginPage(brand, client, inactive.FriendlyMessage, session.subject, tenant);
                     }
                 }
@@ -220,6 +222,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                 {
                     _da.Log("signin_no_access", tenant.tenant_id, "session not used: no access mapping for client",
                         $"user: {session.subject}, client: {client.client_id}", "warn");
+                    Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.UserSignInRefused,
+                        new { user = session.subject, client_id = client.client_id, reason = "no_access", ip = Webhooks.ArkWebhookEvents.Ip(HttpContext) }, session.subject);
                     if (prompt.Contains("none"))
                         throw new OAuthException(OAuthErrorCodes.LoginRequired,
                             "the signed-in user does not have access to this client.");
@@ -350,6 +354,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                     && (DateTime.UtcNow - status.at).TotalMinutes < opt.LockoutMinutes)
                 {
                     _da.Log("signin_lockout", tenant.tenant_id, "sign-in blocked by lockout", $"user: {username}", "warn");
+                    Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.UserLockedOut,
+                        new { user = username, client_id = client.client_id, lockout_minutes = opt.LockoutMinutes, ip = Webhooks.ArkWebhookEvents.Ip(HttpContext) }, username);
                     return (null, $"Too many failed attempts. Try again in {opt.LockoutMinutes} minutes.");
                 }
             }
@@ -363,6 +369,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                 var session = await _grants.CreateSessionAsync(
                     tenant.tenant_id, user.email, opt.SessionLifetimeMinutes, browserId);
                 _da.Log("signin", tenant.tenant_id, "sign-in succeeded", $"user: {username}, client: {client.client_id}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.UserSignedIn,
+                    new { user = user.email, name = user.name, client_id = client.client_id, session_id = session.session_id, ip = Webhooks.ArkWebhookEvents.Ip(HttpContext) }, user.email);
                 return (session, null);
             }
             catch (ArkAccountInactiveException ex)
@@ -373,6 +381,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                 // it saves the user retyping credentials that are in fact correct.
                 _da.Log("signin_inactive", tenant.tenant_id, $"sign-in refused: {ex.Level} deactivated",
                     $"user: {username}, client: {client.client_id}", "warn");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.UserSignInRefused,
+                    new { user = username, client_id = client.client_id, reason = $"{ex.Level}_deactivated".ToLowerInvariant(), ip = Webhooks.ArkWebhookEvents.Ip(HttpContext) }, username);
                 return (null, ex.FriendlyMessage);
             }
             catch (ArkBusyException ex)
@@ -384,6 +394,8 @@ namespace Ark.oAuth.Oidc.Endpoints
             catch (Exception ex)
             {
                 _da.Log("signin_failed", tenant.tenant_id, "sign-in failed", $"user: {username}, reason: {ex.Message}", "warn");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.UserSignInFailed,
+                    new { user = username, client_id = client.client_id, detail = ex.Message, ip = Webhooks.ArkWebhookEvents.Ip(HttpContext) }, username);
                 // one message for every failure mode, so the page cannot be used to enumerate accounts
                 return (null, "That username and password combination was not recognised.");
             }

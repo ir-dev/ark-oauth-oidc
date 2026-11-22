@@ -1,0 +1,406 @@
+@*
+    Webhooks: endpoints, their shard plans, delivery history, analytics and the dead-letter queue.
+
+    Drawn only when the host called AddArkWebhooks() (AdminController answers 404 otherwise), and
+    only for the operator account. The page is a shell: everything on it comes from the webhook
+    management API (/api/oauth/v1/webhooks/...) through ark-webhooks.js, so a script driving the
+    same API gets the same answers and the same refusals.
+
+    Self-contained for the same reason the other console pages are: a view rendered out of a
+    NuGet package cannot assume the host has a layout, a _ViewStart or tag helpers. It loads its
+    own script and stylesheet rather than adding to ark-admin.js, so the console pages that do not
+    show webhooks carry none of it.
+*@
+@{
+    Layout = null;
+    var tenant = ViewBag.Tenant as Ark.oAuth.ArkTenant;
+    var title = tenant?.display ?? tenant?.name ?? (ViewBag.TenantId as string);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin" />
+    <title>Webhooks — @title</title>
+    <link href="@ViewBag.ConsoleCss" rel="stylesheet" />
+    <link href="@ViewBag.ThemeCss" rel="stylesheet" />
+    <link href="@ViewBag.WebhooksCss" rel="stylesheet" />
+    @* Not deferred: applies the viewer's saved theme and text size before the first paint. *@
+    <script src="@ViewBag.ThemeJs"></script>
+</head>
+<body>
+@await Html.PartialAsync("_ConsoleHeader")
+
+<main class="ark-main"
+      id="ark-webhooks"
+      data-page="webhooks"
+      data-app-root="@ViewBag.AppRoot"
+      data-tenant-id="@ViewBag.TenantId">
+
+    <div class="ark-alert ark-alert-warn" id="wh-module-alert" hidden></div>
+
+    @* ---------------------------------------------------------------- overview *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Webhooks</h2>
+            <span class="ark-hint">identity events, signed and delivered to your endpoints with retries</span>
+            <span class="ark-spacer"></span>
+            <label class="wh-inline" for="wh-tenant">Tenant</label>
+            <select id="wh-tenant" aria-label="Tenant"><option value="">All tenants</option></select>
+            <select id="wh-hours" aria-label="Period">
+                <option value="24">Last 24 hours</option>
+                <option value="168">Last 7 days</option>
+                <option value="720">Last 30 days</option>
+            </select>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-refresh">Refresh</button>
+            <button type="button" class="ark-btn-sm" id="wh-new">New webhook</button>
+        </div>
+        <div class="ark-panel-body">
+            <div class="wh-kpis" id="wh-kpis" aria-live="polite"><p class="ark-empty">Loading…</p></div>
+            <div class="wh-chart-card">
+                <div class="wh-chart-head">
+                    <h3 id="wh-chart-title">Delivery attempts</h3>
+                    <span class="wh-legend" aria-hidden="true">
+                        <span class="wh-key"><span class="wh-swatch wh-swatch-ok"></span>Succeeded</span>
+                        <span class="wh-key"><span class="wh-swatch wh-swatch-fail"></span>Failed</span>
+                    </span>
+                </div>
+                <div class="wh-chart" id="wh-chart" role="img" aria-labelledby="wh-chart-title"></div>
+                <div class="wh-tooltip" id="wh-tooltip" role="status" hidden></div>
+                <details class="wh-table-view">
+                    <summary>Table view</summary>
+                    <div class="ark-table-wrap" id="wh-chart-table"></div>
+                </details>
+            </div>
+        </div>
+    </section>
+
+    @* ---------------------------------------------------------------- endpoints *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Endpoints</h2>
+            <span class="ark-hint">select one for its delivery history, dead letters and health</span>
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-table-wrap">
+                <table class="ark-table wh-endpoints">
+                    <thead>
+                        <tr>
+                            <th>Webhook</th>
+                            <th>Status</th>
+                            <th>Events</th>
+                            <th class="ark-num">Delivered</th>
+                            <th class="ark-num">Success</th>
+                            <th class="ark-num">Backlog</th>
+                            <th class="ark-num">Dead letters</th>
+                            <th>Storage</th>
+                            <th>Last delivery</th>
+                        </tr>
+                    </thead>
+                    <tbody id="wh-rows"><tr><td colspan="9" class="ark-empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    @* ---------------------------------------------------------------- one endpoint *@
+    <section class="ark-panel" id="wh-detail" hidden>
+        <div class="ark-panel-head">
+            <h2 id="wh-detail-title">Webhook</h2>
+            <span id="wh-detail-badge"></span>
+            <span class="ark-hint wh-url" id="wh-detail-url"></span>
+            <span class="ark-spacer"></span>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-act-test">Send test</button>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-act-status"></button>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-act-edit">Edit</button>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-act-rotate">Rotate secret</button>
+            <button type="button" class="ark-btn-danger ark-btn-sm" id="wh-act-delete">Delete</button>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-act-close" aria-label="Close and show every webhook">✕</button>
+        </div>
+        <div class="ark-panel-body">
+            <div id="wh-detail-alert"></div>
+            <div id="wh-test-result"></div>
+            <div class="wh-tabs" role="tablist" aria-label="Webhook detail">
+                <button type="button" role="tab" class="wh-tab" id="wh-tab-btn-history" aria-controls="wh-tab-history" aria-selected="true">Delivery history</button>
+                <button type="button" role="tab" class="wh-tab" id="wh-tab-btn-dead" aria-controls="wh-tab-dead" aria-selected="false">Dead letters <span class="wh-count" id="wh-dead-count"></span></button>
+                <button type="button" role="tab" class="wh-tab" id="wh-tab-btn-health" aria-controls="wh-tab-health" aria-selected="false">Health &amp; storage</button>
+            </div>
+
+            <div role="tabpanel" id="wh-tab-history" aria-labelledby="wh-tab-btn-history">
+                <div class="wh-toolbar">
+                    <select id="wh-history-status" aria-label="Filter by status">
+                        <option value="">Every status</option>
+                        <option value="pending,retrying,in_flight">Waiting (pending, retrying, in flight)</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="retrying">Retrying</option>
+                        <option value="dead">Dead-lettered</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="test_failed">Failed tests</option>
+                    </select>
+                    <span class="ark-spacer"></span>
+                    <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-history-reload">Reload</button>
+                </div>
+                <div class="ark-table-wrap">
+                    <table class="ark-table">
+                        <thead>
+                            <tr><th>Created</th><th>Event</th><th>Status</th><th class="ark-num">Attempts</th><th>Last answer</th><th>Next attempt</th><th></th></tr>
+                        </thead>
+                        <tbody id="wh-history"></tbody>
+                    </table>
+                </div>
+                <div class="wh-more"><button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-history-more" hidden>Load older</button></div>
+            </div>
+
+            <div role="tabpanel" id="wh-tab-dead" aria-labelledby="wh-tab-btn-dead" hidden>
+                <div class="wh-toolbar">
+                    <span class="ark-check"><input type="checkbox" id="wh-dead-replayed" /><label for="wh-dead-replayed">Show replayed</label></span>
+                    <span class="ark-spacer"></span>
+                    <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-dead-replay-sel" disabled>Replay selected</button>
+                    <button type="button" class="ark-btn-sm" id="wh-dead-replay-all">Replay all open</button>
+                    <button type="button" class="ark-btn-danger ark-btn-sm" id="wh-dead-purge-sel" disabled>Purge selected</button>
+                </div>
+                <div class="ark-table-wrap">
+                    <table class="ark-table">
+                        <thead>
+                            <tr><th><input type="checkbox" id="wh-dead-all" aria-label="Select all" /></th><th>Dead since</th><th>Event</th><th>Reason</th><th class="ark-num">Attempts</th><th>Last answer</th><th>Replayed</th><th></th></tr>
+                        </thead>
+                        <tbody id="wh-dead"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div role="tabpanel" id="wh-tab-health" aria-labelledby="wh-tab-btn-health" hidden>
+                <div class="wh-health" id="wh-health"></div>
+            </div>
+        </div>
+    </section>
+
+    @* ---------------------------------------------------------------- shards *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Storage shards</h2>
+            <span class="ark-hint">the table sets deliveries are written to, as the endpoints' shard plans laid them out</span>
+            <span class="ark-spacer"></span>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-shards-refresh">Refresh</button>
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-table-wrap">
+                <table class="ark-table">
+                    <thead>
+                        <tr><th>Shard</th><th>Strategy</th><th>Owner</th><th>Status</th><th class="ark-num">Deliveries</th><th class="ark-num">Waiting</th><th class="ark-num">Dead letters</th><th>Tables</th></tr>
+                    </thead>
+                    <tbody id="wh-shards"><tr><td colspan="8" class="ark-empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+            <p class="ark-note wh-runtime" id="wh-runtime"></p>
+        </div>
+    </section>
+</main>
+
+@await Html.PartialAsync("_ConsoleFooter")
+
+@* -------------------------------------------------------------------- editor *@
+<div class="ark-drawer-backdrop" id="wh-drawer-backdrop"></div>
+<aside class="ark-drawer wh-drawer" id="wh-drawer" aria-labelledby="wh-drawer-title">
+    <div class="ark-drawer-head">
+        <h3 id="wh-drawer-title">New webhook</h3>
+        <span class="ark-spacer"></span>
+        <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-drawer-close">Close</button>
+    </div>
+    <div class="ark-drawer-body">
+        <div class="ark-alert" id="wh-form-error" hidden></div>
+
+        <fieldset>
+            <legend>Endpoint</legend>
+            <div class="ark-grid-2">
+                <div class="ark-field">
+                    <label for="f-tenant">Tenant <span class="ark-req">required</span></label>
+                    <select id="f-tenant"></select>
+                    <div class="ark-note">Events of this tenant only. User and tenant changes are raised in the operator tenant.</div>
+                </div>
+                <div class="ark-field">
+                    <label for="f-name">Name <span class="ark-req">required</span></label>
+                    <input type="text" id="f-name" maxlength="200" autocomplete="off" />
+                </div>
+            </div>
+            <div class="ark-field">
+                <label for="f-url">Endpoint URL <span class="ark-req">required</span></label>
+                <input type="url" id="f-url" placeholder="https://hooks.example.com/ark" spellcheck="false" autocomplete="off" />
+                <div class="ark-note">Receives a POST with a JSON body, signed per Standard Webhooks. Redirects are not followed.</div>
+            </div>
+            <div class="ark-field">
+                <label for="f-description">Description</label>
+                <input type="text" id="f-description" autocomplete="off" />
+            </div>
+            <div class="ark-field">
+                <label>Events <span class="ark-req">at least one</span></label>
+                <div class="ark-check"><input type="checkbox" id="f-ev-all" /><label for="f-ev-all">Every event (<code>*</code>), including ones added later</label></div>
+                <div class="wh-events" id="f-events"></div>
+                <input type="text" id="f-events-custom" placeholder="more patterns, space separated: billing.*  app.custom_event" spellcheck="false" autocomplete="off" />
+                <div class="ark-note">Patterns cover events your host publishes through <code>IArkWebhookPublisher</code> too.</div>
+            </div>
+            <div class="ark-field" id="f-status-field">
+                <label for="f-status">Start</label>
+                <select id="f-status">
+                    <option value="active">Active — deliver straight away</option>
+                    <option value="paused">Paused — queue events, deliver once resumed</option>
+                </select>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Authentication</legend>
+            <div class="ark-field">
+                <label for="f-auth-type">Type</label>
+                <select id="f-auth-type">
+                    <option value="none">None — signature only</option>
+                    <option value="basic">HTTP Basic</option>
+                    <option value="bearer">Static token (API key or pre-issued JWT)</option>
+                    <option value="jwt">JWT minted per request</option>
+                    <option value="oauth2">OAuth 2.0 access token (refresh token or client credentials)</option>
+                </select>
+                <div class="ark-note">Every request also carries the <code>webhook-signature</code> header, whatever is chosen here.</div>
+            </div>
+            <div data-auth="basic" hidden>
+                <div class="ark-grid-2">
+                    <div class="ark-field"><label for="f-basic-user">Username</label><input type="text" id="f-basic-user" autocomplete="off" /></div>
+                    <div class="ark-field"><label for="f-basic-pass">Password</label><input type="password" id="f-basic-pass" autocomplete="new-password" /><div class="ark-note" data-secret-note="basic_password"></div></div>
+                </div>
+            </div>
+            <div data-auth="bearer" hidden>
+                <div class="ark-field"><label for="f-bearer-token">Token</label><input type="password" id="f-bearer-token" autocomplete="new-password" spellcheck="false" /><div class="ark-note" data-secret-note="bearer_token"></div></div>
+                <div class="ark-grid-2">
+                    <div class="ark-field"><label for="f-bearer-header">Header</label><input type="text" id="f-bearer-header" placeholder="Authorization" autocomplete="off" /></div>
+                    <div class="ark-field"><label for="f-bearer-scheme">Scheme</label><input type="text" id="f-bearer-scheme" placeholder="Bearer" autocomplete="off" /><div class="ark-note">Blank sends the token alone.</div></div>
+                </div>
+            </div>
+            <div data-auth="jwt" hidden>
+                <div class="ark-grid-2">
+                    <div class="ark-field">
+                        <label for="f-jwt-alg">Signed with</label>
+                        <select id="f-jwt-alg">
+                            <option value="HS256">HS256 — a secret shared with the receiver</option>
+                            <option value="RS256">RS256 — this tenant's signing key (verify with its JWKS)</option>
+                        </select>
+                    </div>
+                    <div class="ark-field" id="f-jwt-secret-field"><label for="f-jwt-secret">Shared secret</label><input type="password" id="f-jwt-secret" autocomplete="new-password" /><div class="ark-note" data-secret-note="jwt_secret">At least 32 characters.</div></div>
+                </div>
+                <div class="ark-grid-2">
+                    <div class="ark-field"><label for="f-jwt-iss">Issuer</label><input type="text" id="f-jwt-iss" placeholder="RS256: the tenant issuer" autocomplete="off" /></div>
+                    <div class="ark-field"><label for="f-jwt-aud">Audience</label><input type="text" id="f-jwt-aud" placeholder="the endpoint's origin" autocomplete="off" /></div>
+                    <div class="ark-field"><label for="f-jwt-life">Lifetime (seconds)</label><input type="number" id="f-jwt-life" min="30" max="3600" value="300" /></div>
+                    <div class="ark-field"><label for="f-jwt-header">Header</label><input type="text" id="f-jwt-header" placeholder="Authorization (Bearer)" autocomplete="off" /></div>
+                </div>
+                <div class="ark-field"><label for="f-jwt-claims">Extra claims (JSON object)</label><textarea id="f-jwt-claims" spellcheck="false" placeholder='{"scope": "webhooks"}'></textarea><div class="ark-note">Every token also carries sub, jti, evt, evt_type, tenant_id and body_sha256 — a hash of the exact body, so a token cannot be lifted onto another request.</div></div>
+            </div>
+            <div data-auth="oauth2" hidden>
+                <div class="ark-grid-2">
+                    <div class="ark-field">
+                        <label for="f-oauth-grant">Grant</label>
+                        <select id="f-oauth-grant">
+                            <option value="refresh_token">refresh_token — exchange a refresh token you hold</option>
+                            <option value="client_credentials">client_credentials</option>
+                        </select>
+                    </div>
+                    <div class="ark-field">
+                        <label for="f-oauth-auth">Client authentication</label>
+                        <select id="f-oauth-auth">
+                            <option value="client_secret_post">client_secret_post</option>
+                            <option value="client_secret_basic">client_secret_basic</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="ark-field"><label for="f-oauth-url">Token endpoint</label><input type="url" id="f-oauth-url" placeholder="https://auth.example.com/oauth2/token" spellcheck="false" autocomplete="off" /></div>
+                <div class="ark-grid-2">
+                    <div class="ark-field"><label for="f-oauth-client">Client id</label><input type="text" id="f-oauth-client" autocomplete="off" /></div>
+                    <div class="ark-field"><label for="f-oauth-secret">Client secret</label><input type="password" id="f-oauth-secret" autocomplete="new-password" /><div class="ark-note" data-secret-note="oauth_client_secret"></div></div>
+                </div>
+                <div class="ark-field" id="f-oauth-refresh-field"><label for="f-oauth-refresh">Refresh token</label><input type="password" id="f-oauth-refresh" autocomplete="new-password" spellcheck="false" /><div class="ark-note" data-secret-note="oauth_refresh_token">A rotated refresh token is stored and used next; entering a new one here replaces it.</div></div>
+                <div class="ark-grid-2">
+                    <div class="ark-field"><label for="f-oauth-scope">Scope</label><input type="text" id="f-oauth-scope" autocomplete="off" /></div>
+                    <div class="ark-field"><label for="f-oauth-aud">Audience</label><input type="text" id="f-oauth-aud" autocomplete="off" /></div>
+                </div>
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Custom headers</legend>
+            <div id="f-headers"></div>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="f-header-add">Add header</button>
+            <div class="ark-note">Values are stored encrypted and never shown again; leave a value blank to keep it.</div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Retries and delivery</legend>
+            <div class="ark-grid-2">
+                <div class="ark-field"><label for="f-max-attempts">Attempts, in all</label><input type="number" id="f-max-attempts" min="1" max="50" /></div>
+                <div class="ark-field">
+                    <label for="f-backoff">Back-off</label>
+                    <select id="f-backoff">
+                        <option value="exponential">Exponential (doubling)</option>
+                        <option value="linear">Linear</option>
+                        <option value="fixed">Fixed</option>
+                    </select>
+                </div>
+                <div class="ark-field"><label for="f-initial-delay">First retry after (s)</label><input type="number" id="f-initial-delay" min="1" max="86400" /></div>
+                <div class="ark-field"><label for="f-max-delay">Longest wait (s)</label><input type="number" id="f-max-delay" min="1" max="604800" /></div>
+                <div class="ark-field"><label for="f-timeout">Timeout per attempt (s)</label><input type="number" id="f-timeout" min="1" max="120" /></div>
+                <div class="ark-field"><label for="f-concurrency">Parallel requests</label><input type="number" id="f-concurrency" min="1" max="64" /><div class="ark-note">Per instance.</div></div>
+                <div class="ark-field"><label for="f-threshold">Disable after N failures in a row</label><input type="number" id="f-threshold" min="0" max="10000" /><div class="ark-note">0 never disables. What is waiting then moves to the dead-letter queue.</div></div>
+            </div>
+            <div class="ark-check"><input type="checkbox" id="f-retry-4xx" /><label for="f-retry-4xx">Retry 4xx answers too (408 and 429 are always retried)</label></div>
+            <div class="ark-note wh-schedule" id="f-schedule"></div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Storage and sharding</legend>
+            <div class="wh-strategies" id="f-strategies" role="radiogroup" aria-label="Shard strategy">
+                <label class="wh-strategy"><input type="radio" name="f-strategy" value="shared" /><span><strong>Shared</strong><small>One table set per database, shared with other webhooks. Right for most.</small></span></label>
+                <label class="wh-strategy"><input type="radio" name="f-strategy" value="dedicated" /><span><strong>Dedicated</strong><small>Tables of its own: isolated from noisy neighbours, purged on its own.</small></span></label>
+                <label class="wh-strategy"><input type="radio" name="f-strategy" value="hashed" /><span><strong>Hashed</strong><small>N table sets by a hash of a key, spread over one or more databases.</small></span></label>
+                <label class="wh-strategy"><input type="radio" name="f-strategy" value="monthly" /><span><strong>Monthly</strong><small>One table set per month; old months stop being scanned.</small></span></label>
+            </div>
+            <div class="ark-grid-2">
+                <div class="ark-field">
+                    <label>Databases</label>
+                    <div class="ark-check-row" id="f-databases"></div>
+                    <div class="ark-note">More than one only for the hashed plan. Add databases under <code>ark_oauth_server:Webhooks:Databases</code>.</div>
+                </div>
+                <div class="ark-field" data-plan="hashed" hidden><label for="f-shard-count">Shards</label><input type="number" id="f-shard-count" min="2" max="32" value="4" /></div>
+                <div class="ark-field" data-plan="hashed" hidden>
+                    <label for="f-partition">Hash on</label>
+                    <select id="f-partition">
+                        <option value="subject">Subject (the user or client the event is about)</option>
+                        <option value="event_type">Event type</option>
+                        <option value="event_id">Event id (even spread)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="wh-plan" id="f-plan" aria-live="polite"></div>
+        </fieldset>
+    </div>
+    <div class="ark-drawer-foot">
+        <button type="button" id="wh-save">Save</button>
+        <button type="button" class="ark-btn-ghost" id="wh-cancel">Cancel</button>
+        <span class="ark-note" id="wh-save-note"></span>
+    </div>
+</aside>
+
+@* -------------------------------------------------------------------- modal *@
+<div class="ark-modal-backdrop" id="wh-modal-backdrop" hidden></div>
+<section class="ark-modal wh-modal" id="wh-modal" aria-labelledby="wh-modal-title" hidden>
+    <div class="ark-modal-head">
+        <h3 id="wh-modal-title"></h3>
+        <button type="button" class="ark-btn-ghost ark-btn-sm" id="wh-modal-close">Close</button>
+    </div>
+    <div class="ark-modal-body" id="wh-modal-body"></div>
+    <div class="ark-modal-foot" id="wh-modal-foot"></div>
+</section>
+
+<div class="ark-toasts" id="ark-toasts" aria-live="polite"></div>
+
+<script src="@ViewBag.WebhooksJs"></script>
+</body>
+</html>

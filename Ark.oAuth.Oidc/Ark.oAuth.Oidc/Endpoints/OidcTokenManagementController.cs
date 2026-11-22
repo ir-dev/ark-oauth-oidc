@@ -181,6 +181,8 @@ namespace Ark.oAuth.Oidc.Endpoints
 
                 _da.Log("revoke", $"{tenant.tenant_id}/oauth2/revoke", "token revocation processed",
                     $"client: {auth.Client.client_id}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.TokenRevoked,
+                    new { client_id = auth.Client.client_id, refresh_token_revoked = revoked }, auth.Client.client_id);
 
                 // §2.2: an unknown token is still a success — the caller's goal is already met.
                 return Ok();
@@ -323,6 +325,9 @@ namespace Ark.oAuth.Oidc.Endpoints
                 $"{report.SessionsEnded} session(s) ended for {report.SubjectsEnded} user(s)",
                 $"client: {clientId}, notified: {report.Notified}, failed: {report.Failed}, " +
                 $"not registered: {report.NotRegistered}");
+            foreach (var endedSession in ended)
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, endedSession.tenant_id, Webhooks.ArkWebhookEvents.UserSignedOut,
+                    new { user = endedSession.subject, session_id = endedSession.session_id, client_id = clientId, reason = "rp_logout" }, endedSession.subject);
 
             if (!string.IsNullOrEmpty(postLogoutRedirectUri))
             {

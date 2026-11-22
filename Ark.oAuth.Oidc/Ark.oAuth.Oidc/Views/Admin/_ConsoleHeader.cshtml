@@ -46,7 +46,7 @@
     </div>
 
     @*
-        Navigation. Provisioning and Data are drawn only for the operator account, because the
+        Navigation. Provisioning, Webhooks and Data are drawn only for the operator account, because the
         routes themselves refuse everybody else — a link that answers 403 teaches nothing except that the page
         exists.
     *@
@@ -55,6 +55,11 @@
         @if (isOperator)
         {
             <a class="ark-nav-link" href="@ViewBag.ProvisioningUrl" aria-current="@(page == "provisioning" ? "page" : null)">Provisioning</a>
+            @* Only when the host called AddArkWebhooks(): the page answers 404 otherwise. *@
+            @if (ViewBag.WebhooksEnabled == true)
+            {
+                <a class="ark-nav-link" href="@ViewBag.WebhooksUrl" aria-current="@(page == "webhooks" ? "page" : null)">Webhooks</a>
+            }
             @if (ViewBag.DataToolsEnabled == true)
             {
                 <a class="ark-nav-link" href="@ViewBag.DataUrl" aria-current="@(page == "data" ? "page" : null)">Data</a>
