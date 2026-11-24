@@ -146,6 +146,22 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
   - **Discovery** lists the token-exchange grant in `grant_types_supported`.
   - **Introspection** additionally answers for an A2A token when the caller is the agent it is
     addressed to or the client that obtained it. Every other answer is as before.
+- **Next release — agents are marked, and the audit trail can leave the server. Both optional.**
+  - **`clients.is_agent`**, one more nullable column added by the schema sync: a label an operator
+    sets ("This client is an agent" in the client drawer, `is_agent` on `client/upsert`). It grants
+    nothing. Null on every existing client; a save that does not carry it leaves it alone.
+  - **New package dependency: `Ark.Watch.Client` 0.1.3** (and its `Ark.Watch.Core`, which needs
+    `System.IO.Hashing` 10.0.15). Nothing of it runs until `ark_oauth_server:Watch` has an
+    `Endpoint` and an `ApiKey`; a host that sets neither is unchanged apart from two assemblies in
+    its output. `AddArkOidcServer` now also calls `AddHttpContextAccessor()`.
+  - **`ark_oauth_server:Watch`** (`Enabled`, `Endpoint`, `ApiKey`, `Application`, `Environment`,
+    `SpoolDirectory`, `IncludeProtocolTrace`): sends the audit trail to an ARK-RAPID Watch node.
+    The setup wizard has a step for it. See the README, "Audit trail".
+  - **New rows in `audit_trace`.** A refused agent-token request (`a2a_refused`) and an introspected
+    agent token (`a2a_introspect`) are now traced when `EnableLogTrace` is on; before, a refusal
+    left no row. A change to an agent's caller list (`a2a_callers`) or mark (`a2a_agent`) is
+    written whatever `EnableLogTrace` says, like an import or a reset.
+  - **New management route:** `GET /api/oauth/v1/watch/status`.
   - **One behaviour change:** a `client_credentials` request carrying `audience` or `resource` used
     to have it ignored. It is still ignored when it names the tenant's own audience or the issuer;
     any other value is now an A2A request and is answered `invalid_target` unless it names an

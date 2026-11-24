@@ -21,4 +21,21 @@
         <span class="ark-console-foot-sep" aria-hidden="true"></span>
     }
     <span>Ark.oAuth.Oidc <code>@ViewBag.PackageVersion</code></span>
+    @*
+        The audit trail (ark_oauth_server:Watch), drawn only when one is configured: where it goes
+        and whether events are arriving. "Waiting" means the node is away and events are held;
+        "losing" means some were dropped or refused, which the counters in the tooltip break down.
+        Live figures: GET /api/oauth/v1/watch/status.
+    *@
+    @if (ViewBag.AuditTrail is Ark.oAuth.Oidc.ArkWatchStatus audit && audit.enabled)
+    {
+        var auditHost = Uri.TryCreate(audit.endpoint, UriKind.Absolute, out var auditUri) ? auditUri.Authority : audit.endpoint;
+        var auditText = audit.health == "ok" ? "sending" : audit.health == "waiting" ? "waiting for the node" : "losing events";
+        <span class="ark-console-foot-sep" aria-hidden="true"></span>
+        <span class="ark-audit-state" data-health="@audit.health"
+              title="Audit trail to ARK-RAPID Watch at @audit.endpoint as @audit.application (@audit.environment). Logged @audit.logged, sent @audit.sent, held on disk @audit.spooled, replayed @audit.replayed, refused @audit.rejected, dropped @audit.dropped, send failures @audit.send_failures.@(audit.spool ? "" : " No spool folder: events are held in memory only while the node is away.")">
+            <span class="ark-audit-dot" aria-hidden="true"></span>
+            <span>Audit trail: <code>@auditHost</code>, @auditText</span>
+        </span>
+    }
 </footer>

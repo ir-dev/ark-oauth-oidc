@@ -188,6 +188,8 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.ShowPoweredBy = ser.ShowPoweredBy;
             // Named in the footer: which build of the server package is serving this console.
             ViewBag.PackageVersion = PackageVersion;
+            // ...and whether the audit trail is being sent anywhere, and how that is going.
+            ViewBag.AuditTrail = (HttpContext.RequestServices.GetService(typeof(ArkWatchAudit)) as ArkWatchAudit)?.Status();
             ViewBag.UserPasswordMode = ser.EffectiveUserPasswordMode switch
             {
                 ArkUserPasswordMode.AdminManaged => "admin_managed",

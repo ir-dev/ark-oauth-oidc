@@ -153,11 +153,38 @@ namespace Ark.oAuth.Oidc.Endpoints
             var audiences = jwt.Audiences.ToList();
             var addressedToCaller = audiences.Any(a => string.Equals(a, caller, StringComparison.OrdinalIgnoreCase));
             var issuedToCaller = string.Equals(Text("client_id"), caller, StringComparison.OrdinalIgnoreCase);
-            if (!addressedToCaller && !issuedToCaller && !mayInspectOthers) return null;
+
+            // Only a token addressed to a client is an agent token; anything else that reaches
+            // here (a token for another tenant audience, say) is not this trail's business.
+            var agentToken = audiences.Count > 0
+                && !audiences.Any(a => ArkAgentTokens.IsTenantAudience(a, tenant, issuer));
+            var sid = Text("sid");
+            var actors = claims.TryGetProperty("act", out var chain) ? ArkAgentTokens.ActorChain(chain) : new List<string>();
+            void Asked(bool active, string relation, string? reason)
+            {
+                if (!agentToken) return;
+                _da.Log("a2a_introspect", $"{tenant.tenant_id}/oauth2/introspect",
+                    active ? "a2a token introspected: active" : $"a2a token introspected: not active ({reason})",
+                    $"client: {caller}, jti: {Text("jti")}, audience: {string.Join(" ", audiences)}", active ? "trace" : "warn",
+                    ArkAgentAudit.Introspected(tenant, caller, active, relation, reason, Text("jti"), Text("sub"),
+                        Text("client_id"), audiences, actors, sid));
+            }
+
+            if (!addressedToCaller && !issuedToCaller && !mayInspectOthers)
+            {
+                // Somebody is holding an agent token that is neither theirs nor for them.
+                Asked(false, "none", "the token is neither addressed to this client nor was it issued to it");
+                return null;
+            }
+            var relation = addressedToCaller ? "addressed_to_caller" : issuedToCaller ? "issued_to_caller" : "resource_server";
 
             // Issued on behalf of a user in a session: it is live only while that session is.
-            var sid = Text("sid");
-            if (!string.IsNullOrEmpty(sid) && await _grants.GetSessionAsync(sid) == null) return null;
+            if (!string.IsNullOrEmpty(sid) && await _grants.GetSessionAsync(sid) == null)
+            {
+                Asked(false, relation, "the session behind the token has ended");
+                return null;
+            }
+            Asked(true, relation, null);
 
             var body = new Dictionary<string, object> { ["active"] = true, ["token_type"] = "Bearer" };
             foreach (var name in new[] { "sub", "scope", "client_id", "iss", "jti", "sid" })

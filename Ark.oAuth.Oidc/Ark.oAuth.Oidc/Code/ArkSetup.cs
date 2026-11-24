@@ -417,6 +417,9 @@ namespace Ark.oAuth.Oidc
                     case "email/test":
                         await context.Response.WriteAsJsonAsync(await TestEmailAsync(await Read<EmailTestRequest>(context)), Json);
                         return;
+                    case "watch/test":
+                        await context.Response.WriteAsJsonAsync(await TestWatchAsync(await Read<WatchSection>(context)), Json);
+                        return;
                     case "complete":
                         await CompleteAsync(context, await Read<SetupRequest>(context));
                         return;
@@ -806,6 +809,142 @@ namespace Ark.oAuth.Oidc
                 throw new SetupException("invalid_from", "Enter the address messages are sent from.", "from");
         }
 
+        // ---------------------------------------------------------------- audit trail (ARK-RAPID Watch)
+
+        sealed record WatchPlan(string Endpoint, string ApiKey, string Application, string Environment);
+
+        /// <summary>
+        /// The audit trail's settings, checked, or null when it is not wanted. The step is
+        /// optional: switched off, nothing about it is validated or written.
+        /// </summary>
+        WatchPlan? NormalizeWatch(WatchSection? watch)
+        {
+            if (watch?.Enabled != true) return null;
+
+            var endpoint = (watch.Endpoint ?? "").Trim();
+            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https") ||
+                !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
+                throw new SetupException("invalid_watch_endpoint",
+                    "Audit server address: the absolute http(s) address of the ARK-RAPID Watch node, e.g. https://audit.example.com.", "watch_endpoint");
+            if (!endpoint.EndsWith('/')) endpoint += "/";
+
+            var key = (watch.ApiKey ?? "").Trim();
+            if (key.Length == 0)
+                throw new SetupException("watch_key_required", "Enter the node's API key for this server.", "watch_api_key");
+            // A public key is for browsers: bound to origins, rate limited, and its events are
+            // stored as client-asserted. An identity provider's trail must not be that.
+            if (key.StartsWith("arkw_pk_", StringComparison.OrdinalIgnoreCase))
+                throw new SetupException("watch_public_key",
+                    "That is a public key (arkw_pk_…), which is for browsers. Use a secret key (arkw_sk_…).", "watch_api_key");
+            if (key.Any(char.IsWhiteSpace) || key.Any(char.IsControl))
+                throw new SetupException("invalid_watch_key", "The API key contains a space or a line break. Paste the key alone.", "watch_api_key");
+
+            var application = (watch.Application ?? "").Trim();
+            if (application.Length == 0) application = ArkWatchConfig.DefaultApplication;
+            if (application.Length > 100 || application.Any(char.IsControl))
+                throw new SetupException("invalid_watch_application", "Application name: up to 100 characters.", "watch_application");
+
+            var environment = (watch.Environment ?? "").Trim();
+            if (environment.Length == 0) environment = _env.EnvironmentName;
+            if (environment.Length > 60 || environment.Any(char.IsControl))
+                throw new SetupException("invalid_watch_environment", "Environment: up to 60 characters.", "watch_environment");
+
+            return new WatchPlan(endpoint, key, application, environment);
+        }
+
+        /// <summary>
+        /// Proves the audit trail end to end before it is saved: that the address is a node, that
+        /// the key is one of its keys, and that the node accepts an event from this application.
+        ///
+        /// Two steps, because they fail for different reasons. <c>GET /api/whoami</c> answers at
+        /// once and says which is wrong — the address or the key. Then one real event goes through
+        /// the same client the server will use, since a key can be valid and still be bound to
+        /// another application, which only ingestion shows.
+        /// </summary>
+        async Task<object> TestWatchAsync(WatchSection? watch)
+        {
+            if (watch != null) watch.Enabled = true;
+            var plan = NormalizeWatch(watch) ?? throw new SetupException("bad_request", "Nothing to test.");
+            var node = new Uri(plan.Endpoint).GetLeftPart(UriPartial.Path);
+
+            string name;
+            try
+            {
+                using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+                using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
+                using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(new Uri(plan.Endpoint), "api/whoami"));
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", plan.ApiKey);
+                request.Headers.Accept.ParseAdd("application/json");
+                using var response = await http.SendAsync(request);
+                var status = (int)response.StatusCode;
+                if (status is 401 or 403)
+                    return new { ok = false, msg = $"The node at {node} refused the key ({status}). Check that it is a secret key of this node and has not been revoked." };
+                if (status == 503)
+                    return new { ok = false, msg = $"The node at {node} answered 503: it has not finished its own setup, or its storage is unavailable." };
+                if (!response.IsSuccessStatusCode)
+                    return new { ok = false, msg = $"{node} answered {status} to /api/whoami, so it does not look like an ARK-RAPID Watch node. Check the address." };
+
+                var body = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    using var doc = JsonDocument.Parse(body);
+                    name = doc.RootElement.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? "" : "";
+                    if (!doc.RootElement.TryGetProperty("id", out _))
+                        return new { ok = false, msg = $"{node} answered, but not as an ARK-RAPID Watch node does. Check the address." };
+                }
+                catch (JsonException)
+                {
+                    return new { ok = false, msg = $"{node} answered, but not as an ARK-RAPID Watch node does. Check the address." };
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                return new { ok = false, msg = $"No answer from {node} within 10 seconds. Check the address and any firewall between this server and it." };
+            }
+            catch (HttpRequestException ex)
+            {
+                return new { ok = false, msg = $"{node} could not be reached: {Innermost(ex)}" };
+            }
+
+            // The key is good. Now one event, through the client itself and with no spool, so
+            // "delivered" can only mean the node took it.
+            try
+            {
+                await using var client = new Ark.Watch.Client.ArkWatchClient(new Ark.Watch.Client.ArkWatchClientOptions
+                {
+                    Endpoint = new Uri(plan.Endpoint),
+                    ApiKey = plan.ApiKey,
+                    Application = plan.Application,
+                    AppVersion = PackageVersion,
+                    Environment = plan.Environment,
+                    DefaultDomain = ArkWatchDomains.System,
+                    DefaultSystem = "ark-idp"
+                });
+                var entry = new Ark.Watch.Client.AuditEntry
+                {
+                    Level = Ark.Watch.Core.AuditLevel.Info,
+                    Outcome = Ark.Watch.Core.Outcome.Success,
+                    Action = "audit_trail.test",
+                    Domain = ArkWatchDomains.System,
+                    System = "setup",
+                    Message = "Test event from the Ark IdP setup wizard: this server can write to the audit trail."
+                };
+                client.Log(in entry);
+                await client.FlushAsync(TimeSpan.FromSeconds(10));
+                var stats = client.GetStats();
+                var who = name.Length > 0 ? $" as “{name}”" : "";
+                if (stats.Rejected > 0)
+                    return new { ok = false, msg = $"The key is valid{who}, but the node refused the test event. A key can be bound to one application: set the application name below to the one the key was created for." };
+                if (stats.Sent + stats.Duplicates < 1)
+                    return new { ok = false, msg = $"The key is valid{who}, but the test event was not delivered to {node} (the node answered ingestion with an error, or is under backpressure). Try again in a moment." };
+                return new { ok = true, msg = $"Connected to {node}{who}. A test event was accepted for application “{plan.Application}”." };
+            }
+            catch (Exception ex)
+            {
+                return new { ok = false, msg = $"The key is valid, but the test event could not be sent: {Innermost(ex)}" };
+            }
+        }
+
         // ---------------------------------------------------------------- install
 
         static readonly Regex TenantId = new("^[A-Za-z0-9][A-Za-z0-9_-]{1,62}$", RegexOptions.CultureInvariant);
@@ -880,6 +1019,26 @@ namespace Ark.oAuth.Oidc
                 _log.LogInformation("Ark IdP setup complete: tenant {Tenant}, issuer {Issuer}, settings in {File}",
                     plan.TenantId, plan.Issuer, settingsFile);
 
+                // The first line of the audit trail, when there is one: who set this server up,
+                // and from where. Whoever completes setup becomes its administrator.
+                ArkWatch.Record(context, new ArkWatchEvent
+                {
+                    Action = "idp.setup",
+                    Domain = ArkWatchDomains.System,
+                    System = "setup",
+                    Level = Ark.Watch.Core.AuditLevel.Security,
+                    Outcome = Ark.Watch.Core.Outcome.Success,
+                    Tenant = plan.TenantId,
+                    ParticipantId = plan.AdminUsername,
+                    ParticipantType = Ark.Watch.Core.ParticipantTypes.User,
+                    ResourceType = "tenant",
+                    ResourceId = plan.TenantId,
+                    Message = plan.ExistingTenant
+                        ? $"identity provider attached to the existing database of tenant '{plan.TenantId}'"
+                        : $"identity provider set up: tenant '{plan.TenantId}', issuer {plan.Issuer}"
+                }.With("issuer", plan.Issuer).With("database_provider", plan.Provider)
+                    .With("attached_existing", plan.ExistingTenant).With("local_request", IsLocal(context)));
+
                 var endpoints = new Protocol.ArkOidcEndpoints(plan.AppRoot, plan.TenantId);
                 await context.Response.WriteAsJsonAsync(new
                 {
@@ -893,7 +1052,10 @@ namespace Ark.oAuth.Oidc
                     machine_client_id = ArkManagementAuth.MachineClientId(plan.TenantId),
                     // an existing database is attached, not seeded, so nothing was set
                     machine_client_secret = plan.ExistingTenant ? null : plan.MachineSecret,
-                    attached_existing = plan.ExistingTenant
+                    attached_existing = plan.ExistingTenant,
+                    // where the audit trail goes, never its key
+                    audit_trail = plan.Watch == null ? null : new Uri(plan.Watch.Endpoint).GetLeftPart(UriPartial.Path),
+                    audit_application = plan.Watch?.Application
                 }, Json);
             }
             finally
@@ -913,7 +1075,7 @@ namespace Ark.oAuth.Oidc
         sealed record Plan(
             string TenantId, string AppRoot, string BaseUrl, string BasePath, string Issuer,
             string Provider, string Connection, string? PublicKey, string? PrivateKey,
-            string AdminUsername, string? MachineSecret, bool ExistingTenant, string? LandingUrl);
+            string AdminUsername, string? MachineSecret, bool ExistingTenant, string? LandingUrl, WatchPlan? Watch);
 
         Plan Validate(HttpContext context, SetupRequest req)
         {
@@ -984,8 +1146,10 @@ namespace Ark.oAuth.Oidc
                     throw new SetupException("invalid_origin", $"'{origin}' is not an origin. Use scheme://host[:port], nothing after it.", "cors_origins");
             }
 
+            var watch = NormalizeWatch(req.Watch);
+
             return new Plan(tenant, appRoot, baseUrl, basePath, $"{appRoot}/{tenant}", provider, connection, pub, priv,
-                username, secret.Length == 0 ? null : secret, existing, landing);
+                username, secret.Length == 0 ? null : secret, existing, landing, watch);
         }
 
         /// <summary>
@@ -1111,6 +1275,16 @@ namespace Ark.oAuth.Oidc
                 ["ShowPoweredBy"] = req.Branding?.ShowPoweredBy ?? true
             };
             if (!string.IsNullOrEmpty(users.DefaultPassword)) server["DefaultPw"] = users.DefaultPassword;
+            // Only when it was asked for: without the section the server sends nothing anywhere.
+            if (plan.Watch != null)
+                server["Watch"] = new JsonObject
+                {
+                    ["Enabled"] = true,
+                    ["Endpoint"] = plan.Watch.Endpoint,
+                    ["ApiKey"] = plan.Watch.ApiKey,
+                    ["Application"] = plan.Watch.Application,
+                    ["Environment"] = plan.Watch.Environment
+                };
             if (context.RequestServices.GetService<ArkIdpConsoleMarker>() != null)
             {
                 var admin = new JsonObject { ["SignOutUrl"] = $"{context.Request.PathBase}{ArkIdpConsole.SignOutPath}" };
@@ -1165,6 +1339,17 @@ namespace Ark.oAuth.Oidc
             public EmailSection? Email { get; set; }
             public ProtocolSection? Protocol { get; set; }
             public ManagementSection? Management { get; set; }
+            public WatchSection? Watch { get; set; }
+        }
+
+        /// <summary>The optional audit trail: an ARK-RAPID Watch node and this server's key for it.</summary>
+        sealed class WatchSection
+        {
+            public bool Enabled { get; set; }
+            public string? Endpoint { get; set; }
+            public string? ApiKey { get; set; }
+            public string? Application { get; set; }
+            public string? Environment { get; set; }
         }
 
         sealed class OrganizationSection

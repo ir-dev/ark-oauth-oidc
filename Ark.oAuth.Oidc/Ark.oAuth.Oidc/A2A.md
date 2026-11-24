@@ -43,6 +43,15 @@ Everything is on the **client** drawer of the admin console (`/{tenant}/admin`).
 
 Callers and targets must be in the same tenant.
 
+**Mark the agents.** In the same section, tick **This client is an agent**. The client list then
+shows an `agent` badge against it, with two counts — `←` how many clients may call it, `→` how many
+it may call — and **agents only** above the list narrows it to them. The mark is a label for the
+console and the audit trail: it grants nothing and refuses nothing, the caller list alone decides
+who may call whom. A client that takes part in agent-to-agent calls without the mark is shown as
+`a2a, not marked`, so nothing that acts as an agent is ever missing from the list. Through the
+management API it is `"is_agent": true` on the same `client/upsert`; a save that does not carry
+the field leaves it as it was.
+
 The same list through the management API, on `POST /api/oauth/v1/client/upsert`:
 
 ```json
@@ -263,6 +272,69 @@ Errors are the standard token-endpoint shape, `{"error", "error_description"}`, 
 | `invalid_request` | `subject_token`, `subject_token_type` or `audience` is missing; or `actor_token` was sent (the actor is always the authenticated client). | |
 | `unsupported_grant_type` | A2A is switched off on this server. | |
 
+## The audit trail
+
+Every agent-to-agent event is recorded, for whoever has to answer afterwards *which agent acted,
+for which person, against which agent, and was it allowed*. There are two places it goes.
+
+**The server's own trace** (`audit_trace`, when `EnableLogTrace` is on) gets a row for each token
+issued (`token`), each one refused (`a2a_refused`) and each agent token introspected
+(`a2a_introspect`). A change to who may call an agent (`a2a_callers`) and to the agent mark
+(`a2a_agent`) is written whatever `EnableLogTrace` says, with who made it and from where.
+
+**An ARK-RAPID Watch audit server**, when one is configured (`ark_oauth_server:Watch`, or the
+*Audit trail* step of the setup wizard — see the README). There the same events are structured,
+tamper evident and searchable, under the domain `Agents`:
+
+| `action` | When | Level, outcome |
+|---|---|---|
+| `agent_token.issue` | `client_credentials` + `audience`: an agent asked for a token to call another as itself | `Notice` / `Success`; refused: `Security` / `Denied` |
+| `agent_token.exchange` | token exchange: an agent asked for a token to call another on behalf of a user | `Security` / `Success`; refused: `Security` / `Denied` |
+| `agent_token.introspect` | an agent asked whether a token addressed to an agent is still good | `Info` / `Success` when active; `Security` / `Denied` when not |
+| `agent_callers.update` | the list of who may call an agent changed | `Security` / `Success` |
+| `agent.mark`, `agent.unmark` | a client was marked as an agent, or the mark was removed | `Notice` / `Success` |
+
+The **participant** is always the agent that made the request (type `service`), because it is the
+one that acted; for a change in the console it is the operator who made it. The **resource** is the
+agent it wanted to reach (`agent`, its client_id), or the token asked about (`agent_token`, its
+`jti`). The rest is in the attributes:
+
+| Attribute | On | |
+|---|---|---|
+| `mode` | all token events | `as_itself` or `on_behalf_of` |
+| `caller`, `target`, `target_name` | token events | the two agents. `target` is absent from a refusal until the caller has been found on the target's list: until then the record keeps only `requested_audience`, exactly as the caller was told nothing |
+| `on_behalf_of` | delegation | the user the agent acted for |
+| `actors`, `delegation_depth` | delegation | the whole `act` chain, newest first, and its length |
+| `token_id` | issued | the new token's `jti`. Tokens are named, never carried |
+| `subject_token_id`, `subject_token_issued_to`, `subject_token_audiences`, `subject_token_expires_at` | delegation | the token that was presented for exchange |
+| `subject_token_held_as` | delegation | why this agent could exchange it: `issued_to_actor` or `addressed_to_actor` |
+| `session` | delegation | the user's session (`sid`), which ends everything done in their name |
+| `scopes`, `requested_scopes`, `claims` | token events | what was asked for, and the `ark_claims` the token carries at the target |
+| `expires_at`, `lifetime_seconds` | issued | |
+| `error`, `error_description`, `status` | refused | what the caller was sent back |
+| `relation`, `active`, `reason` | introspection | why the asker was answered (`addressed_to_caller`, `issued_to_caller`, `resource_server`, or `none`), and why a token was not active |
+| `added`, `removed`, `changed`, `callers`, `delegating_callers`, `delegation_granted` | `agent_callers.update` | each entry with its claims and whether it may act for users, before and after |
+| `client_auth_method`, `grant_type`, `caller_is_agent`, `user_agent` | token events | how the request was made |
+
+Every event also carries the caller's address, the tenant, a `correlation_id` and — when the
+request arrived inside a W3C trace — its `trace_id` and `span_id`.
+
+**Following one user through a chain of agents.** Each hop names the token it was exchanged from,
+so the chain is a linked list: start from the user's sign-in (`user.signin`, then `token.issue`),
+find the `agent_token.exchange` whose `subject_token_id` is that token's `jti`, then the one whose
+`subject_token_id` is *its* `token_id`, and so on. Or filter by `session`: every delegated token of
+one sign-in shares it, and the `session.end` event marks where it all stopped.
+
+**Tying it to your own agents' records.** Send `X-Correlation-ID` (letters, digits, `-`, `_`, `.`,
+`:`; up to 128) on the token request and it becomes the event's `correlation_id`; send a
+`traceparent` and the event joins that trace. An agent that uses the same value in its own audit
+client has one trail across both.
+
+**What the server cannot see.** It records that a token was issued and that it was asked about.
+The call from one agent to the other does not pass through it, so the *receiving* agent is the
+only one that can record "I was called, by this agent, for this user, and did this". Log it there
+with the token's `jti` as the resource id, and it lines up with the `token_id` above.
+
 ## Settings
 
 Under `ark_oauth_server:Oidc`, all optional:
@@ -290,8 +362,8 @@ it is on.
 
 ## Upgrading
 
-Nothing to do. The first start adds one nullable column, `clients.a2a_callers_`, through the usual
-schema sync. One behaviour to know about: a `client_credentials` request that sends an `audience`
+Nothing to do. The first start adds two nullable columns, `clients.a2a_callers_` and
+`clients.is_agent`, through the usual schema sync. One behaviour to know about: a `client_credentials` request that sends an `audience`
 or `resource` naming something other than the tenant's own audience used to have the parameter
 ignored, and is now answered `invalid_target` unless it names an agent the caller may call. Set
 `Oidc:EnableA2A` to `false` to keep the old behaviour.

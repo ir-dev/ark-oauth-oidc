@@ -120,6 +120,24 @@ namespace Ark.oAuth.Oidc
                 };
             }
         }
+        /// <summary>
+        /// The audit trail's state: whether events are being sent to an ARK-RAPID Watch node, where
+        /// to, and the client's own counters — logged, sent, held on disk, refused, dropped. Never
+        /// the key. <c>enabled: false</c> with a <c>reason</c> when nothing is configured.
+        /// </summary>
+        [HttpGet]
+        [Route("v1/watch/status")]
+        public IActionResult WatchStatus()
+        {
+            var audit = HttpContext.RequestServices.GetService(typeof(ArkWatchAudit)) as ArkWatchAudit;
+            Response.Headers["Cache-Control"] = "no-store";
+            return Ok(new
+            {
+                error = false,
+                msg = "audit trail status.",
+                data = audit?.Status() ?? new ArkWatchStatus { reason = "not registered" }
+            });
+        }
         [Route("v1/client/list")]
         public async Task<dynamic> ClientList([FromServices] DataAccess da)
         {
@@ -477,7 +495,10 @@ namespace Ark.oAuth.Oidc
             try
             {
                 await da.UpsertUsersClientClaims(us_cl);
-                da.Log("user_cl_cl_upsert", "v1/user/client/claims/upsert", "user client claims updated", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, claims: {us_cl?.claims_}");
+                da.Log("user_cl_cl_upsert", "v1/user/client/claims/upsert", "user client claims updated", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, claims: {us_cl?.claims_}", "trace",
+                    ArkWatchMap.Admin("access.grant", Ark.Watch.Core.AuditLevel.Security, "user", us_cl?.email,
+                            $"access of '{us_cl?.email}' to a client granted or changed", us_cl?.tenant_id)
+                        .With("client_ref", us_cl?.client_id).With("claims", JsonList.Read(us_cl?.claims_)));
                 Webhooks.ArkWebhookEvents.Raise(HttpContext, us_cl?.tenant_id ?? Webhooks.ArkWebhookEvents.OperatorTenant(HttpContext), Webhooks.ArkWebhookEvents.UserAccessChanged,
                     new { user = us_cl?.email, client_id = us_cl?.client_id, change = "granted", claims = JsonList.Read(us_cl?.claims_) }, us_cl?.email);
                 return new
@@ -505,7 +526,10 @@ namespace Ark.oAuth.Oidc
             try
             {
                 await da.DeleteUsersClientClaims(us_cl);
-                da.Log("user_cl_cl_delete", "v1/user/client/claims/delete", "delete client claims updated", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, claims: {us_cl?.claims_}");
+                da.Log("user_cl_cl_delete", "v1/user/client/claims/delete", "delete client claims updated", $"deails : e: {us_cl?.email}, ci: {us_cl?.client_id}, claims: {us_cl?.claims_}", "trace",
+                    ArkWatchMap.Admin("access.revoke", Ark.Watch.Core.AuditLevel.Security, "user", us_cl?.email,
+                            $"access of '{us_cl?.email}' to a client removed", us_cl?.tenant_id)
+                        .With("client_ref", us_cl?.client_id).With("claims", JsonList.Read(us_cl?.claims_)));
                 Webhooks.ArkWebhookEvents.Raise(HttpContext, us_cl?.tenant_id ?? Webhooks.ArkWebhookEvents.OperatorTenant(HttpContext), Webhooks.ArkWebhookEvents.UserAccessChanged,
                     new { user = us_cl?.email, client_id = us_cl?.client_id, change = "removed" }, us_cl?.email);
                 return new
@@ -534,7 +558,10 @@ namespace Ark.oAuth.Oidc
             {
                 var existing = await da.GetUser((user?.email ?? "").ToLower().Trim());
                 var saved = await da.UpsertUser(user);
-                da.Log("user_upsert", "v1/user/upsert", "user updated", $"deails : e: {user?.email}, name: {user?.name}, rm: {user?.reset_mode}");
+                da.Log("user_upsert", "v1/user/upsert", "user updated", $"deails : e: {user?.email}, name: {user?.name}, rm: {user?.reset_mode}", "trace",
+                    ArkWatchMap.Admin(existing == null ? "user.create" : "user.update", Ark.Watch.Core.AuditLevel.Notice, "user", saved?.email ?? user?.email,
+                            existing == null ? $"account '{saved?.email ?? user?.email}' created" : $"account '{saved?.email ?? user?.email}' changed")
+                        .With("name", saved?.name ?? user?.name).With("created", existing == null));
                 Webhooks.ArkWebhookEvents.Raise(HttpContext, Webhooks.ArkWebhookEvents.OperatorTenant(HttpContext), Webhooks.ArkWebhookEvents.UserUpdated,
                     new { user = saved?.email ?? user?.email, name = saved?.name ?? user?.name, created = existing == null }, saved?.email ?? user?.email);
                 // A new account is usable in one of two ways, and which one it is decides what the
@@ -595,7 +622,9 @@ namespace Ark.oAuth.Oidc
             try
             {
                 var saved = await da.SetUserPassword(request?.email, request?.password);
-                da.Log("user_password_set", "v1/user/pw/set", "user password updated", $"details : e: {saved?.email}");
+                da.Log("user_password_set", "v1/user/pw/set", "user password updated", $"details : e: {saved?.email}", "trace",
+                    ArkWatchMap.Admin("user.password_set", Ark.Watch.Core.AuditLevel.Security, "user", saved?.email,
+                        $"an administrator set the password of '{saved?.email}'"));
                 Webhooks.ArkWebhookEvents.Raise(HttpContext, Webhooks.ArkWebhookEvents.OperatorTenant(HttpContext), Webhooks.ArkWebhookEvents.UserPasswordChanged,
                     new { user = saved?.email, by = "administrator" }, saved?.email);
                 return new

@@ -76,7 +76,18 @@ namespace Ark.oAuth.Oidc.Endpoints
                 if (!client.EffectiveGrantTypes.Contains(grantType, StringComparer.OrdinalIgnoreCase))
                     client = await FreshClientAsync(client); // a grant added through another instance
                 if (!client.EffectiveGrantTypes.Contains(grantType, StringComparer.OrdinalIgnoreCase))
-                    throw OAuthException.UnauthorizedClient($"this client is not registered for the '{grantType}' grant.");
+                {
+                    var refusal = OAuthException.UnauthorizedClient($"this client is not registered for the '{grantType}' grant.");
+                    // A client reaching for token exchange without the grant is an agent trying
+                    // to act for a user it was never set up to act for: worth a line of its own.
+                    if (tokenExchange)
+                        AgentRefused(tenant, client, new AgentTokenTrace
+                        {
+                            Mode = AgentTokenTrace.OnBehalfOf,
+                            RequestedAudience = string.Join(" ", form["audience"].Concat(form["resource"]))
+                        }, refusal, auth);
+                    throw refusal;
+                }
 
                 if (tokenExchange)
                     return await TokenExchangeGrantAsync(tenant, ep, client, form, auth);
@@ -244,12 +255,32 @@ namespace Ark.oAuth.Oidc.Endpoints
 
             // Agent-to-agent: the request names the agent it is going to call, and the token is
             // good there and nowhere else. Naming the tenant's own audience is not that request.
-            var audience = Options.EnableA2A ? ArkAgentTokens.RequestedAudience(form) : null;
+            string? audience = null;
+            if (Options.EnableA2A)
+            {
+                try { audience = ArkAgentTokens.RequestedAudience(form); }
+                catch (OAuthException ex)
+                {
+                    AgentRefused(tenant, client, new AgentTokenTrace
+                    {
+                        RequestedAudience = string.Join(" ", form["audience"].Concat(form["resource"])), RequestedScopes = scopes
+                    }, ex, auth);
+                    throw;
+                }
+            }
             if (audience != null && !ArkAgentTokens.IsTenantAudience(audience, tenant, ep.Issuer))
             {
-                var issued = await _agents.AsItselfAsync(tenant, ep.Issuer, client, audience, scopes);
+                var trace = new AgentTokenTrace();
+                AgentTokenResult issued;
+                try { issued = await _agents.AsItselfAsync(tenant, ep.Issuer, client, audience, scopes, trace); }
+                catch (OAuthException ex)
+                {
+                    AgentRefused(tenant, client, trace, ex, auth);
+                    throw;
+                }
                 _da.Log("token", $"{tenant.tenant_id}/oauth2/token", "a2a token issued",
-                    $"client: {client.client_id}, audience: {issued.Audience}");
+                    ArkAgentAudit.Details(client, trace, issued), "trace",
+                    ArkAgentAudit.Issued(tenant, client, issued, trace, auth.Method));
                 Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.TokenIssued,
                     new { grant_type = "client_credentials", client_id = client.client_id, subject = issued.Subject, scopes, audience = issued.Audience }, client.client_id);
                 return Ok(BuildResponse(issued.AccessToken, issued.ExpiresAt, scopes, null, null));
@@ -281,19 +312,51 @@ namespace Ark.oAuth.Oidc.Endpoints
         private async Task<IActionResult> TokenExchangeGrantAsync(
             ArkTenant tenant, ArkOidcEndpoints ep, ArkClient client, IFormCollection form, ClientAuthResult auth)
         {
-            // The actor is the authenticated client, so it has to be one that can authenticate.
-            if (auth.Method == "none")
-                throw OAuthException.InvalidClient("token exchange requires client authentication.");
+            var trace = new AgentTokenTrace { Mode = AgentTokenTrace.OnBehalfOf };
+            AgentTokenResult issued;
+            try
+            {
+                // The actor is the authenticated client, so it has to be one that can authenticate.
+                if (auth.Method == "none")
+                    throw OAuthException.InvalidClient("token exchange requires client authentication.");
 
-            var issued = await _agents.OnBehalfOfAsync(tenant, ep.Issuer, client, form);
+                issued = await _agents.OnBehalfOfAsync(tenant, ep.Issuer, client, form, trace);
+            }
+            catch (OAuthException ex)
+            {
+                AgentRefused(tenant, client, trace, ex, auth);
+                throw;
+            }
             _da.Log("token", $"{tenant.tenant_id}/oauth2/token", "a2a token issued on behalf of a user",
-                $"client: {client.client_id}, sub: {issued.Subject}, audience: {issued.Audience}, act: {string.Join(" < ", issued.Actors)}");
+                ArkAgentAudit.Details(client, trace, issued), "trace",
+                ArkAgentAudit.Issued(tenant, client, issued, trace, auth.Method));
             Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.TokenIssued,
                 new { grant_type = ArkAgentTokens.TokenExchangeGrant, client_id = client.client_id, subject = issued.Subject, scopes = issued.Scopes, audience = issued.Audience, actors = issued.Actors }, issued.Subject);
 
             var body = BuildResponse(issued.AccessToken, issued.ExpiresAt, issued.Scopes, null, null);
             body["issued_token_type"] = ArkAgentTokens.AccessTokenType; // RFC 8693 §2.2.1
             return Ok(body);
+        }
+
+        /// <summary>
+        /// Records an agent-token request that was turned down. Until now a refusal left no
+        /// trace at all: the caller got its error and the server forgot. An agent asking for
+        /// access it was not given — to an agent that has not listed it, for a user who has no
+        /// access there, past a session that has ended — is the half of the audit trail that
+        /// matters most, so it is written here before the error goes back.
+        /// </summary>
+        private void AgentRefused(ArkTenant tenant, ArkClient client, AgentTokenTrace trace, OAuthException ex, ClientAuthResult auth)
+        {
+            try
+            {
+                _da.Log("a2a_refused", $"{tenant.tenant_id}/oauth2/token", $"a2a token refused: {ex.Error}",
+                    ArkAgentAudit.Details(client, trace, refused: ex), "warn",
+                    ArkAgentAudit.Refused(tenant, client, trace, ex, auth.Method));
+            }
+            catch
+            {
+                // The refusal itself is what the caller must get; the record of it is best effort.
+            }
         }
 
         private async Task<IActionResult> DeviceCodeGrantAsync(

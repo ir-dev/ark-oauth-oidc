@@ -525,6 +525,63 @@
                     </div>
                 </section>
 
+                <!-- ============================================================ audit trail -->
+                <section class="step" data-step="audit" data-title="Audit trail" hidden>
+                    <h1>Audit trail <span class="optional">optional</span></h1>
+                    <p class="lead">
+                        This server can send a record of everything it does to an <b>ARK-RAPID Watch</b> audit server: every
+                        sign-in and refusal, every token, every change made in the admin console, and every agent-to-agent
+                        call, including who an agent acted for. The record is kept outside this server, tamper evident and
+                        searchable. Skip this step and nothing is sent; you can add it later in the settings.
+                    </p>
+
+                    <label class="switch">
+                        <input type="checkbox" name="watch_enabled" />
+                        <span><b>Send the audit trail to ARK-RAPID Watch</b></span>
+                    </label>
+
+                    <div id="watchFields" hidden>
+                        <div class="grid two">
+                            <label class="field">
+                                <span>Audit server address <em>required</em></span>
+                                <input name="watch_endpoint" type="url" placeholder="https://audit.example.com" spellcheck="false" />
+                                <small>The address of the ARK-RAPID Watch node, as this server reaches it.</small>
+                            </label>
+                            <label class="field">
+                                <span>API key <em>required</em></span>
+                                <div class="input-group">
+                                    <input name="watch_api_key" type="password" autocomplete="new-password" placeholder="arkw_sk_…" spellcheck="false" />
+                                    <button type="button" class="btn small ghost" data-toggle-password="watch_api_key">Show</button>
+                                </div>
+                                <small>A <b>secret</b> key from the node: Admin → Applications there. Shown once when it is created.</small>
+                            </label>
+                            <label class="field">
+                                <span>Application name</span>
+                                <input name="watch_application" maxlength="100" placeholder="ark-idp" spellcheck="false" />
+                                <small>What this server’s events are filed under. If the key was created for one application, use that name.</small>
+                            </label>
+                            <label class="field">
+                                <span>Environment</span>
+                                <input name="watch_environment" maxlength="60" placeholder="Production" spellcheck="false" />
+                            </label>
+                        </div>
+                        <p class="note warn" id="watchHttpWarn" hidden>
+                            This address is plain http. The API key and every audit event cross it unencrypted: use it only
+                            inside a private network.
+                        </p>
+                        <div class="row">
+                            <button type="button" class="btn" id="testWatch">Test connection</button>
+                        </div>
+                        <p class="result" id="watchResult" hidden></p>
+                        <p class="note">
+                            The key is written to the settings file, which only this server’s account can read. In production
+                            you can set it from the environment instead: <code>ark_oauth_server__Watch__ApiKey</code>.
+                            Sending never slows a sign-in or fails one: if the audit server is away, events wait on disk and
+                            are sent when it is back.
+                        </p>
+                    </div>
+                </section>
+
                 <!-- ============================================================ review -->
                 <section class="step" data-step="review" data-title="Review &amp; install" hidden>
                     <h1>Review &amp; install</h1>
@@ -551,6 +608,7 @@
                         <dt>Issuer</dt><dd><code id="doneIssuer"></code> <button type="button" class="link" data-copy="#doneIssuer">Copy</button></dd>
                         <dt>Discovery</dt><dd><code id="doneDiscovery"></code> <button type="button" class="link" data-copy="#doneDiscovery">Copy</button></dd>
                         <dt>Settings</dt><dd><code id="doneSettings"></code></dd>
+                        <dt id="doneAuditLabel" hidden>Audit trail</dt><dd id="doneAuditRow" hidden><code id="doneAudit"></code></dd>
                     </dl>
                     <div class="card warn" id="doneSecretCard" hidden>
                         <h2>Machine client secret, shown once</h2>

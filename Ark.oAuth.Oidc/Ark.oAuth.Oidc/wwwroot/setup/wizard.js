@@ -27,7 +27,7 @@
     const DRAFT = 'ark-idp-setup-draft';
     // Never persisted, even for the life of a tab.
     const SECRET_FIELDS = new Set(['admin_password', 'admin_password2', 'db_password', 'raw_connection', 'smtp_password',
-        'default_password', 'machine_secret', 'import_key', 'setup_code']);
+        'default_password', 'machine_secret', 'import_key', 'setup_code', 'watch_api_key']);
 
     let env = null;
     let initialized = false;
@@ -39,6 +39,9 @@
     // What the done screen's downloads are made from. Memory only: never stored, gone with the tab.
     let handover = null;
     let dbOkFor = null;
+    // The audit-trail settings the last successful test was run with, and the last test of any outcome.
+    let watchOkFor = null;
+    let watchTestedFor = null;
     let existingTenants = [];
     const logos = { host_logo: '', app_logo: '' };
 
@@ -255,6 +258,23 @@
                 }
                 return p;
             }
+            case 'audit': {
+                // Optional: switched off, there is nothing to check.
+                if (!val('watch_enabled')) return null;
+                let p = null;
+                if (!isUrl(val('watch_endpoint'))) p = invalid('watch_endpoint', 'Enter the full address, e.g. https://audit.example.com');
+                const k = field('watch_api_key').value.trim();
+                if (!k) p = invalid('watch_api_key', 'Enter the API key, or turn the audit trail off to continue without one.');
+                else if (/^arkw_pk_/i.test(k)) p = invalid('watch_api_key', 'That is a public key, for browsers. Use a secret key (arkw_sk_…).');
+                if (p) return p;
+                // Like the database: proven before it is saved.
+                if (watchOkFor !== watchSignature()) {
+                    const ok = await testWatch();
+                    if (!ok) return 'The audit server test failed.';
+                }
+                return null;
+            }
+
             default:
                 return null;
         }
@@ -562,6 +582,55 @@
         } catch (err) { showResult(out, 'error', err.message); }
     }));
 
+    // ------------------------------------------------------------------ audit trail
+
+    function watchPayload() {
+        return {
+            enabled: !!val('watch_enabled'),
+            endpoint: val('watch_endpoint'),
+            api_key: field('watch_api_key').value.trim(),
+            application: val('watch_application') || 'ark-idp',
+            environment: val('watch_environment') || (env && env.environment) || ''
+        };
+    }
+
+    const watchSignature = () => { const w = watchPayload(); return `${w.endpoint}|${w.api_key}|${w.application}|${w.environment}`; };
+
+    function renderWatch() {
+        $('#watchFields').hidden = !val('watch_enabled');
+        let plain = false;
+        try { const u = new URL(val('watch_endpoint')); plain = u.protocol === 'http:' && !isLocalHost(u.hostname); } catch { /* flagged on Continue */ }
+        $('#watchHttpWarn').hidden = !plain;
+        if (env && env.environment) field('watch_environment').placeholder = env.environment;
+        // A result describes the settings it was run with; once they change it says nothing true.
+        if (watchTestedFor && watchTestedFor !== watchSignature()) { watchOkFor = null; watchTestedFor = null; $('#watchResult').hidden = true; }
+    }
+    ['watch_enabled', 'watch_endpoint', 'watch_api_key', 'watch_application', 'watch_environment']
+        .forEach(n => field(n).addEventListener(field(n).type === 'checkbox' ? 'change' : 'input', renderWatch));
+
+    async function testWatch() {
+        const out = $('#watchResult');
+        showResult(out, 'info', 'Contacting the audit server…');
+        watchTestedFor = watchSignature();
+        try {
+            const r = await call('watch/test', watchPayload());
+            showResult(out, r.ok ? 'ok' : 'error', r.msg);
+            watchOkFor = r.ok ? watchSignature() : null;
+            if (r.ok) {
+                const step = steps.find(s => s.dataset.step === 'audit');
+                step.dataset.error = '';
+                renderRail();
+            }
+            return r.ok;
+        } catch (err) {
+            showResult(out, 'error', err.message);
+            if (err.field) invalid(err.field, err.message);
+            watchOkFor = null;
+            return false;
+        }
+    }
+    $('#testWatch').addEventListener('click', e => busy(e.currentTarget, testWatch));
+
     // ------------------------------------------------------------------ copy
 
     document.addEventListener('click', async e => {
@@ -616,7 +685,8 @@
                 lockout_minutes: num('lockout_minutes'),
                 cors_origins: origins()
             },
-            management: { machine_client_secret: field('machine_secret').value.trim() }
+            management: { machine_client_secret: field('machine_secret').value.trim() },
+            watch: watchPayload()
         };
     }
 
@@ -663,7 +733,14 @@
                 ['Back-channel logout', yes(p.protocol.enable_back_channel_logout)],
                 ['CORS origins', esc(p.protocol.cors_origins.join(', ') || 'none')],
                 ['Machine client secret', p.management.machine_client_secret ? 'set (shown once after install)' : 'none yet']
-            ]]
+            ]],
+            ['audit', 'Audit trail', p.watch.enabled
+                ? [
+                    ['ARK-RAPID Watch', `<code>${esc(p.watch.endpoint)}</code>`],
+                    ['Application', `${esc(p.watch.application)}${p.watch.environment ? `, ${esc(p.watch.environment)}` : ''}`],
+                    ['API key', 'set']
+                ]
+                : [['ARK-RAPID Watch', 'Off: nothing is sent']]]
         ];
         const root = $('#summary');
         root.innerHTML = sections.map(([step, title, rows]) => `
@@ -685,7 +762,9 @@
         password_mode: ['users', 'password_mode'], default_password: ['users', 'default_password'],
         smtp: ['users', 'smtp'], port: ['users', 'smtp_port'], from: ['users', 'smtp_from'],
         cors_origins: ['security', 'cors_origins'], machine_client_secret: ['security', 'machine_secret'],
-        host_logo: ['organization', null], app_logo: ['organization', null]
+        host_logo: ['organization', null], app_logo: ['organization', null],
+        watch_endpoint: ['audit', 'watch_endpoint'], watch_api_key: ['audit', 'watch_api_key'],
+        watch_application: ['audit', 'watch_application'], watch_environment: ['audit', 'watch_environment']
     };
 
     async function install() {
@@ -729,6 +808,11 @@
         $('#doneDiscovery').textContent = r.discovery;
         $('#doneSettings').textContent = r.settings_file;
         $('#doneConsole').href = r.console;
+        if (r.audit_trail) {
+            $('#doneAuditLabel').hidden = false;
+            $('#doneAuditRow').hidden = false;
+            $('#doneAudit').textContent = `${r.audit_trail} as ${r.audit_application}`;
+        }
         if (r.machine_client_secret) {
             $('#doneSecretCard').hidden = false;
             $('#doneMachineId').textContent = `client_id: ${r.machine_client_id}`;
@@ -739,7 +823,7 @@
         $('#doneKeysCard').hidden = !handover;
         // Secrets the page no longer needs: the downloads read the copy in handover.
         key = null;
-        ['admin_password', 'admin_password2', 'db_password', 'smtp_password', 'machine_secret', 'raw_connection'].forEach(n => setVal(n, ''));
+        ['admin_password', 'admin_password2', 'db_password', 'smtp_password', 'machine_secret', 'raw_connection', 'watch_api_key'].forEach(n => setVal(n, ''));
         window.scrollTo({ top: 0 });
     }
 
@@ -955,6 +1039,7 @@
         renderServer();
         renderDatabase();
         renderEmail();
+        renderWatch();
         renderRail();
     }
 

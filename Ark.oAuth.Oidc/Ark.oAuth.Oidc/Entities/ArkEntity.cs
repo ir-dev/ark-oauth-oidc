@@ -177,6 +177,18 @@ namespace Ark.oAuth
             set => a2a_callers_ = ArkAgentCaller.Write(value);
         }
 
+        /// <summary>
+        /// Marks this client as an agent: software that calls other clients, or is called by
+        /// them, rather than an application people sign in to. The console shows it as a badge
+        /// and the audit trail names it as one.
+        ///
+        /// A label, not a permission. It grants nothing and refuses nothing: who may call an
+        /// agent is decided by <see cref="a2a_callers"/> alone, so an unmarked client that is
+        /// listed as a caller still gets its token, and a marked one that nobody lists gets none.
+        /// Null on a save means "not carried", and the stored value stays.
+        /// </summary>
+        public bool? is_agent { get; set; }
+
         /// <summary>True when this client has somewhere to receive a logout token.</summary>
         [NotMapped]
         public bool SupportsBackChannelLogout => !string.IsNullOrWhiteSpace(backchannel_logout_uri);

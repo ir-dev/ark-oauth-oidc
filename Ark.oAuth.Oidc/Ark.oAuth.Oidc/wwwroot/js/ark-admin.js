@@ -575,6 +575,16 @@
                         },
                         { title: "type", field: "application_type", width: 90 },
                         {
+                            // Marked as an agent, or evidently one: it lists callers, or another
+                            // client lists it. The second kind is shown too, so a client that
+                            // takes part in agent-to-agent calls is never invisible here.
+                            title: "agent", field: "is_agent", width: 195, headerSort: true,
+                            sorter: function (a, b, aRow, bRow) {
+                                return agentRank(aRow.getData()) - agentRank(bRow.getData());
+                            },
+                            formatter: function (cell) { return agentCell(cell.getRow().getData()); }
+                        },
+                        {
                             title: "auth", field: "token_endpoint_auth_method", width: 165,
                             formatter: function (cell) {
                                 var v = cell.getValue() || "";
@@ -604,9 +614,89 @@
             } else if (tables.client) {
                 tables.client.setData(state.clients);
             }
+            applyAgentFilter();
             renderActivation();
             renderActivationTargets();
         });
+    }
+
+    // ------------------------------------------------------------- agents
+
+    /**
+     * What makes a client an agent, as far as this console can see: the mark an operator set, the
+     * clients it lets call it, and the clients that let it call them.
+     */
+    function agentInfo(client) {
+        var same = function (a, b) { return String(a || "").toLowerCase() === String(b || "").toLowerCase(); };
+        var calledBy = listOf(client, "a2a_callers").map(function (c) { return c.client_id; });
+        var calls = state.clients.filter(function (other) {
+            return other.tenant_id === client.tenant_id && !same(other.client_id, client.client_id) &&
+                listOf(other, "a2a_callers").some(function (c) { return same(c.client_id, client.client_id); });
+        }).map(function (other) { return other.client_id; });
+        var forUsers = state.clients.some(function (other) {
+            return other.tenant_id === client.tenant_id &&
+                listOf(other, "a2a_callers").some(function (c) { return same(c.client_id, client.client_id) && c.delegate_users; });
+        });
+        return {
+            marked: client.is_agent === true,
+            calledBy: calledBy,
+            calls: calls,
+            forUsers: forUsers,
+            active: calledBy.length > 0 || calls.length > 0
+        };
+    }
+
+    function agentRank(client) {
+        var info = agentInfo(client);
+        return info.marked ? 2 : info.active ? 1 : 0;
+    }
+
+    function agentCell(client) {
+        var info = agentInfo(client);
+        if (!info.marked && !info.active) return "";
+        var why = [];
+        if (info.marked) why.push("Marked as an agent.");
+        else why.push("Takes part in agent-to-agent calls but is not marked as an agent. Open it to mark it.");
+        if (info.calledBy.length) why.push("May be called by: " + info.calledBy.join(", ") + ".");
+        if (info.calls.length) why.push("May call: " + info.calls.join(", ") + (info.forUsers ? " (on behalf of users at one or more)." : "."));
+        if (!info.active) why.push("No caller is listed for it anywhere yet, so no agent token can be issued.");
+
+        var box = document.createElement("span");
+        box.className = "ark-agent-cell";
+        box.title = why.join(" ");
+        var badge = document.createElement("span");
+        badge.className = "ark-badge " + (info.marked ? "ark-badge-agent" : "ark-badge-warn");
+        badge.textContent = info.marked ? "agent" : "a2a, not marked";
+        box.appendChild(badge);
+        if (info.active) {
+            var links = document.createElement("span");
+            links.className = "ark-agent-links";
+            // In: who may call it. Out: whom it may call.
+            links.textContent = "\u2190" + info.calledBy.length + " \u2192" + info.calls.length;
+            box.appendChild(links);
+        }
+        return box;
+    }
+
+    function applyAgentFilter() {
+        var only = byId("client-agents-only");
+        if (!tables.client || !only) return;
+        if (only.checked) tables.client.setFilter(function (data) { return agentRank(data) > 0; });
+        else tables.client.clearFilter();
+    }
+    on("client-agents-only", "change", applyAgentFilter);
+
+    /** The drawer's own summary of the same thing, for the client being edited. */
+    function renderAgentState() {
+        var badge = byId("client-drawer-agent");
+        var marked = field("is_agent") && field("is_agent").checked;
+        if (badge) badge.hidden = !marked;
+        var out = byId("cl-a2a-relations");
+        if (!out) return;
+        var info = editing && editing.id ? agentInfo(editing) : null;
+        out.textContent = info && info.calls.length
+            ? "It is currently allowed to call: " + info.calls.join(", ") + "."
+            : "";
     }
 
     function integrateUrl(client) {
@@ -633,7 +723,7 @@
         "refresh_token_lifetime_seconds", "authorization_code_lifetime_seconds", "expire_mins"
     ];
     var FLAG_FIELDS = ["is_active", "require_pkce", "require_par", "require_consent", "refresh_token_rotation",
-        "backchannel_logout_session_required"];
+        "backchannel_logout_session_required", "is_agent"];
 
     function openClient(client) {
         editing = client ? Object.assign({}, client) : {
@@ -685,6 +775,7 @@
             callers.innerHTML = "";
             listOf(editing, "a2a_callers").forEach(function (entry) { callers.appendChild(a2aRow(entry)); });
         }
+        renderAgentState();
 
         document.getElementById("cl-secret-state").textContent = editing.has_client_secret
             ? "A secret is set. Regenerating replaces it immediately."
@@ -750,14 +841,16 @@
         // that is listed but no longer exists stays visible, so removing it is a decision.
         var tenant = field("tenant_id").value;
         var own = field("client_id").value.trim();
-        var ids = state.clients.filter(function (c) {
+        var others = state.clients.filter(function (c) {
             return c.tenant_id === tenant && c.client_id !== own;
-        }).map(function (c) { return c.client_id; });
+        });
+        var ids = others.map(function (c) { return c.client_id; });
+        var agents = others.filter(function (c) { return c.is_agent === true; }).map(function (c) { return c.client_id; });
         if (entry.client_id && ids.indexOf(entry.client_id) < 0) ids.unshift(entry.client_id);
 
         var select = row.querySelector("select");
         select.add(new Option("choose a client…", ""));
-        ids.forEach(function (id) { select.add(new Option(id, id)); });
+        ids.forEach(function (id) { select.add(new Option(agents.indexOf(id) < 0 ? id : id + " \u00b7 agent", id)); });
         select.value = entry.client_id || "";
         row.querySelector(".ark-a2a-claims").value = (entry.claims || []).join(", ");
         row.querySelector("input[type=checkbox]").checked = !!entry.delegate_users;
@@ -779,6 +872,7 @@
     }
 
     on("cl-a2a-add", "click", function () { field("a2a_callers").appendChild(a2aRow(null)); });
+    on("cl-is_agent", "change", renderAgentState);
 
     on("client-add", "click", function () { openClient(null); });
     on("client-drawer-close", "click", closeClient);

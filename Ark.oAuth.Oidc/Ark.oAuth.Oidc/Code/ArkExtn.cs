@@ -770,6 +770,12 @@ namespace Ark.oAuth.Oidc
             // The audit trail is written in batches, off the request path — see ArkAuditWriter.
             services.AddSingleton<ArkAuditWriter>();
             services.AddHostedService(sp => sp.GetRequiredService<ArkAuditWriter>());
+            // The same trail, structured, to an ARK-RAPID Watch node — when ark_oauth_server:Watch
+            // names one. Until then this is an object that answers "no" (see ArkWatchAudit). The
+            // accessor is how an event learns the caller's address and who is signed in.
+            services.AddHttpContextAccessor();
+            services.AddSingleton<ArkWatchAudit>();
+            services.AddHostedService<ArkWatchLifetime>();
             services.AddScoped<DataAccess>();
             services.AddScoped<TokenServer>();
             services.AddSingleton<ArkUtil>();

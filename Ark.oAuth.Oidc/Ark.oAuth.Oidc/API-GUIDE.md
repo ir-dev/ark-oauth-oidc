@@ -53,6 +53,7 @@ Active while `ark_oauth_server:TenantId` or `ConnectionStrings:ArkAuthConnection
 | `POST /ark-idp/setup/api/keys/import` | `{ private_key }` (PEM PKCS#8/PKCS#1, or base64 PKCS#8) → same | 404 |
 | `POST /ark-idp/setup/api/database/test` | `{ provider, connection_string }` → `{ ok, exists, tenants[], msg }` | 404 |
 | `POST /ark-idp/setup/api/email/test` | `{ email{…}, to }` → `{ ok, msg }` | 404 |
+| `POST /ark-idp/setup/api/watch/test` | `{ endpoint, api_key, application?, environment? }` → `{ ok, msg }`: `GET {endpoint}/api/whoami` with the key, then one event through `Ark.Watch.Client` | 404 |
 | `POST /ark-idp/setup/api/complete` | the whole form → writes settings, bootstraps the DB, reloads configuration | 404 |
 | `GET /ark-idp/branding/{file}` | uploaded logos | same |
 
@@ -62,7 +63,8 @@ the code from the start-up log / `setup-code.txt`. Errors are `{ error, msg, fie
 
 `complete` writes `{DataPath}/settings.json` (0600): `ConnectionStrings`, and `ark_oauth_server`
 with `TenantId, BaseUrl, BasePath, Provider, UserPasswordMode, DefaultPw?, AdminUser{Username,Name},
-Admin{SignOutUrl,LandingUrl?}, Oidc{…}, EmailConfig{…}, ShowPoweredBy` (from `branding.show_powered_by`, default
+Admin{SignOutUrl,LandingUrl?}, Oidc{…}, EmailConfig{…}, Watch{Enabled,Endpoint,ApiKey,Application,Environment}?
+(only when the optional `watch.enabled` step was filled in; a public `arkw_pk_` key is refused), ShowPoweredBy` (from `branding.show_powered_by`, default
 `true`; `LandingUrl` from `server.landing_url`, written only when it is not the public URL itself, as a
 path when it is on this server). Not written: the admin password, the signing key, the machine secret (database only, hashed
 where secret); the wizard's last screen offers them once, as a JSON or `.xlsx` download built in the
@@ -98,6 +100,31 @@ not seeded (tenant id must match; no key/client/account created).
 | `EnableA2A` | `true` | Agent-to-agent tokens: `client_credentials` + `audience`, and token exchange (RFC 8693). Inert until a client lists a caller in `a2a_callers`. `false` = the token endpoint as before the feature. See [A2A.md](A2A.md). |
 | `A2ATokenLifetimeSeconds` | `300` | Cap on an A2A token's life; the caller's `access_token_lifetime_seconds` applies when shorter, and a delegated token never outlives its subject token. |
 | `A2AMaxDelegationDepth` | `4` | Most agents in one `act` chain. |
+
+`ArkClient.is_agent` (`bool?`, column `clients.is_agent`) marks a client as an agent for the console
+badge and the audit trail. A label only; null on a save keeps the stored value.
+
+`ark_oauth_server:Watch` (`ArkWatchConfig`, optional): the audit trail to an ARK-RAPID Watch node via
+`Ark.Watch.Client`. Nothing is constructed until `Endpoint` and `ApiKey` are both set.
+
+| Setting | Default | Notes |
+|---|---|---|
+| `Enabled` | `true` | |
+| `Endpoint` | none | Node address. |
+| `ApiKey` | none | Secret key (`arkw_sk_…`); set it as `ark_oauth_server__Watch__ApiKey`. |
+| `Application` | `ark-idp` | |
+| `Environment` | host environment name | |
+| `SpoolDirectory` | `{Setup:DataPath}/watch-spool/{machine}` | `none` = memory only. |
+| `IncludeProtocolTrace` | `true` | `false` drops the per-request lines (`authorization.grant`, `authorization.push`, `device.request`, `token.issue`, `session.notify`). |
+
+Events are raised by every `DataAccess.Log` / `Record` / `LogError` call (mapped in `ArkWatchMap`,
+`Code/ArkWatch.cs`) and, in full, by the agent-to-agent paths (`Protocol/ArkAgentAudit.cs`). Record one
+from host code with `ArkWatch.Record(HttpContext, new ArkWatchEvent { … })`; it never throws.
+
+The same table continues (`ark_oauth_server:Oidc`):
+
+| Setting | Default | Notes |
+|---|---|---|
 | `EnablePushedAuthorizationRequests` | `true` | RFC 9126 `/par`. |
 | `RequirePushedAuthorizationRequests` | `false` | Refuse plain `/authorize` not via PAR. |
 | `DeviceCodeLifetimeSeconds` | `600` | |
@@ -246,6 +273,7 @@ Configuration, all optional (`ark_oauth_server:Management`):
 |---|---|
 | Tenants | `v1/tenant/list`, `v1/tenant/upsert` |
 | Clients | `v1/client/list`, `v1/client/upsert`, `v1/client/delete`, `v1/client/secret/reset` |
+| Audit trail | `GET v1/watch/status` → `{ enabled, reason, endpoint, application, environment, spool, protocol_trace, logged, sent, spooled, replayed, rejected, dropped, send_failures, breaker, health }` (never the key) |
 | Claims | `v1/claim/list`, `v1/claim/upsert`, `v1/claim/delete` |
 | Scopes | `v1/scope/list`, `v1/scope/upsert`, `v1/scope/delete` |
 | Users | `v1/user/list`, `v1/user/upsert`, `v1/user/pw/reset/init`, `v1/user/pw/set` |

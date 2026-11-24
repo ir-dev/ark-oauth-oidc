@@ -484,6 +484,60 @@ access there, ends when their session does, and never outlives the token it was 
 default and inert until a caller is listed; `Oidc:EnableA2A = false` removes it. Setup, the token
 contents, every refusal and the client-library calls are in [A2A.md](A2A.md).
 
+Tick **This client is an agent** in the same section and the client list shows it with an `agent`
+badge and how many clients it may call and be called by; **agents only** narrows the list. The mark
+is a label (`is_agent` on the client record): it grants nothing, the caller list decides.
+
+## Audit trail (ARK-RAPID Watch)
+
+Optional. The server can send a structured record of everything it does to an
+[ARK-RAPID Watch](https://github.com/ir-dev/ark-net-audit) audit server, through the
+`Ark.Watch.Client` package this one now references: sign-ins and refusals, tokens, revocations,
+sign-outs, every change made in the console or through the management API, and every
+agent-to-agent event in full (see [A2A.md](A2A.md#the-audit-trail)). The record lives outside this
+server, is tamper evident and can be searched by who, what, which client and which user.
+
+**Nothing is sent until it is configured.** With no endpoint or no key, no client is created, no
+thread is started and no file is written. Configure it in the setup wizard (the **Audit trail**
+step, which tests the address and the key before saving), or as settings:
+
+```json
+"ark_oauth_server": {
+  "Watch": {
+    "Endpoint": "https://audit.example.com/",
+    "Application": "ark-idp",
+    "Environment": "Production"
+  }
+}
+```
+
+and the key from the environment or a vault, never a file: `ark_oauth_server__Watch__ApiKey`. Use a
+**secret** key of the node (`arkw_sk_…`), created there under Admin → Applications.
+
+| `ark_oauth_server:Watch` | Default | |
+|---|---|---|
+| `Enabled` | `true` | `false` stops sending without removing the settings. |
+| `Endpoint` | none | The node's address. Required. |
+| `ApiKey` | none | A secret key of the node. Required. |
+| `Application` | `ark-idp` | What the events are filed under. A key created for one application only accepts that name. |
+| `Environment` | the host's environment name | |
+| `SpoolDirectory` | `watch-spool/{machine}` in the setup data directory | Where events wait while the node is away. `none` keeps them in memory only. Each instance needs a folder of its own, which the default gives it. |
+| `IncludeProtocolTrace` | `true` | `false` leaves out the high-volume lines (each authorization request, pushed request, device code and ordinary token) and keeps who-did-what: sign-ins, refusals, agent tokens, revocations, changes. |
+
+**It never slows a request or fails one.** An event is written to an in-memory ring and the request
+goes on; a background worker sends it. While the node cannot be reached, events are kept on disk
+and sent in order when it is back, including across a restart of this server. A change to these
+settings takes effect without a restart.
+
+**Is it working?** The console's footer shows *Audit trail: host, sending* (or *waiting for the
+node*, or *losing events*), with the counters in its tooltip, and
+`GET /api/oauth/v1/watch/status` returns them: `logged`, `sent`, `spooled`, `replayed`, `rejected`,
+`dropped`, `send_failures`, `health`. `rejected` above zero usually means the key belongs to
+another application name. The key is never returned.
+
+It is independent of `EnableLogTrace`, which is about the trace this server keeps in its own
+database: either can be on without the other.
+
 ## Export, import and factory reset
 
 The operator account gets a **Data** page at `/{tenant_id}/admin/data`, over an API at
@@ -545,6 +599,11 @@ package version.
 | `branding/` | the uploaded logos, served at `/ark-idp/branding/…` (as files, so activation emails can show them) |
 | `ark_idp.db` | the SQLite database, when SQLite is chosen with the default path |
 | `.gitignore` | `*`: the directory ignores itself, because `dotnet run` puts it inside your project |
+
+The optional **Audit trail** step asks for an ARK-RAPID Watch address and key, tests them — the
+address, the key, then one real event — and writes them to `settings.json` as
+`ark_oauth_server:Watch`. Skipped, the section is not written and nothing is sent. A folder
+`watch-spool/` appears beside the settings once it is on.
 
 `settings.json` is read as configuration on every start. It is inserted **after appsettings.json and
 before user secrets, environment variables and the command line**, so any value it holds can still

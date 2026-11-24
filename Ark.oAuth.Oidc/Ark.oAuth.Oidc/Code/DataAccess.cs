@@ -23,6 +23,7 @@ namespace Ark.oAuth.Oidc
         ArkDataContext _ctx;
         ArkUtil _util;
         ArkAuditWriter? _audit;
+        ArkWatchAudit? _watch;
         public DataAccess(ArkDataContext ctx, ArkUtil util)
         {
             _ctx = ctx;
@@ -36,6 +37,15 @@ namespace Ark.oAuth.Oidc
         public DataAccess(ArkDataContext ctx, ArkUtil util, ArkAuditWriter audit) : this(ctx, util)
         {
             _audit = audit;
+        }
+        /// <summary>
+        /// ...and <paramref name="watch"/> sends the same trail, structured, to an ARK-RAPID Watch
+        /// node when one is configured (see <see cref="ArkWatchAudit"/>). It does nothing when
+        /// none is.
+        /// </summary>
+        public DataAccess(ArkDataContext ctx, ArkUtil util, ArkAuditWriter audit, ArkWatchAudit watch) : this(ctx, util, audit)
+        {
+            _watch = watch;
         }
         public ArkDataContext GetCtx()
         {
@@ -119,6 +129,9 @@ namespace Ark.oAuth.Oidc
             await NormaliseClient(client);
             var tt = (await _ctx.clients.FirstOrDefaultAsync(t => t.id.ToLower() == (client.id ?? "").ToLower())) ?? (await _ctx.clients.FirstOrDefaultAsync(t => t.tenant_id.ToLower() == (client.tenant_id ?? "").ToLower() && t.client_id.ToLower() == (client.client_id ?? "").ToLower()));
             await EnsureUniqueClientName(client.tenant_id, client.client_name ?? client.display ?? client.name ?? client.client_id, tt?.id);
+            // As they stood before this save, for the audit line below.
+            var callersBefore = tt?.a2a_callers ?? new List<ArkAgentCaller>();
+            var wasAgent = tt?.is_agent == true;
             if (tt == null)
             {
                 client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
@@ -134,6 +147,8 @@ namespace Ark.oAuth.Oidc
                 // The A2A caller list likewise: a save that does not carry it (provisioning,
                 // onboarding, an older console script) leaves it as it was. "[]" clears it.
                 if (client.a2a_callers_ == null) client.a2a_callers_ = tt.a2a_callers_;
+                // ...and the agent mark.
+                if (client.is_agent == null) client.is_agent = tt.is_agent;
                 _ctx.ChangeTracker.Clear();
                 client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.clients.Update(client);
@@ -144,7 +159,134 @@ namespace Ark.oAuth.Oidc
             // which control the operator happened to use decides whether the switch takes effect.
             if (tt != null && tt.is_active && !client.is_active)
                 await RevokeRefreshTokensForClient(client.tenant_id, client.client_id);
+            RecordAgentChanges(client, callersBefore, wasAgent);
             return client;
+        }
+
+        /// <summary>
+        /// Records a change to who may call an agent, or to whether a client is marked as one.
+        ///
+        /// Written whatever <c>EnableLogTrace</c> says, like an import or a reset: "who allowed
+        /// this agent to act for users at that one, and when" is the question an audit of
+        /// agent-to-agent access starts with, and every path that can change the list — the
+        /// console, the management API — ends in <see cref="UpsertClient"/>. A save that changes
+        /// neither writes nothing.
+        /// </summary>
+        void RecordAgentChanges(ArkClient client, List<ArkAgentCaller> before, bool wasAgent)
+        {
+            try
+            {
+                static bool Same(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+                static Dictionary<string, object?> Describe(ArkAgentCaller c) => new()
+                {
+                    ["client_id"] = c.client_id,
+                    ["claims"] = (c.claims ?? new List<string>()).ToList(),
+                    ["delegate_users"] = c.delegate_users
+                };
+                static string Text(ArkAgentCaller c) =>
+                    $"{c.client_id} [{string.Join(" ", c.claims ?? new List<string>())}]{(c.delegate_users ? " +users" : "")}";
+
+                var after = client.a2a_callers;
+                var added = after.Where(a => !before.Any(b => Same(b.client_id, a.client_id))).ToList();
+                var removed = before.Where(b => !after.Any(a => Same(a.client_id, b.client_id))).ToList();
+                var changed = after
+                    .Select(a => (after: a, before: before.FirstOrDefault(b => Same(b.client_id, a.client_id))))
+                    .Where(p => p.before != null && (p.before.delegate_users != p.after.delegate_users
+                        || !new HashSet<string>(p.before.claims ?? new List<string>(), StringComparer.Ordinal)
+                            .SetEquals(p.after.claims ?? new List<string>())))
+                    .ToList();
+                var isAgent = client.is_agent == true;
+                if (added.Count + removed.Count + changed.Count == 0 && wasAgent == isAgent) return;
+
+                var (who, ip) = _watch?.Caller() ?? (null, null);
+                var reference = $"{client.tenant_id}/{client.client_id}";
+
+                if (added.Count + removed.Count + changed.Count > 0)
+                {
+                    var parts = new List<string>();
+                    if (added.Count > 0) parts.Add("added: " + string.Join("; ", added.Select(Text)));
+                    if (removed.Count > 0) parts.Add("removed: " + string.Join("; ", removed.Select(Text)));
+                    if (changed.Count > 0) parts.Add("changed: " + string.Join("; ", changed.Select(p => $"{Text(p.before!)} -> {Text(p.after)}")));
+
+                    var e = new ArkWatchEvent
+                    {
+                        Action = "agent_callers.update",
+                        Domain = ArkWatchDomains.Agents,
+                        System = "management-api",
+                        Level = Ark.Watch.Core.AuditLevel.Security,
+                        Outcome = Ark.Watch.Core.Outcome.Success,
+                        Tenant = client.tenant_id,
+                        ResourceType = "agent",
+                        ResourceId = client.client_id,
+                        Message = $"who may call agent '{client.client_id}' changed: {added.Count} added, {removed.Count} removed, {changed.Count} changed"
+                    };
+                    e.With("target", client.client_id)
+                        .With("added", added.Select(Describe).ToList())
+                        .With("removed", removed.Select(Describe).ToList())
+                        .With("changed", changed.Select(p => new Dictionary<string, object?>
+                        {
+                            ["client_id"] = p.after.client_id,
+                            ["before"] = Describe(p.before!),
+                            ["after"] = Describe(p.after)
+                        }).ToList())
+                        .With("callers", after.Select(c => c.client_id).ToList())
+                        .With("delegating_callers", after.Where(c => c.delegate_users).Select(c => c.client_id).ToList());
+                    // Granting an agent the right to act for users is the change to look for.
+                    if (added.Any(c => c.delegate_users) || changed.Any(p => p.after.delegate_users && !p.before!.delegate_users))
+                        e.With("delegation_granted", true);
+                    WriteAudit("a2a_callers", reference, "a2a caller list changed", string.Join(" | ", parts), who, ip, e);
+                }
+
+                if (wasAgent != isAgent)
+                {
+                    var e = new ArkWatchEvent
+                    {
+                        Action = isAgent ? "agent.mark" : "agent.unmark",
+                        Domain = ArkWatchDomains.Agents,
+                        System = "management-api",
+                        Level = Ark.Watch.Core.AuditLevel.Notice,
+                        Outcome = Ark.Watch.Core.Outcome.Success,
+                        Tenant = client.tenant_id,
+                        ResourceType = "agent",
+                        ResourceId = client.client_id,
+                        Message = isAgent ? $"client '{client.client_id}' marked as an agent" : $"client '{client.client_id}' is no longer marked as an agent"
+                    };
+                    e.With("is_agent", isAgent);
+                    WriteAudit("a2a_agent", reference, isAgent ? "client marked as an agent" : "agent mark removed", "", who, ip, e);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
+        }
+
+        /// <summary>
+        /// An audit row that is always written, queued behind the request like the trace when the
+        /// writer is running. <see cref="Record"/> clears the change tracker first, which is right
+        /// for an import and wrong in the middle of a save other code is still building on.
+        /// </summary>
+        void WriteAudit(string ref_key, string ref_val, string message, string details, string? by, string? ip, ArkWatchEvent? watch)
+        {
+            if (_watch is { Enabled: true })
+            {
+                try { _watch.Log(null, watch ?? ArkWatchMap.FromRow(ref_key, ref_val, message, details, "audit", by)); }
+                catch { /* the trail is never a reason to fail */ }
+            }
+            var row = new ArkAudit()
+            {
+                ref_key = ref_key,
+                ref_val = ref_val,
+                log_type = "audit",
+                message = message,
+                details = details,
+                by = string.IsNullOrWhiteSpace(by) ? "ark_admin" : by,
+                ip = ip ?? "",
+                at = DateTime.UtcNow
+            };
+            if (_audit != null && _audit.TryEnqueue(row)) return;
+            _ctx.audit_trace.Add(row);
+            _ctx.SaveChanges();
         }
         /// <summary>
         /// Fills in the v1 single-valued columns a client row still requires from the RFC 7591
@@ -765,8 +907,23 @@ namespace Ark.oAuth.Oidc
         {
             await _ctx.Database.EnsureCreatedAsync();
         }
-        public void Log(string? ref_key, string? ref_val, string? message, string? details, string? log_type = "trace")
+        public void Log(string? ref_key, string? ref_val, string? message, string? details, string? log_type = "trace") =>
+            Log(ref_key, ref_val, message, details, log_type, null);
+
+        /// <summary>
+        /// The same line, with the event to send to the audit server in its place. A site that
+        /// knows more than a sentence can say — who called whom, for which user, with which
+        /// token — passes <paramref name="watch"/>; without one the event is derived from the
+        /// line (see <see cref="ArkWatchMap"/>). The audit server is sent the event whatever
+        /// <c>EnableLogTrace</c> says: that switch is about this database's own trace.
+        /// </summary>
+        public void Log(string? ref_key, string? ref_val, string? message, string? details, string? log_type, ArkWatchEvent? watch)
         {
+            if (_watch is { Enabled: true })
+            {
+                try { _watch.Log(null, watch ?? ArkWatchMap.FromRow(ref_key, ref_val, message, details, log_type)); }
+                catch { /* the trail is never a reason to fail */ }
+            }
             try
             {
                 if (!_util.IsTraceEnabled) return;
@@ -798,8 +955,17 @@ namespace Ark.oAuth.Oidc
         /// <see cref="Log"/> is a trace and is off on most production servers, which would leave
         /// "who emptied the database" with no answer at exactly the moment it is asked.
         /// </summary>
-        public void Record(string? ref_key, string? ref_val, string? message, string? details, string? by, string? ip)
+        public void Record(string? ref_key, string? ref_val, string? message, string? details, string? by, string? ip) =>
+            Record(ref_key, ref_val, message, details, by, ip, null);
+
+        /// <summary>The same row, with the event to send to the audit server in its place.</summary>
+        public void Record(string? ref_key, string? ref_val, string? message, string? details, string? by, string? ip, ArkWatchEvent? watch)
         {
+            if (_watch is { Enabled: true })
+            {
+                try { _watch.Log(null, watch ?? ArkWatchMap.FromRow(ref_key, ref_val, message, details, "audit", by)); }
+                catch { /* the trail is never a reason to fail */ }
+            }
             try
             {
                 _ctx.ChangeTracker.Clear();
@@ -823,6 +989,11 @@ namespace Ark.oAuth.Oidc
         }
         public void LogError(Exception exp, string? ref_key, string? ref_val, string? message)
         {
+            if (_watch is { Enabled: true })
+            {
+                try { _watch.Log(null, ArkWatchMap.FromError(exp, ref_key, ref_val, message)); }
+                catch { /* the trail is never a reason to fail */ }
+            }
             try
             {
                 var row = new ArkAudit()

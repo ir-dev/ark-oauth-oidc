@@ -60,6 +60,9 @@
             <h2>Clients</h2>
             <span class="ark-hint">applications allowed to request tokens</span>
             <span class="ark-spacer"></span>
+            <label class="ark-head-check" title="Show only clients marked as agents, or taking part in agent-to-agent calls">
+                <input type="checkbox" id="client-agents-only" /> agents only
+            </label>
             <button id="client-add" type="button">Add client</button>
         </div>
         <div class="ark-panel-body"><div id="tbl_client"></div></div>
@@ -114,6 +117,7 @@
 <aside class="ark-drawer" id="client-drawer" aria-label="Client editor">
     <div class="ark-drawer-head">
         <h3 id="client-drawer-title">Client</h3>
+        <span class="ark-badge ark-badge-agent" id="client-drawer-agent" hidden>agent</span>
         <span class="ark-topbar-spacer"></span>
         <button type="button" class="ark-btn-ghost" id="client-drawer-close">Close</button>
     </div>
@@ -245,6 +249,17 @@
 
         <fieldset>
             <legend>Agent-to-agent (A2A)</legend>
+            <div class="ark-check">
+                <input type="checkbox" id="cl-is_agent" />
+                <label for="cl-is_agent">This client is an agent</label>
+            </div>
+            <div class="ark-note ark-a2a-note">
+                Marks the client as software that calls other clients, or is called by them,
+                rather than an application people sign in to. It is shown as a badge in the
+                client list and named as an agent in the audit trail. The mark is a label: it
+                grants nothing by itself, the list below decides who may call whom.
+                <span id="cl-a2a-relations"></span>
+            </div>
             <div class="ark-note ark-a2a-note">
                 Who may call this client as an agent. A client listed here can obtain a token
                 addressed to this one (<code>aud</code> is this client_id) and to nobody else;

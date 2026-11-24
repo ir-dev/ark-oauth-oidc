@@ -139,6 +139,18 @@ These apply in every language and are the source of most "it just says the passw
   addressed to; and a save that does not carry `a2a_callers_` leaves the list alone. The three
   server-side clients each ship `agent_token` / `verify_agent_token` / `agent_actors` under their
   own spelling; the browser client has none, because a public client cannot be an agent.
+  `ArkClient.is_agent` is a label for the console badge and the audit trail: never read it to allow
+  or refuse anything.
+* **The audit trail to ARK-RAPID Watch is optional and must cost nothing when it is off**
+  (`ark_oauth_server:Watch`, `Code/ArkWatch.cs`, package `Ark.Watch.Client`). No client, thread or
+  file exists until an endpoint and a key are configured. Every `DataAccess.Log` / `Record` /
+  `LogError` line is forwarded through `ArkWatchMap`; a new audit key needs a row there or it is
+  filed as a generic event. A site that knows more passes its own `ArkWatchEvent`: the A2A paths do,
+  through `Protocol/ArkAgentAudit.cs`. Keep these true: recording never throws or blocks; a token is
+  named by its `jti`, never carried; and a refused A2A request is recorded with what was
+  established before the refusal (`AgentTokenTrace`). Test against a scratch node built from the
+  `Ark.Watch.Server` package, never a real one; on a laptop with a nearly full disk it answers 429
+  until `ArkWatch__Wal__SoftDiskLimit` / `HardDiskLimit` are raised.
 * **Load test:** `scripts/loadtest` (seed + generator) against a scratch host and database, never a
   real one. Results are published as a dated page under `site/performance/`. On a laptop, wrap a
   long run in `caffeinate -dimsu`: on battery the machine sleeps after a minute idle and the run

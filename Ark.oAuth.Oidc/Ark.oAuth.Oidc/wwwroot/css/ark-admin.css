@@ -501,6 +501,22 @@ legend {
 .ark-badge-ok { background: var(--ark-success-soft); color: var(--ark-success); }
 .ark-badge-off { background: var(--ark-surface-2); color: var(--ark-fg-muted); border-color: var(--ark-border); }
 .ark-badge-warn { background: var(--ark-warn-soft); color: var(--ark-warn); }
+/* A client that is an agent: the one badge in the client list drawn in the accent colour. */
+.ark-badge-agent { background: var(--ark-accent-soft); color: var(--ark-accent); border-color: var(--ark-accent); }
+.ark-agent-cell { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ark-agent-links { font-size: calc(11.5px * var(--ark-text-scale, 1)); color: var(--ark-fg-muted); font-variant-numeric: tabular-nums; }
+.ark-head-check {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    font-size: calc(12.5px * var(--ark-text-scale, 1)); color: var(--ark-fg-muted);
+}
+.ark-panel-head .ark-head-check input { width: auto; min-width: 0; margin: 0; }
+.ark-drawer-head .ark-badge[hidden] { display: none; }
+/* The audit trail's state, in the console footer. */
+.ark-audit-state { display: inline-flex; align-items: center; gap: 6px; }
+.ark-audit-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ark-fg-muted); }
+.ark-audit-state[data-health="ok"] .ark-audit-dot { background: var(--ark-success); }
+.ark-audit-state[data-health="waiting"] .ark-audit-dot { background: var(--ark-warn); }
+.ark-audit-state[data-health="losing"] .ark-audit-dot { background: var(--ark-danger); }
 
 /* ---------- drawer ---------- */
 .ark-drawer-backdrop {

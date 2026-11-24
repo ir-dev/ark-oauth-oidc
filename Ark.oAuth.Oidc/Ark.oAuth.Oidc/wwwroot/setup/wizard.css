@@ -164,6 +164,12 @@ a { color: var(--ark-accent); }
 form { padding: 28px 32px 8px; }
 
 h1 { font-size: calc(22px * var(--ark-text-scale, 1)); line-height: 1.3; margin: 0 0 6px; letter-spacing: -.01em; }
+/* A step that may be skipped says so beside its title. */
+h1 .optional {
+    display: inline-block; vertical-align: middle; margin-left: 8px; padding: 2px 9px; border-radius: 99px;
+    font-size: calc(11.5px * var(--ark-text-scale, 1)); font-weight: 600; letter-spacing: 0;
+    color: var(--ark-fg-muted); background: var(--ark-surface-2); border: 1px solid var(--ark-border);
+}
 h2 { font-size: calc(15px * var(--ark-text-scale, 1)); margin: 0 0 6px; }
 .lead { color: var(--ark-fg-muted); margin: 0 0 22px; max-width: 70ch; }
 .center { text-align: center; }

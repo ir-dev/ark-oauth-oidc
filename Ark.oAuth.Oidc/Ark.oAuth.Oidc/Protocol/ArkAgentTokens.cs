@@ -16,6 +16,50 @@ namespace Ark.oAuth.Oidc.Protocol
         public string Audience { get; set; } = default!;
         /// <summary>The <c>act</c> chain, newest first. Empty when the agent called as itself.</summary>
         public List<string> Actors { get; set; } = new();
+        /// <summary>The token's <c>jti</c>: what the audit trail knows this token by.</summary>
+        public string TokenId { get; set; } = "";
+        /// <summary>The <c>ark_claims</c> the token carries at the agent it is addressed to.</summary>
+        public List<string> Claims { get; set; } = new();
+    }
+
+    /// <summary>
+    /// What is known about one agent-token request, filled in as the request is checked.
+    ///
+    /// It exists for the audit trail. A request that is refused is refused part-way through, and
+    /// the record of it should say as much as had been established by then — which agent asked,
+    /// for whom, with which token, to reach whom — not only that something was turned down. So
+    /// each fact is written here the moment it is known, and whoever catches the refusal has it.
+    /// Nothing in here is a secret: tokens are named by their <c>jti</c>, never carried.
+    /// </summary>
+    public class AgentTokenTrace
+    {
+        public const string AsItself = "as_itself";
+        public const string OnBehalfOf = "on_behalf_of";
+
+        /// <summary><see cref="AsItself"/> or <see cref="OnBehalfOf"/>.</summary>
+        public string Mode { get; set; } = AsItself;
+        /// <summary>The audience the request named, as sent.</summary>
+        public string? RequestedAudience { get; set; }
+        /// <summary>The agent that audience resolved to, once it has.</summary>
+        public string? Target { get; set; }
+        public string? TargetName { get; set; }
+        /// <summary>Whether the target lets this caller act for users.</summary>
+        public bool? DelegateUsers { get; set; }
+        /// <summary>The user a delegated token is for.</summary>
+        public string? Subject { get; set; }
+        /// <summary>The <c>jti</c> of the token presented for exchange: the link back up the chain.</summary>
+        public string? SubjectTokenId { get; set; }
+        /// <summary>The client the presented token was issued to.</summary>
+        public string? SubjectTokenIssuedTo { get; set; }
+        public List<string> SubjectTokenAudiences { get; set; } = new();
+        public DateTime? SubjectTokenExpiresAt { get; set; }
+        /// <summary>Why this client may exchange the presented token: <c>addressed_to_actor</c> or <c>issued_to_actor</c>.</summary>
+        public string? SubjectTokenHeldAs { get; set; }
+        /// <summary>The session behind a delegated token (already a hash of the cookie, never the cookie).</summary>
+        public string? SessionId { get; set; }
+        /// <summary>The agents the user had already been handed through, newest first.</summary>
+        public List<string> PreviousActors { get; set; } = new();
+        public List<string> RequestedScopes { get; set; } = new();
     }
 
     /// <summary>
@@ -85,10 +129,15 @@ namespace Ark.oAuth.Oidc.Protocol
         // -----------------------------------------------------------------
 
         public async Task<AgentTokenResult> AsItselfAsync(
-            ArkTenant tenant, string issuer, ArkClient caller, string audience, List<string> scopes)
+            ArkTenant tenant, string issuer, ArkClient caller, string audience, List<string> scopes, AgentTokenTrace? trace = null)
         {
+            trace ??= new AgentTokenTrace();
+            trace.Mode = AgentTokenTrace.AsItself;
+            trace.RequestedAudience = audience;
+            trace.RequestedScopes = scopes;
+
             var options = ArkConfigSnapshot.Oidc(_ctx.Configuration);
-            var (target, entry) = await ResolveTargetAsync(tenant, issuer, caller, audience, forUser: false);
+            var (target, entry) = await ResolveTargetAsync(tenant, issuer, caller, audience, forUser: false, trace);
 
             var ctx = new TokenRequestContext
             {
@@ -101,11 +150,12 @@ namespace Ark.oAuth.Oidc.Protocol
                 LifetimeSeconds = Lifetime(options, caller),
                 AuthorizationClaims = entry.claims ?? new List<string>()
             };
-            var (token, expiresAt, _) = await _tokens.IssueAccessTokenAsync(ctx);
+            var (token, expiresAt, jti) = await _tokens.IssueAccessTokenAsync(ctx);
             return new AgentTokenResult
             {
                 AccessToken = token, ExpiresAt = expiresAt, Scopes = scopes,
-                Subject = caller.client_id, Audience = target.client_id
+                Subject = caller.client_id, Audience = target.client_id,
+                TokenId = jti, Claims = ctx.AuthorizationClaims ?? new List<string>()
             };
         }
 
@@ -114,8 +164,15 @@ namespace Ark.oAuth.Oidc.Protocol
         // -----------------------------------------------------------------
 
         public async Task<AgentTokenResult> OnBehalfOfAsync(
-            ArkTenant tenant, string issuer, ArkClient actor, IFormCollection form)
+            ArkTenant tenant, string issuer, ArkClient actor, IFormCollection form, AgentTokenTrace? trace = null)
         {
+            trace ??= new AgentTokenTrace();
+            trace.Mode = AgentTokenTrace.OnBehalfOf;
+            trace.RequestedScopes = form["scope"].ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+            // As sent, before it is checked: a refusal for naming two agents should name both.
+            trace.RequestedAudience = string.Join(" ", form["audience"].Concat(form["resource"])
+                .Select(v => (v ?? "").Trim()).Where(v => v.Length > 0).Distinct(StringComparer.Ordinal));
+
             var options = ArkConfigSnapshot.Oidc(_ctx.Configuration);
 
             var subjectToken = form["subject_token"].ToString();
@@ -151,6 +208,15 @@ namespace Ark.oAuth.Oidc.Protocol
             var issuedTo = Text("client_id");
             var audiences = jwt.Audiences.ToList();
 
+            // The token is genuine, so what it says may be recorded whatever happens next.
+            trace.Subject = subject;
+            trace.SubjectTokenId = Text("jti");
+            trace.SubjectTokenIssuedTo = issuedTo;
+            trace.SubjectTokenAudiences = audiences;
+            trace.SubjectTokenExpiresAt = DateTime.SpecifyKind(jwt.ValidTo, DateTimeKind.Utc);
+            trace.SessionId = Text("sid");
+            if (claims.TryGetProperty("act", out var presentedAct)) trace.PreviousActors = ActorChain(presentedAct);
+
             // Who may exchange a token: the agent it is addressed to, or the client it was issued
             // to in the first place. Any API in the tenant is handed ordinary access tokens all
             // day; without this, each of them could turn a caller's token into one for somewhere
@@ -160,6 +226,7 @@ namespace Ark.oAuth.Oidc.Protocol
             var issuedToActor = Same(issuedTo, actor.client_id) && audiences.All(a => IsTenantAudience(a, tenant, issuer));
             if (!addressedToActor && !issuedToActor)
                 throw OAuthException.InvalidGrant("subject_token was neither issued to this client nor addressed to it.");
+            trace.SubjectTokenHeldAs = addressedToActor ? "addressed_to_actor" : "issued_to_actor";
 
             if (claims.TryGetProperty("service_role", out _))
                 throw OAuthException.InvalidGrant("a service account token cannot be exchanged.");
@@ -188,7 +255,7 @@ namespace Ark.oAuth.Oidc.Protocol
 
             // --- the agent it is for ---
 
-            var (target, _) = await ResolveTargetAsync(tenant, issuer, actor, audience, forUser: true);
+            var (target, _) = await ResolveTargetAsync(tenant, issuer, actor, audience, forUser: true, trace);
 
             // The user's own standing at the target decides what the token may do there. An agent
             // cannot carry somebody to an application they were never given access to.
@@ -234,11 +301,12 @@ namespace Ark.oAuth.Oidc.Protocol
                 LifetimeSeconds = Math.Min(Lifetime(options, actor), remaining),
                 AuthorizationClaims = granted
             };
-            var (token, expiresAt, _) = await _tokens.IssueAccessTokenAsync(ctx);
+            var (token, expiresAt, jti) = await _tokens.IssueAccessTokenAsync(ctx);
             return new AgentTokenResult
             {
                 AccessToken = token, ExpiresAt = expiresAt, Scopes = scopes,
-                Subject = subject!, Audience = target.client_id, Actors = actors
+                Subject = subject!, Audience = target.client_id, Actors = actors,
+                TokenId = jti, Claims = granted
             };
         }
 
@@ -251,7 +319,7 @@ namespace Ark.oAuth.Oidc.Protocol
         /// the token endpoint is not a way to find out which client_ids are agents.
         /// </summary>
         private async Task<(ArkClient target, ArkAgentCaller entry)> ResolveTargetAsync(
-            ArkTenant tenant, string issuer, ArkClient caller, string audience, bool forUser)
+            ArkTenant tenant, string issuer, ArkClient caller, string audience, bool forUser, AgentTokenTrace trace)
         {
             var target = await ArkIdpCache.ClientAsync(_ctx, tenant.tenant_id, audience);
             var entry = Entry(target, caller);
@@ -268,6 +336,12 @@ namespace Ark.oAuth.Oidc.Protocol
                 || IsTenantAudience(target.client_id, tenant, issuer))
                 throw new OAuthException(InvalidTarget,
                     $"'{audience}' is not an agent this client may call. The target client lists its callers (a2a_callers).");
+
+            // The caller is on the list, so the target may be named in the record of a refusal
+            // too. Before this point the record keeps only what the request itself said.
+            trace.Target = target.client_id;
+            trace.TargetName = target.client_name ?? target.display ?? target.name;
+            trace.DelegateUsers = entry.delegate_users;
 
             if (forUser && !entry.delegate_users)
                 throw new OAuthException(InvalidTarget,

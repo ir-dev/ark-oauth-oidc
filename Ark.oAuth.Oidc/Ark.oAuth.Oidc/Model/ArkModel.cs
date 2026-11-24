@@ -116,6 +116,11 @@
         public ArkManagementConfig Management { get; set; } = new ArkManagementConfig();
         /// <summary>The first-run setup wizard. See <see cref="ArkSetupConfig"/>.</summary>
         public ArkSetupConfig Setup { get; set; } = new ArkSetupConfig();
+        /// <summary>
+        /// The audit trail sent to an ARK-RAPID Watch node. Optional: with no endpoint or no key
+        /// nothing is sent and nothing is started. See <see cref="ArkWatchConfig"/>.
+        /// </summary>
+        public ArkWatchConfig Watch { get; set; } = new ArkWatchConfig();
 
         /// <summary>The parsed onboarding mode, defaulting to the legacy auto behaviour.</summary>
         public ArkUserPasswordMode EffectiveUserPasswordMode =>
@@ -175,6 +180,60 @@
         public string Password { get; set; }
         /// <summary>Display name for the account. Defaults to <c>Admin User</c>.</summary>
         public string Name { get; set; }
+    }
+
+    /// <summary>
+    /// Observability, bound from <c>ark_oauth_server:Watch</c>: where the identity provider sends
+    /// its audit trail.
+    ///
+    /// The provider has always kept a trace in its own database (<c>EnableLogTrace</c>). This is
+    /// the same trail, structured, sent to an ARK-RAPID Watch node — a separate, tamper-evident
+    /// audit server — through the <c>Ark.Watch.Client</c> package: who signed in, which token went
+    /// to whom, which agent called which on whose behalf, and who changed what in the console.
+    ///
+    /// It is off until both <see cref="Endpoint"/> and <see cref="ApiKey"/> are set. Without them
+    /// no client is created, no thread is started and no file is written. Sending never blocks a
+    /// request and never fails one: events go to an in-memory ring, a background worker ships
+    /// them, and while the node is away they wait in <see cref="SpoolDirectory"/>.
+    ///
+    /// The setup wizard asks for these; a server configured any other way sets them like any
+    /// other setting, with the key from the environment
+    /// (<c>ark_oauth_server__Watch__ApiKey</c>) rather than a file.
+    /// </summary>
+    public class ArkWatchConfig
+    {
+        /// <summary>False stops sending without removing the settings. Default true.</summary>
+        public bool Enabled { get; set; } = true;
+        /// <summary>The node's address, e.g. <c>https://audit.example.com/</c>.</summary>
+        public string Endpoint { get; set; }
+        /// <summary>A secret API key of the node (<c>arkw_sk_…</c>). Never a public key.</summary>
+        public string ApiKey { get; set; }
+        /// <summary>The application the events are filed under. Defaults to <c>ark-idp</c>.</summary>
+        public string Application { get; set; }
+        /// <summary>The environment label on every event. Defaults to the host's environment name.</summary>
+        public string Environment { get; set; }
+        /// <summary>
+        /// Where events wait while the node cannot be reached. Defaults to <c>watch-spool/{machine}</c>
+        /// in the setup data directory, when that can be written; <c>none</c> keeps them in memory
+        /// only. Each instance needs a folder of its own.
+        /// </summary>
+        public string SpoolDirectory { get; set; }
+        /// <summary>
+        /// Also send the high-volume protocol trace: every authorization request, pushed request,
+        /// device code and ordinary token issued. Off, only the events that say who did what are
+        /// sent — sign-ins, refusals, agent-to-agent tokens, revocations and every change made
+        /// through the console or the management API. Default true.
+        /// </summary>
+        public bool IncludeProtocolTrace { get; set; } = true;
+
+        /// <summary>The application name events are filed under when none is configured.</summary>
+        public const string DefaultApplication = "ark-idp";
+
+        /// <summary>Whether there is enough here to send anything.</summary>
+        public bool IsConfigured =>
+            Enabled && !string.IsNullOrWhiteSpace(ApiKey)
+            && Uri.TryCreate((Endpoint ?? "").Trim(), UriKind.Absolute, out var uri)
+            && uri.Scheme is "http" or "https";
     }
 
     /// <summary>

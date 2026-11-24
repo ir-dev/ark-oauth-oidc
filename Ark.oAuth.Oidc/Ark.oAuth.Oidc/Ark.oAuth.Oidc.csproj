@@ -77,6 +77,20 @@ token sees no difference.
 * **Behaviour change:** `audience` / `resource` on a client_credentials request used to be ignored;
   a value other than the tenant's own audience is now answered invalid_target unless it names an
   agent the caller may call. Oidc:EnableA2A = false restores the previous behaviour. See A2A.md.
+* **Agents are marked.** "This client is an agent" in the client drawer (is_agent on the client
+  record) shows an agent badge in the client list, with how many clients it may call and be called
+  by, and an "agents only" filter. A label: the caller list still decides who may call whom.
+  One more nullable column, clients.is_agent.
+* **An audit trail outside the server, optional.** With ark_oauth_server:Watch:Endpoint and ApiKey
+  set (the setup wizard has an "Audit trail" step that tests them), every audit line is sent,
+  structured, to an ARK-RAPID Watch node through the Ark.Watch.Client package: sign-ins and
+  refusals, tokens, revocations, sign-outs and every change made in the console or the management
+  API. Agent-to-agent activity is recorded in full: each token issued or refused, who it was for,
+  the whole act chain, the token it was exchanged from, each introspection, and each change to who
+  may call an agent. Sending never blocks or fails a request; while the node is away events wait
+  on disk. Without the two settings nothing is constructed and nothing changes. New dependency:
+  Ark.Watch.Client 0.1.3. See the README, "Audit trail", and A2A.md, "The audit trail".
+* **A refused agent-token request is now traced.** It used to leave no row in audit_trace.
 
 2.4.1 — webhooks, opt-in. Nothing changes for a host that does not ask for them.
 
@@ -634,6 +648,16 @@ projects, and now carries a readme, an SPDX license expression and a symbol pack
 			Microsoft.IdentityModel.Protocols.OpenIdConnect 8.19.2, which the pin above lifts to 8.23.0.
 		-->
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.15" />
+		<!--
+			The ARK-RAPID Watch audit client, for the optional audit trail (ark_oauth_server:Watch,
+			Code/ArkWatch.cs). It is only constructed once an endpoint and a key are configured, so
+			a host that never sets them carries two small assemblies and nothing else: no thread,
+			no socket, no file. It brings Ark.Watch.Core, whose one dependency, System.IO.Hashing,
+			is on the same 10.0.15 train as the packages above. The plain client rather than
+			Ark.Watch.Client.AspNetCore: that one reads its settings once at start-up, and the
+			setup wizard has to be able to supply them to a process that is already running.
+		-->
+		<PackageReference Include="Ark.Watch.Client" Version="0.1.3" />
 	</ItemGroup>
 
 </Project>
