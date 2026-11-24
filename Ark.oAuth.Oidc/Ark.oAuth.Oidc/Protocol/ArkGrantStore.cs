@@ -40,7 +40,7 @@ namespace Ark.oAuth.Oidc.Protocol
 
         public async Task<string> CreateAuthCodeAsync(ArkClient client, string tenantId, string subject,
             string redirectUri, List<string> scopes, string? codeChallenge, string? codeChallengeMethod,
-            string? nonce, string? sessionId, DateTime authTime)
+            string? nonce, string? sessionId, DateTime authTime, string? resource = null)
         {
             var code = ArkCrypto.RandomToken(32);
             _ctx.auth_codes.Add(new ArkAuthCode
@@ -56,6 +56,7 @@ namespace Ark.oAuth.Oidc.Protocol
                 code_challenge_method = codeChallengeMethod,
                 nonce = nonce,
                 auth_time = authTime,
+                resource = resource,
                 created_at = DateTime.UtcNow,
                 expires_at = DateTime.UtcNow.AddSeconds(client.authorization_code_lifetime_seconds)
             });
@@ -174,7 +175,7 @@ namespace Ark.oAuth.Oidc.Protocol
         // -----------------------------------------------------------------
 
         public async Task<string> CreateRefreshTokenAsync(ArkClient client, string tenantId, string subject,
-            List<string> scopes, string? sessionId, string? familyId = null)
+            List<string> scopes, string? sessionId, string? familyId = null, string? resource = null)
         {
             var token = ArkCrypto.RandomToken(32);
             _ctx.refresh_tokens.Add(new ArkRefreshToken
@@ -186,6 +187,7 @@ namespace Ark.oAuth.Oidc.Protocol
                 subject = subject,
                 session_id = sessionId,
                 scope = string.Join(" ", scopes),
+                resource = resource,
                 created_at = DateTime.UtcNow,
                 expires_at = DateTime.UtcNow.AddSeconds(client.refresh_token_lifetime_seconds)
             });
@@ -289,7 +291,7 @@ namespace Ark.oAuth.Oidc.Protocol
         // -----------------------------------------------------------------
 
         public async Task<(string deviceCode, string userCode, ArkDeviceCode entry)> CreateDeviceCodeAsync(
-            ArkClient client, string tenantId, List<string> scopes, int lifetimeSeconds, int intervalSeconds)
+            ArkClient client, string tenantId, List<string> scopes, int lifetimeSeconds, int intervalSeconds, string? resource = null)
         {
             var deviceCode = ArkCrypto.RandomToken(32);
             string userCode;
@@ -309,6 +311,7 @@ namespace Ark.oAuth.Oidc.Protocol
                 client_id = client.client_id,
                 scope = string.Join(" ", scopes),
                 status = "pending",
+                resource = resource,
                 interval_seconds = intervalSeconds,
                 created_at = DateTime.UtcNow,
                 expires_at = DateTime.UtcNow.AddSeconds(lifetimeSeconds)

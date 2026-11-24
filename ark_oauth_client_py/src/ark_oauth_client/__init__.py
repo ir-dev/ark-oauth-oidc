@@ -84,7 +84,7 @@ from .session import (
 )
 from .tokens import ACCESS_TOKEN_TYPE, TOKEN_EXCHANGE_GRANT, TokenSet, agent_actors
 
-__version__ = "2.4.1"
+__version__ = "2.4.2"
 
 #: The PKCE helpers under the name the .NET package gives them.
 PkceHelper = type(

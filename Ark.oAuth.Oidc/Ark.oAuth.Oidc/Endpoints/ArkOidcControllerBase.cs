@@ -84,6 +84,22 @@ namespace Ark.oAuth.Oidc.Endpoints
         /// </summary>
         protected Task<ArkClient> FreshClientAsync(ArkClient client) => ArkIdpCache.ClientIfChangedAsync(Ctx, client);
 
+        /// <summary>
+        /// The MCP endpoint of this server a sign-in names as its <c>resource</c> (RFC 8707), or
+        /// null when it names none. Any other value is ignored, as it always was.
+        ///
+        /// For an application's own endpoint the client has to be that application: what a person
+        /// consents to at "shop" is shop acting for them, not some other client doing so there.
+        /// </summary>
+        protected async Task<string?> InteractiveResourceAsync(ArkTenant tenant, ArkOidcEndpoints ep, ArkClient client, IEnumerable<string?> values)
+        {
+            var resource = await Mcp.ArkMcpIndicators.RequestedAsync(Ctx, ServerConfig, ep, tenant, values);
+            if (resource == null) return null;
+            if (resource.Level == Mcp.ArkMcpLevel.Client && !Mcp.ArkMcpIndicators.IsOwnOrMachine(resource, tenant, client))
+                throw new OAuthException(ArkAgentTokens.InvalidTarget, $"'{client.client_id}' may not be issued a token for that resource.");
+            return resource.Uri;
+        }
+
         protected void NoStore()
         {
             Response.Headers["Cache-Control"] = "no-store";

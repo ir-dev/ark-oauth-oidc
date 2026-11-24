@@ -48,8 +48,10 @@ namespace Ark.oAuth.Oidc.Endpoints
                     throw OAuthException.UnauthorizedClient("this client is not registered for the device grant.");
 
                 var scopes = await _claims.ResolveScopesAsync(Request.Form["scope"].ToString(), client);
+                // RFC 8707: a device that will call one of this server's MCP endpoints says so now.
+                var resource = await InteractiveResourceAsync(tenant, ep, client, Request.Form["resource"]);
                 var (deviceCode, userCode, entry) = await _grants.CreateDeviceCodeAsync(
-                    client, tenant.tenant_id, scopes, Options.DeviceCodeLifetimeSeconds, Options.DevicePollIntervalSeconds);
+                    client, tenant.tenant_id, scopes, Options.DeviceCodeLifetimeSeconds, Options.DevicePollIntervalSeconds, resource);
 
                 _da.Log("device_authorization", tenant.tenant_id, "device code issued", $"client: {client.client_id}");
 

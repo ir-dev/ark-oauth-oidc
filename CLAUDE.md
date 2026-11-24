@@ -143,6 +143,18 @@ These apply in every language and are the source of most "it just says the passw
   own spelling; the browser client has none, because a public client cannot be an agent.
   `ArkClient.is_agent` is a label for the console badge and the audit trail: never read it to allow
   or refuse anything.
+* **The server is an MCP server** (spec in `Ark.oAuth.Oidc/Ark.oAuth.Oidc/MCP.md`, code in `Mcp/`):
+  setup at `/ark-idp/mcp` while unconfigured (setup code = bearer token, served by
+  `ArkSetupMiddleware`), then host, `/{tenant}/mcp` and `/{tenant}/mcp/{client_id}`
+  (`ArkMcpController`). Keep these true: an endpoint accepts only a token whose one `aud` is its own
+  address (`ArkMcpAuth`), never a cookie and never a tenant-audience token; authority is read from the
+  database per call, scopes only say look or change; a caller that is not the operator changes nothing
+  outside its tenant, and an account only when `users.home_tenant_id` is that tenant; the `ark.*` claims
+  are handed out only from the same level or above; in the operator tenant the tenant level *is* the
+  operator's. A tool and its argument check come from one `ArkMcpParams`. Setup tools use the wizard's
+  own validators, and setup secrets that never reach `settings.json` never reach the draft file either.
+  The protocol is hand-written (no MCP SDK dependency): test it against the official Python, TypeScript
+  and C# clients, in both the 2026-07-28 and the `initialize` era.
 * **The audit trail to ARK-RAPID Watch is optional and must cost nothing when it is off**
   (`ark_oauth_server:Watch`, `Code/ArkWatch.cs`, package `Ark.Watch.Client`). No client, thread or
   file exists until an endpoint and a key are configured. Every `DataAccess.Log` / `Record` /

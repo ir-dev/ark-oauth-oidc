@@ -1231,7 +1231,7 @@ app.listen(3000);</pre></div>
         <tr><td>No token passthrough</td><td>token exchange; a forwarded ticket is refused</td><td><span class="st ok">tested</span></td></tr>
         <tr><td>Pre-registered clients</td><td>admin console or management API</td><td><span class="st ok">yes</span></td></tr>
         <tr><td>Client credentials extension</td><td>the Python SDK’s provider, unmodified, with a client secret</td><td><span class="st ok">tested</span></td></tr>
-        <tr><td><code>resource</code> binds the token (RFC 8707)</td><td>ARK, for client credentials and token exchange. <strong>Ignored on a browser sign-in</strong>, see <a href="#limits">limits</a></td><td><span class="st warn">in part</span></td></tr>
+        <tr><td><code>resource</code> binds the token (RFC 8707)</td><td>ARK, for client credentials and token exchange. <strong>Ignored on a browser sign-in</strong> unless it names one of ARK’s own MCP endpoints, see <a href="#limits">limits</a></td><td><span class="st warn">in part</span></td></tr>
         <tr><td>Dynamic client registration (deprecated)</td><td>ARK, off by default, needs an access token when on</td><td><span class="st muted">optional</span></td></tr>
         <tr><td>Client ID metadata documents</td><td>nobody</td><td><span class="st bad">no</span></td></tr>
         <tr><td>Enterprise-managed authorization extension</td><td>nobody</td><td><span class="st bad">no</span></td></tr>
@@ -1248,6 +1248,11 @@ app.listen(3000);</pre></div>
       <p>
         ARK’s management API can create clients, map people to applications and switch accounts off, across every tenant.
         No agent should hold the key to that. Put a small MCP server in front: it is a door like any other, and it alone holds the key.
+      </p>
+      <p>
+        From the release after 2.4.2 ARK is an MCP server itself, for setup, the host, a tenant and one application, and often that is
+        enough: see <a href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/MCP.md" target="_blank" rel="noopener">MCP.md</a>.
+        The gateway below is for a tool list of your own.
       </p>
     </div>
     <div class="card player" data-player="idp-mcp">
@@ -1810,7 +1815,7 @@ added: planner [idp.clients.read] +users   by: ark_idp_machine</pre></div></div>
     </div>
     <ul class="limits">
       <li class="card"><h3>Browser sign-in from a third-party MCP client</h3><p>A desktop or editor MCP client that signs the user in itself gets a token for the whole tenant: ARK ignores <code>resource</code> on that path. A server that checks the audience, as it must, refuses it (tested). Sign users in to your own app, and let its back end exchange the token.</p></li>
-      <li class="card"><h3>No MCP server in the box</h3><p>ARK issues and checks tickets. The gateway in flow 3 is code you run, and its tool list is yours to keep short.</p></li>
+      <li class="card"><h3>No gateway in the box</h3><p>ARK’s own MCP server (after 2.4.2) covers the identity server and nothing else. The gateway in flow 3 is code you run, and its tool list is yours to keep short.</p></li>
       <li class="card"><h3>It cannot judge intent</h3><p>An agent that is talked into misusing a right Alice really has will hold a valid ticket. ARK limits where it can go and what it can reach. Ask a person before anything destructive.</p></li>
       <li class="card"><h3>Bearer tickets</h3><p>Short-lived and tied to one door, but not to a key. There is no DPoP or mTLS binding, so whoever holds a ticket can use it at that door until it expires.</p></li>
       <li class="card"><h3>One tenant</h3><p>Agents call agents of the same tenant. There is no cross-tenant or cross-company ticket.</p></li>

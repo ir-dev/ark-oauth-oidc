@@ -352,6 +352,14 @@ Under `ark_oauth_server:Oidc`, all optional:
 Discovery lists `urn:ietf:params:oauth:grant-type:token-exchange` in `grant_types_supported` while
 it is on.
 
+## Through the target's MCP endpoint
+
+Every client has an MCP endpoint on this server, `{issuer}/mcp/{client_id}` ([MCP.md](MCP.md)). Named by that
+address instead of its `client_id`, as `resource` or `audience`, the target is the same client, and the caller
+list, the claims and every refusal above are the same. The token's `aud` is the endpoint: it is good there, and
+not at the agent itself. The endpoint reads the caller list again on every call, so removing a caller counts at
+once. A delegated token is accepted only while its caller may still act for users.
+
 ## What it does not do
 
 * **No cross-tenant calls.** A tenant's agents talk to that tenant's agents.

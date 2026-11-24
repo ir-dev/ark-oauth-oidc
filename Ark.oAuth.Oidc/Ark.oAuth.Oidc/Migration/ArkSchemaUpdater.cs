@@ -107,6 +107,30 @@ namespace Ark.oAuth.Oidc
             return result;
         }
 
+        /// <summary>
+        /// Whether the identity provider's own tables are there. A database can hold tables and
+        /// none of these: the webhook module creates its own in the background, and on a database
+        /// nobody had used yet it could get there before the first request did. Asking only
+        /// whether there are any tables at all then skipped the schema for good, and every
+        /// request failed on "no such table".
+        /// </summary>
+        internal static bool HasCoreTables(ArkDataContext ctx)
+        {
+            var folder = ProviderFolder(ctx.Database.ProviderName);
+            if (folder == null) return true;
+            var connection = ctx.Database.GetDbConnection();
+            var wasClosed = connection.State != ConnectionState.Open;
+            if (wasClosed) connection.Open();
+            try
+            {
+                return TableExists(connection, folder, "tenants");
+            }
+            finally
+            {
+                if (wasClosed) connection.Close();
+            }
+        }
+
         private static void ApplyScripts(DbConnection connection, string folder, Result result)
         {
             var assembly = typeof(ArkSchemaUpdater).Assembly;

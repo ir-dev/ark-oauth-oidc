@@ -636,8 +636,16 @@ namespace Ark.oAuth.Oidc
             ["provision"] = new("client.provision", ArkWatchDomains.Administration, AuditLevel.Security, Outcome.Success, Api),
             ["provision_user"] = new("access.grant", ArkWatchDomains.Administration, AuditLevel.Security, Outcome.Success, Api),
             ["provision_refused"] = new("client.provision", ArkWatchDomains.Administration, AuditLevel.Warning, Outcome.Failure, Api),
+            ["claim_upsert"] = new("claim.update", ArkWatchDomains.Administration, AuditLevel.Notice, Outcome.Success, Api, "claim"),
+            ["user_unlock"] = new("user.unlock", ArkWatchDomains.Administration, AuditLevel.Security, Outcome.Success, Api, "user"),
+            ["signing_key_rotate"] = new("signing_key.rotate", ArkWatchDomains.Administration, AuditLevel.Security, Outcome.Success, Api, "tenant"),
+            ["signing_key_retire"] = new("signing_key.retire", ArkWatchDomains.Administration, AuditLevel.Security, Outcome.Success, Api, "tenant"),
+            // The MCP endpoints pass their own event (ArkMcpAudit); these are for the row without one.
+            ["mcp_call"] = new("mcp.tool_call", ArkWatchDomains.Administration, AuditLevel.Security, Outcome.Success, "mcp"),
+            ["mcp_refused"] = new("mcp.tool_call", ArkWatchDomains.Administration, AuditLevel.Security, Outcome.Denied, "mcp"),
 
             // --- the server itself ---
+            ["idp_setup"] = new("idp.setup", ArkWatchDomains.System, AuditLevel.Security, Outcome.Success, Host, "tenant"),
             ["schema_update"] = new("schema.update", ArkWatchDomains.System, AuditLevel.Notice, Outcome.Success, Host),
             ["schema_sync"] = new("schema.update", ArkWatchDomains.System, AuditLevel.Notice, Outcome.Success, Host),
             ["schema_baseline"] = new("schema.update", ArkWatchDomains.System, AuditLevel.Notice, Outcome.Success, Host),

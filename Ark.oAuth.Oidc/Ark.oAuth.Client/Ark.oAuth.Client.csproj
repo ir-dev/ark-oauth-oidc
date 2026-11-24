@@ -26,9 +26,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.4.1</Version>
-		<AssemblyVersion>2.4.1.0</AssemblyVersion>
-		<FileVersion>2.4.1.0</FileVersion>
+		<Version>2.4.2</Version>
+		<AssemblyVersion>2.4.2.0</AssemblyVersion>
+		<FileVersion>2.4.2.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -50,7 +50,11 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
-Next release — agent-to-agent (A2A). Additive; nothing existing changes.
+Next release — no change to this package. The provider, Ark.oAuth.Oidc, is itself an MCP server in this
+release, with which an agent sets it up and administers it. Nothing a client sees changes, and the two
+can be upgraded in either order.
+
+2.4.2 — agent-to-agent (A2A). Additive; nothing existing changes.
 
 * **ArkAgentTokens** (registered by AddArkOidcClient): GetTokenAsync(audience) returns a token
   addressed to another agent, as this client itself; GetTokenAsync(audience, subjectToken) returns

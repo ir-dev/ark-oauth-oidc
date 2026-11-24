@@ -171,6 +171,10 @@ namespace Ark.oAuth.Oidc.Endpoints
                 }
 
                 var scopes = await _claims.ResolveScopesAsync(p.GetValueOrDefault("scope"), client);
+                // RFC 8707. Read off the query as well as the parameters, which keep only the first
+                // of several values: a second one must not go unnoticed.
+                var resource = await InteractiveResourceAsync(tenant, ep, client,
+                    Request.Query["resource"].Append(p.GetValueOrDefault("resource")));
                 var prompt = (p.GetValueOrDefault("prompt") ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 var nonce = p.GetValueOrDefault("nonce");
 
@@ -303,7 +307,7 @@ namespace Ark.oAuth.Oidc.Endpoints
 
                 // --- issue the code ---
                 var code = await _grants.CreateAuthCodeAsync(client, tenant.tenant_id, session.subject,
-                    redirectUri!, scopes, codeChallenge, codeChallengeMethod, nonce, session.session_id, session.auth_time);
+                    redirectUri!, scopes, codeChallenge, codeChallengeMethod, nonce, session.session_id, session.auth_time, resource);
 
                 // From here the client is logged in under this session, so it has to be told when
                 // the session ends. Recorded at the code rather than at the token exchange: a code

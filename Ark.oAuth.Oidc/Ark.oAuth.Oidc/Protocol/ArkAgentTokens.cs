@@ -129,7 +129,8 @@ namespace Ark.oAuth.Oidc.Protocol
         // -----------------------------------------------------------------
 
         public async Task<AgentTokenResult> AsItselfAsync(
-            ArkTenant tenant, string issuer, ArkClient caller, string audience, List<string> scopes, AgentTokenTrace? trace = null)
+            ArkTenant tenant, string issuer, ArkClient caller, string audience, List<string> scopes, AgentTokenTrace? trace = null,
+            string? mcpResource = null)
         {
             trace ??= new AgentTokenTrace();
             trace.Mode = AgentTokenTrace.AsItself;
@@ -144,7 +145,7 @@ namespace Ark.oAuth.Oidc.Protocol
                 Tenant = tenant,
                 Client = caller,
                 Issuer = issuer,
-                Audience = target.client_id,
+                Audience = mcpResource ?? target.client_id,
                 Subject = caller.client_id,
                 Scopes = scopes,
                 LifetimeSeconds = Lifetime(options, caller),
@@ -154,7 +155,7 @@ namespace Ark.oAuth.Oidc.Protocol
             return new AgentTokenResult
             {
                 AccessToken = token, ExpiresAt = expiresAt, Scopes = scopes,
-                Subject = caller.client_id, Audience = target.client_id,
+                Subject = caller.client_id, Audience = ctx.Audience,
                 TokenId = jti, Claims = ctx.AuthorizationClaims ?? new List<string>()
             };
         }
@@ -164,7 +165,8 @@ namespace Ark.oAuth.Oidc.Protocol
         // -----------------------------------------------------------------
 
         public async Task<AgentTokenResult> OnBehalfOfAsync(
-            ArkTenant tenant, string issuer, ArkClient actor, IFormCollection form, AgentTokenTrace? trace = null)
+            ArkTenant tenant, string issuer, ArkClient actor, IFormCollection form, AgentTokenTrace? trace = null,
+            Mcp.ArkMcpResource? mcp = null)
         {
             trace ??= new AgentTokenTrace();
             trace.Mode = AgentTokenTrace.OnBehalfOf;
@@ -255,7 +257,8 @@ namespace Ark.oAuth.Oidc.Protocol
 
             // --- the agent it is for ---
 
-            var (target, _) = await ResolveTargetAsync(tenant, issuer, actor, audience, forUser: true, trace);
+            // Named by its MCP endpoint, the agent is the application behind it.
+            var (target, _) = await ResolveTargetAsync(tenant, issuer, actor, mcp?.Client!.client_id ?? audience, forUser: true, trace);
 
             // The user's own standing at the target decides what the token may do there. An agent
             // cannot carry somebody to an application they were never given access to.
@@ -293,7 +296,7 @@ namespace Ark.oAuth.Oidc.Protocol
                 Tenant = tenant,
                 Client = actor,
                 Issuer = issuer,
-                Audience = target.client_id,
+                Audience = mcp?.Uri ?? target.client_id,
                 Subject = subject!,
                 Scopes = scopes,
                 SessionId = sessionId,
@@ -305,7 +308,7 @@ namespace Ark.oAuth.Oidc.Protocol
             return new AgentTokenResult
             {
                 AccessToken = token, ExpiresAt = expiresAt, Scopes = scopes,
-                Subject = subject!, Audience = target.client_id, Actors = actors,
+                Subject = subject!, Audience = ctx.Audience, Actors = actors,
                 TokenId = jti, Claims = granted
             };
         }

@@ -192,7 +192,8 @@ namespace Ark.oAuth.Oidc
             // arrangement on a managed PostgreSQL server — connected fine and was left
             // to the schema updater to fill. CanConnect() also swallows every error, so
             // a wrong password or a refused CONNECT was taken for a missing database too.
-            else if (!creator.Exists() || !creator.HasTables())
+            // Nor is one that holds only another module's tables: see HasCoreTables.
+            else if (!creator.Exists() || !creator.HasTables() || !ArkSchemaUpdater.HasCoreTables(dbContext))
             {
                 CreateSchema(dbContext, creator);
             }
@@ -584,7 +585,7 @@ namespace Ark.oAuth.Oidc
         /// seeded in source would be the same secret on every deployment of this server, and a
         /// client that can mint tokens is exactly the wrong place to keep a well-known default.
         /// </summary>
-        private static ArkClient BuildMachineClient(string tenantId, string domain) => new()
+        internal static ArkClient BuildMachineClient(string tenantId, string domain) => new()
         {
             tenant_id = tenantId,
             client_id = $"{tenantId}_machine",
@@ -803,6 +804,8 @@ namespace Ark.oAuth.Oidc
             services.AddScoped<Protocol.ArkAgentTokens>();
             services.AddScoped<Protocol.ArkClientAuthenticator>();
             services.AddScoped<Protocol.ArkBackChannelLogout>();
+            // the MCP endpoints: see MCP.md
+            services.AddScoped<Mcp.ArkMcpAuth>();
 
             // browser clients (SPAs) redeem their code from the page itself, so the token and
             // userinfo endpoints need a CORS policy — see ark_oauth_server:Oidc:CorsOrigins
@@ -874,7 +877,8 @@ namespace Ark.oAuth.Oidc
                 policy
                     .WithOrigins(origins)
                     .WithMethods("GET", "POST", "OPTIONS")
-                    .WithHeaders("Authorization", "Content-Type", "Accept")
+                    // the last three are what an MCP client in a browser sends with every request
+                    .WithHeaders("Authorization", "Content-Type", "Accept", "Mcp-Protocol-Version", "Mcp-Method", "Mcp-Name")
                     // the reason a 401 from /userinfo is legible in a browser console
                     .WithExposedHeaders("WWW-Authenticate")
                     .SetPreflightMaxAge(TimeSpan.FromMinutes(10));

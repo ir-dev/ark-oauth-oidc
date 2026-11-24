@@ -154,7 +154,7 @@ namespace Ark.oAuth.Oidc.Protocol
             }
             foreach (var scope in requestedList)
             {
-                if (!clientScopes.Contains(scope))
+                if (!clientScopes.Contains(scope) && !Mcp.ArkMcpScopes.ImpliedBy(clientScopes, scope))
                     throw OAuthException.InvalidScope($"scope '{scope}' is not allowed for this client.");
             }
             return requestedList;
@@ -188,7 +188,7 @@ namespace Ark.oAuth.Oidc.Protocol
         /// token holding <c>client.register</c> as an initial access token, so a client that
         /// could register itself for it could mint every client after it.
         /// </summary>
-        public static readonly IReadOnlyList<string> PrivilegedScopes = new[] { "client.register" };
+        public static readonly IReadOnlyList<string> PrivilegedScopes = new[] { "client.register", Mcp.ArkMcpScopes.Manage };
 
         /// <summary>The privileged scopes among <paramref name="scopes"/>.</summary>
         public static List<string> Privileged(IEnumerable<string> scopes) =>
@@ -206,7 +206,11 @@ namespace Ark.oAuth.Oidc.Protocol
             // Machine-to-machine scope: what an initial access token must carry to create clients
             // through the RFC 7591 registration endpoint. Never a default — a client only holds it
             // if someone registered it for that client deliberately.
-            new ArkScope { name = "client.register", display = "Register clients", description = "Create and manage client registrations.", is_protocol = true }
+            new ArkScope { name = "client.register", display = "Register clients", description = "Create and manage client registrations.", is_protocol = true },
+            // The MCP endpoints (MCP.md). Neither decides what the caller may reach — that is who
+            // the token is for — only whether it may look, or also change what it reaches.
+            new ArkScope { name = Mcp.ArkMcpScopes.Read, display = "Read through the identity server's MCP tools", description = "Look up what you may see: applications, people, access and settings. Changes nothing.", is_protocol = true },
+            new ArkScope { name = Mcp.ArkMcpScopes.Manage, display = "Make changes through the identity server's MCP tools", description = "Change what you may administer: applications, people and their access.", is_protocol = true }
         };
     }
 }

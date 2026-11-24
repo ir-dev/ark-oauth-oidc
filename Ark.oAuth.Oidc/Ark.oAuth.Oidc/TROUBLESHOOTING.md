@@ -91,6 +91,19 @@ Diagnose against the provider's actual behaviour. Verify .NET changes against a 
 | `/oauth2/register` 404 / not advertised | Dynamic registration off | Discovery has no `registration_endpoint` | Set `Oidc:EnableDynamicRegistration=true` | Guessing the URL |
 | Registration works but no one can sign in to the new client | Registration ≠ access mapping | — | Map a user to the client | Assuming registration grants access |
 
+## MCP
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `401` "the token is not addressed to this endpoint" | The token was requested without `resource`, or for another endpoint. | Request it with `resource=` the exact address of the endpoint. One token per endpoint. |
+| `403 insufficient_scope` | A tool that changes something, and a token without `mcp.manage`. | Ask for `scope=mcp.read mcp.manage`. A client other than the machine client has to be registered for it, by an operator. |
+| `invalid_scope` from an MCP client signing a person in | The client is not registered for `mcp.read`. | Add it to the client's scopes (`client_update`), or register with kind `mcp_client`. |
+| `not_permitted` although signed in as the administrator | Being an administrator over MCP is a claim on the access mapping **to the client signed in through**. | Grant `ark.tenant.admin` (`ark.host.admin` in the operator tenant) there. `whoami` says which is missing. |
+| `invalid_target` for an application's endpoint | Another client asked for it and is not on its caller list. | `agent_caller_set`, or use the application's own registration. |
+| `403` "this Origin may not call" | A browser-based client from an origin that is not listed. | Add it to `Oidc:CorsOrigins`. |
+| Setup endpoint answers `401` | The setup code is missing or wrong, or setup is finished and the endpoint now takes a token. | The code is in the start-up log and in `setup-code.txt`; after setup use the machine credential. |
+| `not_reviewed` from `setup_complete` | Something changed after the review. | `setup_review` again, have it agreed, use its `review_id`. |
+
 ## Export / import / reset
 
 | Symptom | Cause | Fix |

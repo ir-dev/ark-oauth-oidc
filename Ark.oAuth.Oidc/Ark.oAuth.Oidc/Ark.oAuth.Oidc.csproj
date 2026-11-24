@@ -30,9 +30,9 @@
 
 	<!-- ============================== Version ============================== -->
 	<PropertyGroup>
-		<Version>2.4.1</Version>
-		<AssemblyVersion>2.4.1.0</AssemblyVersion>
-		<FileVersion>2.4.1.0</FileVersion>
+		<Version>2.4.2</Version>
+		<AssemblyVersion>2.4.2.0</AssemblyVersion>
+		<FileVersion>2.4.2.0</FileVersion>
 	</PropertyGroup>
 
 	<!-- ============================== Package identity ============================== -->
@@ -54,7 +54,37 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
-Next release — agent-to-agent (A2A) tokens. Inert until an operator lists a caller.
+Next release — the identity server is an MCP server. On by default; nothing answers without a credential.
+
+Sign-in, discovery, tokens, pages, the management API and existing configuration are as in 2.4.2.
+* **Set the server up with an agent.** While it is unconfigured, /ark-idp/mcp offers the setup wizard
+  as tools, with the setup code as the bearer token. Values are collected section by section, in any
+  order and over several conversations, each with who supplied it; tested; reviewed; and installed
+  only as reviewed. The administrator sets their own password through a one-time link.
+* **Three levels after that**, each its own endpoint: /ark-idp/mcp for the operator, /{tenant}/mcp
+  for a tenant's administrator (applications, people, access, agents, sessions, keys, audit), and
+  /{tenant}/mcp/{client_id} for one application, its people and the agents it lists. The machine
+  credential opens the first two. Server card, client configuration and protected resource metadata
+  (RFC 9728) are served beside each.
+* **Resource indicators (RFC 8707) for these endpoints**, on every grant: the token's aud is the
+  endpoint, and nothing else accepts it. Every other value of resource is handled as before.
+* **Two scopes, mcp.read and mcp.manage**, step up with HTTP 403. mcp.manage cannot be
+  self-registered. Administrators over MCP hold ark.host.admin, ark.tenant.admin or
+  ark.client.admin on an access mapping.
+* **Tenants get administrators of their own.** tenant_create returns a machine credential that
+  reaches that tenant and nothing else. users.home_tenant_id says which tenant manages an account;
+  null, which is every existing one, is the operator.
+* **Every change over MCP, and every call refused for want of permission, is recorded**, whatever
+  EnableLogTrace says.
+* Settings under ark_oauth_server:Mcp (Enabled, HostLevel, TenantLevel, ClientLevel, ReadOnly,
+  AllowClientSecret, MaxRequestKilobytes). See MCP.md.
+* Discovery is also served at /.well-known/oauth-authorization-server/{tenant} and
+  /.well-known/openid-configuration/{tenant} (RFC 8414, issuer with a path).
+* **Schema:** four nullable columns and two catalogue scopes, added on the first start.
+* **Fixed:** on a new database, a host with AddArkWebhooks() whose first request came some seconds
+  after start-up never got its schema, and every request failed. No new dependency.
+
+2.4.2 — agent-to-agent (A2A) tokens. Inert until an operator lists a caller.
 
 Every existing endpoint, token and page is as in 2.4.1, and a client that never asks for an agent
 token sees no difference.
@@ -413,6 +443,7 @@ release notes of 2.4.1 on nuget.org: nuget.org takes 35,000 characters at most.
 		<None Include="MIGRATION.md" Pack="true" PackagePath="" />
 		<None Include="WEBHOOKS.md" Pack="true" PackagePath="" />
 		<None Include="A2A.md" Pack="true" PackagePath="" />
+		<None Include="MCP.md" Pack="true" PackagePath="" />
 	</ItemGroup>
 
 	<!-- ==============================================================================

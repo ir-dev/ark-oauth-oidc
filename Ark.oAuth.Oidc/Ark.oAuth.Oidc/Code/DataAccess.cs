@@ -266,7 +266,7 @@ namespace Ark.oAuth.Oidc
         /// writer is running. <see cref="Record"/> clears the change tracker first, which is right
         /// for an import and wrong in the middle of a save other code is still building on.
         /// </summary>
-        void WriteAudit(string ref_key, string ref_val, string message, string details, string? by, string? ip, ArkWatchEvent? watch)
+        internal void WriteAudit(string ref_key, string ref_val, string message, string details, string? by, string? ip, ArkWatchEvent? watch)
         {
             if (_watch is { Enabled: true })
             {
@@ -629,6 +629,8 @@ namespace Ark.oAuth.Oidc
                 // SetUserPassword / UpdatePassword, never through a row save.
                 if (string.IsNullOrEmpty(user.hash_pw)) user.hash_pw = tt.hash_pw;
                 if (string.IsNullOrEmpty(user.ref_uid)) user.ref_uid = tt.ref_uid;
+                // Which tenant manages the account is not the console's to drop, either.
+                if (string.IsNullOrEmpty(user.home_tenant_id)) user.home_tenant_id = tt.home_tenant_id;
                 _ctx.ChangeTracker.Clear();
                 user.id = tt.id;
                 user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
@@ -664,6 +666,33 @@ namespace Ark.oAuth.Oidc
             _ctx.users.Update(uu);
             await _ctx.SaveChangesAsync();
             return uu;
+        }
+        /// <summary>
+        /// Puts an account in the state an activation email does — it cannot sign in until its
+        /// password has been set through a one-time link — and returns that link instead of
+        /// mailing it, for whoever is to hand it over. An earlier link stops working.
+        /// </summary>
+        internal async Task<string> IssuePasswordLinkAsync(string email, string tenantId)
+        {
+            var login = (email ?? "").ToLower().Trim();
+            var uid = Protocol.ArkCrypto.RandomToken(32);
+            // values, not expressions: EF cannot translate the ToString into SQL
+            var at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+            var updated = await _ctx.users.Where(u => u.email == login).ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.ref_uid, uid)
+                .SetProperty(u => u.reset_mode, true)
+                .SetProperty(u => u.emailed, false)
+                .SetProperty(u => u.at, at));
+            if (updated == 0) throw new ApplicationException($"unknown user '{login}'.");
+            _ctx.ChangeTracker.Clear();
+
+            var format = _util.ServerConfig.EmailConfig?.activation_link;
+            if (!string.IsNullOrWhiteSpace(format) && format.Contains("{1}"))
+            {
+                try { return string.Format(format, tenantId, uid); }
+                catch (FormatException) { }
+            }
+            return $"{Protocol.ArkOidcEndpoints.PublicRoot(_util.ServerConfig)}/oauth/{tenantId}/v1/password/reset/{uid}";
         }
         public async Task<bool> UpdatePassword(string uq_refid, string pw)
         {

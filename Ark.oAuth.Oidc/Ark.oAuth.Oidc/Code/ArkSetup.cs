@@ -180,7 +180,7 @@ namespace Ark.oAuth.Oidc
         const string CsrfHeader = "X-Ark-Setup";
 
         static readonly SemaphoreSlim InstallLock = new(1, 1);
-        static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+        internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
         {
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             WriteIndented = false
@@ -206,6 +206,11 @@ namespace Ark.oAuth.Oidc
         }
 
         bool Enabled => _config.GetValue("ark_oauth_server:Setup:Enabled", true);
+
+        // What the setup tools report about this host (Mcp/Tools/SetupTools.cs).
+        internal string DataDirectory => ArkIdpSettings.DataDirectory(_config, _env);
+        internal string EnvironmentName => _env.EnvironmentName;
+        internal bool CanApply => _config is IConfigurationBuilder;
 
         public async Task InvokeAsync(HttpContext context)
         {
@@ -239,6 +244,14 @@ namespace Ark.oAuth.Oidc
                 return;
             }
 
+            // Setup by an agent. The same address is the host level of the MCP server once setup
+            // is done, and is then the controller's.
+            if (McpEnabled && path.StartsWithSegments(Mcp.ArkMcpResources.HostPath, out var mcp))
+            {
+                await ServeMcpAsync(context, mcp.Value ?? "");
+                return;
+            }
+
             // Not configured: nothing else can be served yet.
             if (path.Equals("/favicon.ico", StringComparison.OrdinalIgnoreCase))
             {
@@ -269,7 +282,14 @@ namespace Ark.oAuth.Oidc
             _log.LogWarning(
                 "Ark IdP is not configured yet. Open /ark-idp/setup on this server in a browser to run the setup wizard. " +
                 "From this machine (localhost) no code is needed.{Where}", where);
+            if (code != null && McpEnabled)
+                _log.LogWarning(
+                    "An agent can set it up instead: connect it to the MCP server at {Path} with the setup code {Code} as its bearer token. " +
+                    "The connection settings are at {Path}/config.", Mcp.ArkMcpResources.HostPath, code, Mcp.ArkMcpResources.HostPath);
         }
+
+        /// <summary>Whether an agent may run setup over MCP. Read from configuration directly: there may be no section to bind yet.</summary>
+        bool McpEnabled => _config.GetValue("ark_oauth_server:Mcp:Enabled", true) && _config.GetValue("ark_oauth_server:Mcp:HostLevel", true);
 
         /// <summary>
         /// The code, created once and kept beside the settings so a restart does not change it.
@@ -343,6 +363,71 @@ namespace Ark.oAuth.Oidc
             code ??= context.Request.Headers[TokenHeader].ToString();
             var given = (code ?? "").Trim().ToUpperInvariant();
             return expected != null && given.Length > 0 && Protocol.ArkCrypto.FixedTimeEquals(given, expected);
+        }
+
+        // ---------------------------------------------------------------- setup over MCP
+
+        Mcp.Tools.SetupTools? _mcpTools;
+        // One per process: it holds what the draft file must not.
+        Mcp.Tools.SetupTools McpTools => LazyInitializer.EnsureInitialized(ref _mcpTools,
+            () => new Mcp.Tools.SetupTools(this, new Mcp.ArkSetupDraft(DataDirectory)))!;
+
+        async Task ServeMcpAsync(HttpContext context, string rest)
+        {
+            var config = Protocol.ArkConfigSnapshot.Server(_config) ?? new ArkAuthServerConfig();
+            var root = Protocol.ArkOidcEndpoints.For(context.Request, config, "setup").BaseUrl;
+            var endpoint = new Mcp.ArkMcpEndpoint
+            {
+                Level = Mcp.ArkMcpLevel.Host, Setup = true, Config = config, Root = root, Resource = Mcp.ArkMcpResources.Host(root)
+            };
+
+            if (HttpMethods.IsGet(context.Request.Method) && rest is "/server-card" or "/config")
+            {
+                context.Response.ContentType = "application/json; charset=utf-8";
+                // Not cached: it changes the moment setup finishes.
+                context.Response.Headers.CacheControl = "no-store";
+                context.Response.Headers.XContentTypeOptions = "nosniff";
+                var document = rest == "/config" ? Mcp.ArkMcpDocuments.Config(endpoint) : Mcp.ArkMcpDocuments.Card(endpoint, PackageVersion);
+                await context.Response.WriteAsync(document.ToJsonString(Mcp.ArkMcpJson.Options));
+                return;
+            }
+            if (rest is not ("" or "/"))
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+            if (!HttpMethods.IsPost(context.Request.Method))
+            {
+                context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+                context.Response.Headers.Allow = "POST";
+                return;
+            }
+
+            await Mcp.ArkMcpServer.HandleAsync(context, new Mcp.ArkMcpServer.Binding
+            {
+                Endpoint = endpoint,
+                Authenticate = () => Task.FromResult(SetupCaller(context)),
+                Tools = McpTools.All,
+                Instructions = Mcp.Tools.SetupTools.Instructions,
+                OnCalled = Mcp.ArkMcpAudit.Called
+            });
+        }
+
+        /// <summary>
+        /// The caller of the setup tools: whoever presents the setup code, as the bearer token.
+        /// Always, from this machine too — the exemption for localhost is for a developer at a
+        /// browser, and what reaches this endpoint is a program.
+        /// </summary>
+        Mcp.ArkMcpCaller SetupCaller(HttpContext context)
+        {
+            var header = context.Request.Headers.Authorization.ToString();
+            var given = header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? header["Bearer ".Length..].Trim().ToUpperInvariant() : "";
+            var expected = EnsureSetupCode();
+            if (given.Length == 0)
+                throw Mcp.ArkMcpAuthException.Missing("this server is not set up yet. Present the setup code from its start-up log as the bearer token.");
+            if (expected == null || !Protocol.ArkCrypto.FixedTimeEquals(given, expected))
+                throw Mcp.ArkMcpAuthException.Invalid("that is not the setup code in the server's log.");
+            return new Mcp.ArkMcpCaller { Kind = "setup", Credential = "setup_code", Subject = "setup", CanRead = true, CanManage = true, FullScope = true };
         }
 
         // ---------------------------------------------------------------- routing
@@ -565,6 +650,9 @@ namespace Ark.oAuth.Oidc
                 settings_file = Path.Combine(dataDir, ArkIdpSettings.SettingsFileName),
                 can_apply = _config is IConfigurationBuilder,
                 console_sign_in = context.RequestServices.GetService<ArkIdpConsoleMarker>() != null,
+                // An agent can do this instead, and may have started: see ServeMcpAsync.
+                mcp_url = McpEnabled ? $"{request.Scheme}://{request.Host}{pathBase}{Mcp.ArkMcpResources.HostPath}" : null,
+                mcp_draft_at = McpEnabled ? McpTools.DraftUpdatedAt : null,
                 defaults = new
                 {
                     base_url = $"{request.Scheme}://{request.Host}{pathBase}",
@@ -581,7 +669,7 @@ namespace Ark.oAuth.Oidc
         /// the whole server. Relative to the working directory, which is how SQLite will read it,
         /// when that is where it is; absolute otherwise.
         /// </summary>
-        static string DefaultSqliteFile(string dataDir)
+        internal static string DefaultSqliteFile(string dataDir)
         {
             var file = Path.Combine(dataDir, "ark_idp.db");
             var relative = Path.GetRelativePath(Directory.GetCurrentDirectory(), file);
@@ -590,7 +678,7 @@ namespace Ark.oAuth.Oidc
                 : relative.Replace('\\', '/');
         }
 
-        static bool Writable(string directory)
+        internal static bool Writable(string directory)
         {
             try
             {
@@ -605,7 +693,7 @@ namespace Ark.oAuth.Oidc
 
         // ---------------------------------------------------------------- keys
 
-        static object GenerateKeys(KeyRequest? req)
+        internal static object GenerateKeys(KeyRequest? req)
         {
             var size = req?.KeySize ?? 2048;
             if (size is not (2048 or 3072 or 4096))
@@ -665,7 +753,7 @@ namespace Ark.oAuth.Oidc
 
         // ---------------------------------------------------------------- database
 
-        async Task<object> TestDatabaseAsync(DatabaseSection? db)
+        internal async Task<object> TestDatabaseAsync(DatabaseSection? db)
         {
             var (provider, connection) = NormalizeDatabase(db);
             try
@@ -737,7 +825,7 @@ namespace Ark.oAuth.Oidc
             return builder.Options;
         }
 
-        static (string provider, string connection) NormalizeDatabase(DatabaseSection? db)
+        internal static (string provider, string connection) NormalizeDatabase(DatabaseSection? db)
         {
             var provider = (db?.Provider ?? "sqlite").Trim().ToLowerInvariant();
             if (provider is not ("sqlite" or "mysql" or "postgres"))
@@ -762,7 +850,7 @@ namespace Ark.oAuth.Oidc
             return Path.GetFullPath(source);
         }
 
-        static string Innermost(Exception ex)
+        internal static string Innermost(Exception ex)
         {
             while (ex.InnerException != null && ex is not ApplicationException) ex = ex.InnerException;
             return ex.Message;
@@ -770,7 +858,7 @@ namespace Ark.oAuth.Oidc
 
         // ---------------------------------------------------------------- email
 
-        static async Task<object> TestEmailAsync(EmailTestRequest? req)
+        internal static async Task<object> TestEmailAsync(EmailTestRequest? req)
         {
             var email = req?.Email ?? new EmailSection();
             var to = (req?.To ?? "").Trim();
@@ -799,7 +887,7 @@ namespace Ark.oAuth.Oidc
             }
         }
 
-        static void ValidateEmail(EmailSection email)
+        internal static void ValidateEmail(EmailSection email)
         {
             if (string.IsNullOrWhiteSpace(email.Smtp))
                 throw new SetupException("smtp_required", "Enter the SMTP server.", "smtp");
@@ -811,13 +899,13 @@ namespace Ark.oAuth.Oidc
 
         // ---------------------------------------------------------------- audit trail (ARK-RAPID Watch)
 
-        sealed record WatchPlan(string Endpoint, string ApiKey, string Application, string Environment);
+        internal sealed record WatchPlan(string Endpoint, string ApiKey, string Application, string Environment);
 
         /// <summary>
         /// The audit trail's settings, checked, or null when it is not wanted. The step is
         /// optional: switched off, nothing about it is validated or written.
         /// </summary>
-        WatchPlan? NormalizeWatch(WatchSection? watch)
+        internal WatchPlan? NormalizeWatch(WatchSection? watch)
         {
             if (watch?.Enabled != true) return null;
 
@@ -861,7 +949,7 @@ namespace Ark.oAuth.Oidc
         /// the same client the server will use, since a key can be valid and still be bound to
         /// another application, which only ingestion shows.
         /// </summary>
-        async Task<object> TestWatchAsync(WatchSection? watch)
+        internal async Task<object> TestWatchAsync(WatchSection? watch)
         {
             if (watch != null) watch.Enabled = true;
             var plan = NormalizeWatch(watch) ?? throw new SetupException("bad_request", "Nothing to test.");
@@ -954,6 +1042,49 @@ namespace Ark.oAuth.Oidc
 
         async Task CompleteAsync(HttpContext context, SetupRequest? req)
         {
+            var done = await InstallAsync(context, req, "wizard");
+            var plan = done.Plan;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                ok = true,
+                tenant_id = plan.TenantId,
+                issuer = done.Endpoints.Issuer,
+                discovery = done.Endpoints.Discovery,
+                console = done.Console,
+                admin_username = plan.AdminUsername,
+                settings_file = done.SettingsFile,
+                machine_client_id = ArkManagementAuth.MachineClientId(plan.TenantId),
+                // an existing database is attached, not seeded, so nothing was set
+                machine_client_secret = plan.ExistingTenant ? null : plan.MachineSecret,
+                attached_existing = plan.ExistingTenant,
+                // where the audit trail goes, never its key
+                audit_trail = plan.Watch == null ? null : new Uri(plan.Watch.Endpoint).GetLeftPart(UriPartial.Path),
+                audit_application = plan.Watch?.Application,
+                // what an agent connects to from here on
+                mcp_url = _config.GetValue("ark_oauth_server:Mcp:Enabled", true) && _config.GetValue("ark_oauth_server:Mcp:TenantLevel", true)
+                    ? Mcp.ArkMcpResources.Tenant(plan.AppRoot, plan.TenantId) : null
+            }, Json);
+        }
+
+        /// <summary>What an install did, for whoever asked for it to report.</summary>
+        internal sealed record Installed(
+            Plan Plan, string SettingsFile, Protocol.ArkOidcEndpoints Endpoints, string Console, string? AdminPasswordLink);
+
+        /// <summary>
+        /// Checks everything, writes the settings, creates and seeds the database: the whole of
+        /// what Install does, for the wizard and for an agent alike.
+        /// </summary>
+        /// <param name="context">The request that asked for it.</param>
+        /// <param name="req">What was collected.</param>
+        /// <param name="via"><c>wizard</c> or <c>mcp</c>, for the audit trail.</param>
+        /// <param name="adminByLink">
+        /// The administrator sets their own password, through a link returned once. The account
+        /// starts on a random password nobody has seen, so an agent that ran setup never held it.
+        /// </param>
+        /// <param name="sources">Who supplied what, for the audit trail.</param>
+        internal async Task<Installed> InstallAsync(HttpContext context, SetupRequest? req, string via,
+            bool adminByLink = false, IReadOnlyDictionary<string, string>? sources = null)
+        {
             if (req == null) throw new SetupException("bad_request", "Nothing to install.");
             if (_config is not IConfigurationRoot root || !ArkIdpSettings.Attach(_config, _env) && !TryCreateAndAttach())
                 throw new SetupException("cannot_apply",
@@ -965,7 +1096,9 @@ namespace Ark.oAuth.Oidc
                 if (ArkIdpSettings.IsConfigured(_config))
                     throw new SetupException("already_configured", "This server has already been set up.");
 
+                if (adminByLink && req.Admin != null) req.Admin.Password = Protocol.ArkCrypto.RandomToken(32);
                 var plan = Validate(context, req);
+                string? passwordLink = null;
                 var settingsFile = ArkIdpSettings.SettingsFile(_config, _env);
                 var dataDir = Path.GetDirectoryName(settingsFile)!;
 
@@ -1003,6 +1136,9 @@ namespace Ark.oAuth.Oidc
                         TenantDisplay = req.Server?.TenantDisplay?.Trim(),
                         ConsoleLogo = appLogo
                     });
+                    if (adminByLink && !plan.ExistingTenant)
+                        passwordLink = await scope.ServiceProvider.GetRequiredService<DataAccess>()
+                            .IssuePasswordLinkAsync(plan.AdminUsername, plan.TenantId);
                     ArkExtn.MarkDataInitialized();
                 }
                 catch (Exception ex)
@@ -1016,12 +1152,14 @@ namespace Ark.oAuth.Oidc
                 }
 
                 ForgetSetupCode();
+                // It holds whatever an agent had collected, some of it secret, and is of no more use.
+                Mcp.ArkSetupDraft.Delete(dataDir);
                 _log.LogInformation("Ark IdP setup complete: tenant {Tenant}, issuer {Issuer}, settings in {File}",
                     plan.TenantId, plan.Issuer, settingsFile);
 
                 // The first line of the audit trail, when there is one: who set this server up,
                 // and from where. Whoever completes setup becomes its administrator.
-                ArkWatch.Record(context, new ArkWatchEvent
+                var record = new ArkWatchEvent
                 {
                     Action = "idp.setup",
                     Domain = ArkWatchDomains.System,
@@ -1037,26 +1175,25 @@ namespace Ark.oAuth.Oidc
                         ? $"identity provider attached to the existing database of tenant '{plan.TenantId}'"
                         : $"identity provider set up: tenant '{plan.TenantId}', issuer {plan.Issuer}"
                 }.With("issuer", plan.Issuer).With("database_provider", plan.Provider)
-                    .With("attached_existing", plan.ExistingTenant).With("local_request", IsLocal(context)));
-
-                var endpoints = new Protocol.ArkOidcEndpoints(plan.AppRoot, plan.TenantId);
-                await context.Response.WriteAsJsonAsync(new
+                    .With("attached_existing", plan.ExistingTenant).With("local_request", IsLocal(context)).With("via", via);
+                foreach (var (what, who) in sources ?? new Dictionary<string, string>()) record.With($"source_{what}", who);
+                // In the server's own trail as well, which every server has: what an agent collected
+                // is deleted now, and who supplied it must not go with it.
+                try
                 {
-                    ok = true,
-                    tenant_id = plan.TenantId,
-                    issuer = endpoints.Issuer,
-                    discovery = endpoints.Discovery,
-                    console = $"{context.Request.PathBase}/{plan.TenantId}/admin",
-                    admin_username = plan.AdminUsername,
-                    settings_file = settingsFile,
-                    machine_client_id = ArkManagementAuth.MachineClientId(plan.TenantId),
-                    // an existing database is attached, not seeded, so nothing was set
-                    machine_client_secret = plan.ExistingTenant ? null : plan.MachineSecret,
-                    attached_existing = plan.ExistingTenant,
-                    // where the audit trail goes, never its key
-                    audit_trail = plan.Watch == null ? null : new Uri(plan.Watch.Endpoint).GetLeftPart(UriPartial.Path),
-                    audit_application = plan.Watch?.Application
-                }, Json);
+                    using var scope = context.RequestServices.GetRequiredService<IServiceScopeFactory>().CreateScope();
+                    scope.ServiceProvider.GetRequiredService<DataAccess>().Record("idp_setup", plan.TenantId,
+                        plan.ExistingTenant ? "identity provider attached to an existing database" : "identity provider set up",
+                        $"via: {via}, issuer: {plan.Issuer}" + string.Concat((sources ?? new Dictionary<string, string>()).Select(s => $"\n{s.Key}: {s.Value}")),
+                        plan.AdminUsername, ArkWatchAudit.Address(context), record);
+                }
+                catch (Exception ex)
+                {
+                    _log.LogWarning(ex, "Ark IdP setup is complete, but its line could not be written to the audit trail.");
+                }
+
+                return new Installed(plan, settingsFile, new Protocol.ArkOidcEndpoints(plan.AppRoot, plan.TenantId),
+                    $"{context.Request.PathBase}/{plan.TenantId}/admin", passwordLink);
             }
             finally
             {
@@ -1072,14 +1209,15 @@ namespace Ark.oAuth.Oidc
             return ArkIdpSettings.Attach(_config, _env);
         }
 
-        sealed record Plan(
+        internal sealed record Plan(
             string TenantId, string AppRoot, string BaseUrl, string BasePath, string Issuer,
             string Provider, string Connection, string? PublicKey, string? PrivateKey,
             string AdminUsername, string? MachineSecret, bool ExistingTenant, string? LandingUrl, WatchPlan? Watch);
 
-        Plan Validate(HttpContext context, SetupRequest req)
+        /// <summary>The server address and tenant, checked. The landing page only where the built-in sign-in lands anywhere.</summary>
+        internal static (string Tenant, string BaseUrl, string BasePath, string AppRoot, string? Landing) ValidateServer(
+            ServerSection server, bool consoleSignIn)
         {
-            var server = req.Server ?? new ServerSection();
             var tenant = (server.TenantId ?? "").Trim();
             if (!TenantId.IsMatch(tenant))
                 throw new SetupException("invalid_tenant", "Tenant id: 2–63 letters, digits, '_' or '-', starting with a letter or digit.", "tenant_id");
@@ -1096,10 +1234,58 @@ namespace Ark.oAuth.Oidc
                 throw new SetupException("invalid_base_path", "Base path: letters, digits, '_', '-' and '/' only.", "base_path");
 
             var appRoot = Protocol.ArkOidcEndpoints.PublicRoot(new ArkAuthServerConfig { BaseUrl = baseUrl, BasePath = basePath });
+            var landing = consoleSignIn ? NormalizeLanding(server.LandingUrl, appRoot) : null;
+            return (tenant, baseUrl, basePath, appRoot, landing);
+        }
+
+        internal static string ValidateAdmin(AdminSection admin, bool needsPassword)
+        {
+            var username = (admin.Username ?? "").Trim();
+            if (username.Length == 0 || username.Any(char.IsWhiteSpace))
+                throw new SetupException("invalid_admin", "Administrator username: no spaces. An email address works.", "admin_username");
+            if (needsPassword && (admin.Password ?? "").Length < 10)
+                throw new SetupException("weak_password", "The administrator password needs at least 10 characters.", "admin_password");
+            return username;
+        }
+
+        internal static void ValidateUsers(UsersSection users, EmailSection? email)
+        {
+            var mode = (users.PasswordMode ?? "admin_managed").Trim().ToLowerInvariant();
+            if (mode is not ("admin_managed" or "email_based" or "auto"))
+                throw new SetupException("invalid_mode", "Choose how new users get their first password.", "password_mode");
+            var emailEnabled = email?.Enabled == true;
+            if (emailEnabled) ValidateEmail(email!);
+            if (mode == "email_based" && !emailEnabled)
+                throw new SetupException("email_required", "Activation emails need outgoing email. Configure SMTP, or let administrators set first passwords.", "password_mode");
+            if (!string.IsNullOrEmpty(users.DefaultPassword) && users.DefaultPassword.Length < 8)
+                throw new SetupException("weak_default", "The default password for new users needs at least 8 characters.", "default_password");
+        }
+
+        internal static string ValidateManagement(ManagementSection? management)
+        {
+            var secret = (management?.MachineClientSecret ?? "").Trim();
+            if (secret.Length > 0 && secret.Length < ArkManagementConfig.MinMachineClientSecretLength)
+                throw new SetupException("weak_secret", $"The machine client secret needs at least {ArkManagementConfig.MinMachineClientSecretLength} characters.", "machine_client_secret");
+            return secret;
+        }
+
+        internal static void ValidateProtocol(ProtocolSection? protocol)
+        {
+            foreach (var origin in protocol?.CorsOrigins ?? new List<string>())
+            {
+                if (!Uri.TryCreate(origin.Trim(), UriKind.Absolute, out var o) || o.Scheme is not ("http" or "https") ||
+                    o.AbsolutePath != "/" || origin.Trim().TrimEnd('/').Length != o.GetLeftPart(UriPartial.Authority).Length)
+                    throw new SetupException("invalid_origin", $"'{origin}' is not an origin. Use scheme://host[:port], nothing after it.", "cors_origins");
+            }
+        }
+
+        /// <summary>Whether the built-in console sign-in is there to land anywhere.</summary>
+        internal static bool HasConsoleSignIn(HttpContext context) => context.RequestServices.GetService<ArkIdpConsoleMarker>() != null;
+
+        internal Plan Validate(HttpContext context, SetupRequest req)
+        {
             // Only the built-in sign-in lands anywhere; a host's own client decides for itself.
-            var landing = context.RequestServices.GetService<ArkIdpConsoleMarker>() != null
-                ? NormalizeLanding(server.LandingUrl, appRoot)
-                : null;
+            var (tenant, baseUrl, basePath, appRoot, landing) = ValidateServer(req.Server ?? new ServerSection(), HasConsoleSignIn(context));
             var (provider, connection) = NormalizeDatabase(req.Database);
 
             // An existing Ark database: setup attaches to it instead of seeding, and the
@@ -1117,35 +1303,10 @@ namespace Ark.oAuth.Oidc
             string? pub = null, priv = null;
             if (!existing) (pub, priv, _) = ParsePrivateKey(req.Keys?.PrivateKey);
 
-            var admin = req.Admin ?? new AdminSection();
-            var username = (admin.Username ?? "").Trim();
-            if (username.Length == 0 || username.Any(char.IsWhiteSpace))
-                throw new SetupException("invalid_admin", "Administrator username: no spaces. An email address works.", "admin_username");
-            if (!existing && (admin.Password ?? "").Length < 10)
-                throw new SetupException("weak_password", "The administrator password needs at least 10 characters.", "admin_password");
-
-            var users = req.Users ?? new UsersSection();
-            var mode = (users.PasswordMode ?? "admin_managed").Trim().ToLowerInvariant();
-            if (mode is not ("admin_managed" or "email_based" or "auto"))
-                throw new SetupException("invalid_mode", "Choose how new users get their first password.", "password_mode");
-            var emailEnabled = req.Email?.Enabled == true;
-            if (emailEnabled) ValidateEmail(req.Email!);
-            if (mode == "email_based" && !emailEnabled)
-                throw new SetupException("email_required", "Activation emails need outgoing email. Configure SMTP, or let administrators set first passwords.", "password_mode");
-            if (!string.IsNullOrEmpty(users.DefaultPassword) && users.DefaultPassword.Length < 8)
-                throw new SetupException("weak_default", "The default password for new users needs at least 8 characters.", "default_password");
-
-            var secret = (req.Management?.MachineClientSecret ?? "").Trim();
-            if (secret.Length > 0 && secret.Length < ArkManagementConfig.MinMachineClientSecretLength)
-                throw new SetupException("weak_secret", $"The machine client secret needs at least {ArkManagementConfig.MinMachineClientSecretLength} characters.", "machine_client_secret");
-
-            foreach (var origin in req.Protocol?.CorsOrigins ?? new List<string>())
-            {
-                if (!Uri.TryCreate(origin.Trim(), UriKind.Absolute, out var o) || o.Scheme is not ("http" or "https") ||
-                    o.AbsolutePath != "/" || origin.Trim().TrimEnd('/').Length != o.GetLeftPart(UriPartial.Authority).Length)
-                    throw new SetupException("invalid_origin", $"'{origin}' is not an origin. Use scheme://host[:port], nothing after it.", "cors_origins");
-            }
-
+            var username = ValidateAdmin(req.Admin ?? new AdminSection(), needsPassword: !existing);
+            ValidateUsers(req.Users ?? new UsersSection(), req.Email);
+            var secret = ValidateManagement(req.Management);
+            ValidateProtocol(req.Protocol);
             var watch = NormalizeWatch(req.Watch);
 
             return new Plan(tenant, appRoot, baseUrl, basePath, $"{appRoot}/{tenant}", provider, connection, pub, priv,
@@ -1312,7 +1473,7 @@ namespace Ark.oAuth.Oidc
 
         // ---------------------------------------------------------------- request shapes
 
-        sealed class SetupException : Exception
+        internal sealed class SetupException : Exception
         {
             public SetupException(string code, string message, string? field = null) : base(message)
             {
@@ -1324,10 +1485,10 @@ namespace Ark.oAuth.Oidc
         }
 
         sealed class CodeRequest { public string? Code { get; set; } }
-        sealed class KeyRequest { public int? KeySize { get; set; } public string? PrivateKey { get; set; } }
-        sealed class EmailTestRequest { public EmailSection? Email { get; set; } public string? To { get; set; } }
+        internal sealed class KeyRequest { public int? KeySize { get; set; } public string? PrivateKey { get; set; } }
+        internal sealed class EmailTestRequest { public EmailSection? Email { get; set; } public string? To { get; set; } }
 
-        sealed class SetupRequest
+        internal sealed class SetupRequest
         {
             public OrganizationSection? Organization { get; set; }
             public BrandingSection? Branding { get; set; }
@@ -1343,7 +1504,7 @@ namespace Ark.oAuth.Oidc
         }
 
         /// <summary>The optional audit trail: an ARK-RAPID Watch node and this server's key for it.</summary>
-        sealed class WatchSection
+        internal sealed class WatchSection
         {
             public bool Enabled { get; set; }
             public string? Endpoint { get; set; }
@@ -1352,7 +1513,7 @@ namespace Ark.oAuth.Oidc
             public string? Environment { get; set; }
         }
 
-        sealed class OrganizationSection
+        internal sealed class OrganizationSection
         {
             public string? CompanyName { get; set; }
             public string? DisplayName { get; set; }
@@ -1361,14 +1522,14 @@ namespace Ark.oAuth.Oidc
             public string? PrivacyUrl { get; set; }
         }
 
-        sealed class BrandingSection
+        internal sealed class BrandingSection
         {
             public string? HostLogo { get; set; }
             public string? AppLogo { get; set; }
             public bool? ShowPoweredBy { get; set; }
         }
 
-        sealed class ServerSection
+        internal sealed class ServerSection
         {
             public string? TenantId { get; set; }
             public string? TenantDisplay { get; set; }
@@ -1377,12 +1538,12 @@ namespace Ark.oAuth.Oidc
             public string? LandingUrl { get; set; }
         }
 
-        sealed class DatabaseSection { public string? Provider { get; set; } public string? ConnectionString { get; set; } }
-        sealed class KeysSection { public string? PrivateKey { get; set; } }
-        sealed class AdminSection { public string? Username { get; set; } public string? Name { get; set; } public string? Password { get; set; } }
-        sealed class UsersSection { public string? PasswordMode { get; set; } public string? DefaultPassword { get; set; } }
+        internal sealed class DatabaseSection { public string? Provider { get; set; } public string? ConnectionString { get; set; } }
+        internal sealed class KeysSection { public string? PrivateKey { get; set; } }
+        internal sealed class AdminSection { public string? Username { get; set; } public string? Name { get; set; } public string? Password { get; set; } }
+        internal sealed class UsersSection { public string? PasswordMode { get; set; } public string? DefaultPassword { get; set; } }
 
-        sealed class EmailSection
+        internal sealed class EmailSection
         {
             public bool Enabled { get; set; }
             public string? Smtp { get; set; }
@@ -1394,7 +1555,7 @@ namespace Ark.oAuth.Oidc
             public string? Subject { get; set; }
         }
 
-        sealed class ProtocolSection
+        internal sealed class ProtocolSection
         {
             public bool? EnableDeviceFlow { get; set; }
             public bool? EnablePushedAuthorizationRequests { get; set; }
@@ -1408,7 +1569,7 @@ namespace Ark.oAuth.Oidc
             public List<string>? CorsOrigins { get; set; }
         }
 
-        sealed class ManagementSection { public string? MachineClientSecret { get; set; } }
+        internal sealed class ManagementSection { public string? MachineClientSecret { get; set; } }
     }
 
     public static class ArkSetupExtensions

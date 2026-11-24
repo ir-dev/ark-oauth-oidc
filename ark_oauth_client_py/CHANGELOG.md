@@ -2,6 +2,12 @@
 
 ## Next release
 
+No change to this package. In this release the provider, `Ark.oAuth.Oidc`, is itself an MCP server, with
+which an agent sets it up and administers it. Nothing a client sees changes, and the two can be upgraded in
+either order.
+
+## 2.4.2
+
 Agent-to-agent (A2A). Additive: nothing existing changes, and nothing here is used until you call
 it. It needs a provider that has A2A (`Ark.oAuth.Oidc`, same release).
 

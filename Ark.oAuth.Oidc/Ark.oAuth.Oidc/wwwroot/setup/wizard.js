@@ -307,6 +307,21 @@
             add('warn', 'This host signs the admin console in itself. After setup, point its client at the issuer shown at the end.');
     }
 
+    // The other way in: the same setup, as tools. Says where, never the code.
+    function renderMcp() {
+        const url = env && env.mcp_url;
+        $('#mcpCard').hidden = !url;
+        if (!url) return;
+        $('#mcpUrl').textContent = url;
+        $('#mcpConfig').value = JSON.stringify({
+            mcpServers: { 'ark-idp-setup': { type: 'http', url, headers: { Authorization: 'Bearer ${ARK_SETUP_CODE}' } } }
+        }, null, 2);
+        const note = $('#mcpDraftNote');
+        note.hidden = !env.mcp_draft_at;
+        if (env.mcp_draft_at)
+            note.textContent = `An agent has been collecting settings (last change ${new Date(env.mcp_draft_at).toLocaleString()}). Installing from this page uses what is entered here and discards what it collected.`;
+    }
+
     $('#verifyCode').addEventListener('click', e => busy(e.currentTarget, async () => {
         setupCode = val('setup_code').toUpperCase();
         try {
@@ -813,6 +828,11 @@
             $('#doneAuditRow').hidden = false;
             $('#doneAudit').textContent = `${r.audit_trail} as ${r.audit_application}`;
         }
+        if (r.mcp_url) {
+            $('#doneMcpLabel').hidden = false;
+            $('#doneMcpRow').hidden = false;
+            $('#doneMcp').textContent = r.mcp_url;
+        }
         if (r.machine_client_secret) {
             $('#doneSecretCard').hidden = false;
             $('#doneMachineId').textContent = `client_id: ${r.machine_client_id}`;
@@ -839,6 +859,7 @@
             tenant_id: r.tenant_id,
             issuer: r.issuer,
             discovery: r.discovery,
+            mcp_server: r.mcp_url || null,
             admin_console: `${r.issuer}/admin`,
             administrator: r.admin_username,
             signing_key: key && {
@@ -854,6 +875,7 @@
             ['Server', 'Tenant id', k.tenant_id],
             ['Server', 'Issuer', k.issuer],
             ['Server', 'Discovery', k.discovery],
+            ...(k.mcp_server ? [['Server', 'MCP server', k.mcp_server]] : []),
             ['Server', 'Admin console', k.admin_console],
             ['Server', 'Administrator', k.administrator]
         ];
@@ -1035,6 +1057,7 @@
             loadDraft();
         }
         renderChecks();
+        renderMcp();
         renderPreview();
         renderServer();
         renderDatabase();

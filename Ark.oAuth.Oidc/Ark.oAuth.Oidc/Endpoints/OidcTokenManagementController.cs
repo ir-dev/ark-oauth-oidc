@@ -96,7 +96,8 @@ namespace Ark.oAuth.Oidc.Endpoints
                     // An agent-to-agent token is addressed to one client, not to the tenant, so
                     // the check above never passes it. The agent it is addressed to may ask about
                     // it, as may the client it was issued to and a configured resource server.
-                    if (!result.IsValid && Options.EnableA2A)
+                    // So is a token for one of this server's MCP endpoints.
+                    if (!result.IsValid && (Options.EnableA2A || ServerConfig.Mcp is { Enabled: true }))
                     {
                         var a2a = await IntrospectAgentTokenAsync(token, tenant, ep.Issuer, caller, mayInspectOthers);
                         if (a2a != null) return Ok(a2a);
@@ -156,8 +157,10 @@ namespace Ark.oAuth.Oidc.Endpoints
 
             // Only a token addressed to a client is an agent token; anything else that reaches
             // here (a token for another tenant audience, say) is not this trail's business.
+            // A token for one of this server's own MCP endpoints is not an agent token either.
+            var root = Endpoints(tenant.tenant_id).BaseUrl;
             var agentToken = audiences.Count > 0
-                && !audiences.Any(a => ArkAgentTokens.IsTenantAudience(a, tenant, issuer));
+                && !audiences.Any(a => ArkAgentTokens.IsTenantAudience(a, tenant, issuer) || Mcp.ArkMcpResources.Parse(root, a) != null);
             var sid = Text("sid");
             var actors = claims.TryGetProperty("act", out var chain) ? ArkAgentTokens.ActorChain(chain) : new List<string>();
             void Asked(bool active, string relation, string? reason)

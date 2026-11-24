@@ -121,6 +121,8 @@
         /// nothing is sent and nothing is started. See <see cref="ArkWatchConfig"/>.
         /// </summary>
         public ArkWatchConfig Watch { get; set; } = new ArkWatchConfig();
+        /// <summary>The MCP servers: setup, host, tenant and client level. See <see cref="ArkMcpConfig"/>.</summary>
+        public ArkMcpConfig Mcp { get; set; } = new ArkMcpConfig();
 
         /// <summary>The parsed onboarding mode, defaulting to the legacy auto behaviour.</summary>
         public ArkUserPasswordMode EffectiveUserPasswordMode =>
@@ -234,6 +236,47 @@
             Enabled && !string.IsNullOrWhiteSpace(ApiKey)
             && Uri.TryCreate((Endpoint ?? "").Trim(), UriKind.Absolute, out var uri)
             && uri.Scheme is "http" or "https";
+    }
+
+    /// <summary>
+    /// The server's own MCP (Model Context Protocol) endpoints, bound from
+    /// <c>ark_oauth_server:Mcp</c>. See MCP.md.
+    ///
+    /// An agent drives this server through them, at the level its credential reaches:
+    ///
+    ///   * <c>/ark-idp/mcp</c> — setup, while the server is unconfigured (the setup code is the
+    ///     bearer token); from then on the host level, for the operator;
+    ///   * <c>/{tenant}/mcp</c> — administration of that tenant, for its machine client;
+    ///   * <c>/{tenant}/mcp/{client_id}</c> — one application, for that application and its users.
+    ///
+    /// On by default and inert without a credential: none of these answers a tool call to a caller
+    /// who could not already do the same thing elsewhere, or whom an operator has not deliberately
+    /// admitted. Every level takes only a token addressed to it.
+    /// </summary>
+    public class ArkMcpConfig
+    {
+        /// <summary>False removes every MCP endpoint, its metadata and the resource handling at the token endpoint.</summary>
+        public bool Enabled { get; set; } = true;
+        /// <summary><c>/ark-idp/mcp</c>, setup included.</summary>
+        public bool HostLevel { get; set; } = true;
+        /// <summary><c>/{tenant}/mcp</c>.</summary>
+        public bool TenantLevel { get; set; } = true;
+        /// <summary><c>/{tenant}/mcp/{client_id}</c>.</summary>
+        public bool ClientLevel { get; set; } = true;
+        /// <summary>
+        /// Serve only the tools that look: every tool that changes something is refused, whatever
+        /// the caller holds. Setup is not affected, since all it does is change something.
+        /// </summary>
+        public bool ReadOnly { get; set; }
+        /// <summary>
+        /// Accept a client_id and secret (<c>Authorization: Basic</c>) in place of an access token:
+        /// the machine client at the host and tenant levels, the application itself at its own.
+        /// It is the same secret the token endpoint of this server takes, sent to the same server;
+        /// an agent that can be given only a fixed header needs it. False requires a token.
+        /// </summary>
+        public bool AllowClientSecret { get; set; } = true;
+        /// <summary>Largest request body accepted, in kilobytes.</summary>
+        public int MaxRequestKilobytes { get; set; } = 1536;
     }
 
     /// <summary>

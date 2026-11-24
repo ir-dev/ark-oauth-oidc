@@ -197,6 +197,8 @@ Your issuer is `{BaseUrl}/{TenantId}`, and discovery lives at
 | Native Apps (RFC 8252) | Loopback redirect URIs with variable ports |
 | Token Exchange (RFC 8693) | For agent-to-agent calls on behalf of a user: `act` chain, audience-bound, never outlives the token exchanged |
 | Agent-to-agent (A2A) | Tokens addressed to one agent (`aud` = its client_id), a caller list per agent, the Agent Card security section — see [A2A.md](A2A.md) |
+| Model Context Protocol | The server's own MCP endpoints, for setup, host, tenant and application — see [MCP.md](MCP.md) |
+| Resource Indicators (RFC 8707), Protected Resource Metadata (RFC 9728) | For those endpoints |
 
 Deliberately **not** supported: the implicit grant, the hybrid flow, and the resource owner password
 credentials grant — all three are removed in OAuth 2.1.
@@ -218,6 +220,7 @@ All paths are relative to the issuer, `{BaseUrl}/{TenantId}`.
 | Device authorization | `/oauth2/device_authorization` |
 | Pushed authorization request | `/oauth2/par` |
 | Dynamic registration | `/oauth2/register` |
+| MCP server of the tenant, of one application | `/mcp`, `/mcp/{client_id}` |
 | Client setup page | `/oauth2/integrate/{client_id}` |
 
 Signed in to the admin console, every registered client has a generated setup page at
@@ -490,6 +493,31 @@ Tick **This client is an agent** in the same section and the client list shows i
 badge and how many clients it may call and be called by; **agents only** narrows the list. The mark
 is a label (`is_agent` on the client record): it grants nothing, the caller list decides.
 
+## MCP: an agent sets the server up and runs it
+
+The server is an MCP server itself, at four levels: setup (the setup code is the bearer token), the
+operator's, a tenant's, and one application's.
+
+```json
+{ "mcpServers": { "ark-idp-setup": {
+    "type": "http", "url": "https://id.example.com/ark-idp/mcp",
+    "headers": { "Authorization": "Bearer ${ARK_SETUP_CODE}" } } } }
+```
+
+An agent with that collects what setup needs from the people who have it, shows the plan for
+agreement, and installs it. `setup_complete` hands over the machine credential and the tenant's own
+endpoint, where the agent goes on with a token addressed to it:
+
+```bash
+curl -s {issuer}/oauth2/token -d grant_type=client_credentials -d client_id=acme_machine \
+  -d client_secret=$SECRET -d resource={issuer}/mcp -d scope='mcp.read mcp.manage'
+```
+
+`tenant_overview` is where it starts: the state of the tenant and the next steps, each with the tool
+and arguments. The tools, who may call them, people as administrators, and the settings are in
+[MCP.md](MCP.md). `ark_oauth_server:Mcp:Enabled = false` removes all of it; `Mcp:ReadOnly` leaves only
+the tools that look.
+
 ## Audit trail (ARK-RAPID Watch)
 
 Optional. The server can send a structured record of everything it does to an
@@ -601,6 +629,10 @@ package version.
 | `branding/` | the uploaded logos, served at `/ark-idp/branding/…` (as files, so activation emails can show them) |
 | `ark_idp.db` | the SQLite database, when SQLite is chosen with the default path |
 | `.gitignore` | `*`: the directory ignores itself, because `dotnet run` puts it inside your project |
+
+The **Welcome** step also says how an agent can do all of this instead, over MCP; see
+[MCP.md](MCP.md). While one is at it, `setup-draft.json` appears beside the settings (0600, deleted when
+setup finishes).
 
 The optional **Audit trail** step asks for an ARK-RAPID Watch address and key, tests them — the
 address, the key, then one real event — and writes them to `settings.json` as
@@ -805,6 +837,8 @@ off the request path, and is kept for ever unless `AuditRetentionDays` says othe
 3. Keep `RequireHttpsMetadata` at `true` on clients.
 4. Leave `EnableDynamicRegistration` off unless you need it, and keep
    `RequireRegistrationAccessToken` on if you do.
+   Decide who may hold a machine credential: it also opens the MCP endpoints. `Mcp:ReadOnly` or
+   `Mcp:Enabled` limit that.
 5. Give confidential clients real secrets and set `token_endpoint_auth_method` accordingly.
 6. If anything provisions through the API, set `Management:MachineClientSecret` from a key vault
    or environment variable — never a settings file under source control — and leave

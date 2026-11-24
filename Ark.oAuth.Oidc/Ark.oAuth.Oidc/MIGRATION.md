@@ -8,9 +8,9 @@
 
 ## Current version
 
-- **`2.4.1`** (`<Version>` in `Ark.oAuth.Oidc.csproj`), `net10.0`, EF Core `10.0.x`.
-- Ships in lockstep with **`Ark.oAuth.Client 2.4.1`** — deliberately the **same version number** —
-  and with the Python, Node and browser clients at 2.4.1. Upgrade both .NET packages together.
+- **`2.4.2`** (`<Version>` in `Ark.oAuth.Oidc.csproj`), `net10.0`, EF Core `10.0.x`.
+- Ships in lockstep with **`Ark.oAuth.Client 2.4.2`** — deliberately the **same version number** —
+  and with the Python, Node and browser clients at 2.4.2. Upgrade both .NET packages together.
 - **2.4.1 adds webhooks, an opt-in module.** A host that does not call `AddArkWebhooks()` sees no
   change: no tables, no background work, no console link, and the module's routes answer 404.
   Endpoints, discovery, tokens, pages and existing configuration are as in 2.4.0, so every client
@@ -135,7 +135,25 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
 
 ## Behavioural changes by version (from the .csproj notes)
 
-- **Next release — agent-to-agent (A2A) tokens; inert until an operator lists a caller.**
+- **Next release — the server is an MCP server (`MCP.md`). On by default; nothing answers without a credential.**
+  - New routes: `POST /ark-idp/mcp`, `/{tenant}/mcp`, `/{tenant}/mcp/{client_id}`; `GET …/server-card` and
+    `…/config` beside each; `GET /.well-known/oauth-protected-resource/…`. `ark_oauth_server:Mcp:Enabled=false`
+    removes them all. Only POST is mapped at an endpoint, so a host's own GET page at such a path stays its own.
+  - `resource` is honoured on `/authorize`, PAR, device, refresh and `client_credentials` **only** when it names
+    one of these endpoints. Every other value behaves as in 2.4.2.
+  - New scopes `mcp.read`, `mcp.manage` (the second refused by provisioning and dynamic registration). A client
+    registered for `client.register` may request both without being edited.
+  - Schema: `auth_codes.resource`, `refresh_tokens.resource`, `device_codes.resource`, `users.home_tenant_id`,
+    all nullable, added by the start-up sync. 2.4.2 opens the upgraded database. A save of a user row that does
+    not carry `home_tenant_id` leaves it alone.
+  - `{tenant}_machine` of a tenant other than the operator's now has a meaning: it administers that tenant over
+    MCP. One exists only if somebody creates it (`tenant_create`, `tenant_machine_secret_reset`). The management
+    API still admits the operator's machine client alone. Before upgrading, check that nobody registered a client
+    of that name in another tenant for something else.
+  - Bootstrap fix: a database holding only the webhook module's tables is now given the core schema.
+  - No new dependency. **Upgrade action:** none.
+
+- **2.4.2 — agent-to-agent (A2A) tokens; inert until an operator lists a caller.**
   A token can now be addressed to one client (`aud` = its client_id): the `client_credentials`
   grant with `audience` (the agent as itself), or `urn:ietf:params:oauth:grant-type:token-exchange`
   (RFC 8693, the agent on behalf of a user, with an `act` chain). Both are refused with
@@ -148,7 +166,7 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
   - **Discovery** lists the token-exchange grant in `grant_types_supported`.
   - **Introspection** additionally answers for an A2A token when the caller is the agent it is
     addressed to or the client that obtained it. Every other answer is as before.
-- **Next release — agents are marked, and the audit trail can leave the server. Both optional.**
+- **2.4.2 — agents are marked, and the audit trail can leave the server. Both optional.**
   - **`clients.is_agent`**, one more nullable column added by the schema sync: a label an operator
     sets ("This client is an agent" in the client drawer, `is_agent` on `client/upsert`). It grants
     nothing. Null on every existing client; a save that does not carry it leaves it alone.

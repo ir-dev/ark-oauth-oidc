@@ -38,6 +38,10 @@ makes itself the IdP. `Ark.oAuth.Oidc.QuickStart` in this repository is exactly 
 dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart   # then open https://localhost:7300
 ```
 
+An AI agent can do the wizard's part instead, over MCP: connect it to `https://localhost:7300/ark-idp/mcp`
+with the setup code from the log as its bearer token. See
+[MCP.md](Ark.oAuth.Oidc/Ark.oAuth.Oidc/MCP.md).
+
 The rest of this guide runs the *configured* sample pair, the host and a client application wired
 together through appsettings, which is how the end-to-end flows are demonstrated.
 

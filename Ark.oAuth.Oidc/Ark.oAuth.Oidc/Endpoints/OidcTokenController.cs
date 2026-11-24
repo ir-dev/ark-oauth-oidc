@@ -116,12 +116,13 @@ namespace Ark.oAuth.Oidc.Endpoints
                 code, client, form["redirect_uri"].ToString(), form["code_verifier"].ToString());
 
             var scopes = (entry.scope ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+            var resource = await Mcp.ArkMcpIndicators.ForGrantAsync(Ctx, ServerConfig, ep, tenant, entry.resource, form["resource"]);
             var ctx = new TokenRequestContext
             {
                 Tenant = tenant,
                 Client = client,
                 Issuer = ep.Issuer,
-                Audience = tenant.audience,
+                Audience = resource ?? tenant.audience,
                 Subject = entry.subject,
                 Scopes = scopes,
                 SessionId = entry.session_id,
@@ -137,7 +138,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 && client.EffectiveGrantTypes.Contains("refresh_token", StringComparer.OrdinalIgnoreCase))
             {
                 refreshToken = await _grants.CreateRefreshTokenAsync(
-                    client, tenant.tenant_id, entry.subject, scopes, entry.session_id);
+                    client, tenant.tenant_id, entry.subject, scopes, entry.session_id, resource: resource);
             }
 
             string? idToken = null;
@@ -158,6 +159,12 @@ namespace Ark.oAuth.Oidc.Endpoints
             var presented = form["refresh_token"].ToString();
             if (string.IsNullOrWhiteSpace(presented))
                 throw OAuthException.InvalidRequest("refresh_token is required.");
+
+            // A resource the token was not granted for is refused before the token is spent: it is
+            // the request that is wrong, and the client should still hold its token afterwards.
+            if (await Mcp.ArkMcpIndicators.RequestedAsync(Ctx, ServerConfig, ep, tenant, form["resource"]) is { } named
+                && !string.Equals((await _grants.FindRefreshTokenAsync(presented))?.resource, named.Uri, StringComparison.Ordinal))
+                throw new OAuthException(ArkAgentTokens.InvalidTarget, "the authorization this grant came from did not name that resource.");
 
             var entry = await _grants.RedeemRefreshTokenAsync(presented, client);
             var scopes = (entry.scope ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
@@ -213,12 +220,13 @@ namespace Ark.oAuth.Oidc.Endpoints
                 throw OAuthException.InvalidGrant("the account this refresh token belongs to no longer has access to this client.");
             }
 
+            var resource = await Mcp.ArkMcpIndicators.ForGrantAsync(Ctx, ServerConfig, ep, tenant, entry.resource, form["resource"]);
             var ctx = new TokenRequestContext
             {
                 Tenant = tenant,
                 Client = client,
                 Issuer = ep.Issuer,
-                Audience = tenant.audience,
+                Audience = resource ?? tenant.audience,
                 Subject = entry.subject,
                 Scopes = scopes,
                 SessionId = entry.session_id,
@@ -231,7 +239,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             if (client.refresh_token_rotation)
             {
                 rotated = await _grants.CreateRefreshTokenAsync(
-                    client, tenant.tenant_id, entry.subject, scopes, entry.session_id, entry.family_id);
+                    client, tenant.tenant_id, entry.subject, scopes, entry.session_id, entry.family_id, resource);
             }
 
             string? idToken = null;
@@ -253,6 +261,16 @@ namespace Ark.oAuth.Oidc.Endpoints
             scopes = scopes.Where(s => !string.Equals(s, "openid", StringComparison.OrdinalIgnoreCase)
                                     && !string.Equals(s, "offline_access", StringComparison.OrdinalIgnoreCase)).ToList();
 
+            // One of this server's own MCP endpoints (RFC 8707): the machine client administering a
+            // tenant, an application at its own. An agent calling somebody else's application is
+            // an A2A request addressed to that application, and is checked as one below.
+            var mcp = await Mcp.ArkMcpIndicators.RequestedAsync(Ctx, ServerConfig, ep, tenant, form["audience"].Concat(form["resource"]));
+            var mcpAgent = mcp is { Level: Mcp.ArkMcpLevel.Client } && !Mcp.ArkMcpIndicators.IsOwnOrMachine(mcp, tenant, client);
+            if (mcp != null && !mcpAgent)
+                return await McpTokenAsync(tenant, ep, client, mcp, scopes);
+            if (mcpAgent && (!Options.EnableA2A || !Mcp.ArkMcpIndicators.Same(mcp!.Tenant!.tenant_id, tenant.tenant_id)))
+                throw new OAuthException(ArkAgentTokens.InvalidTarget, $"'{client.client_id}' may not be issued a token for that resource.");
+
             // Agent-to-agent: the request names the agent it is going to call, and the token is
             // good there and nowhere else. Naming the tenant's own audience is not that request.
             string? audience = null;
@@ -272,7 +290,12 @@ namespace Ark.oAuth.Oidc.Endpoints
             {
                 var trace = new AgentTokenTrace();
                 AgentTokenResult issued;
-                try { issued = await _agents.AsItselfAsync(tenant, ep.Issuer, client, audience, scopes, trace); }
+                try
+                {
+                    // Named by its MCP endpoint, the agent is the application behind it, and the
+                    // token is good at that endpoint rather than at the application's own.
+                    issued = await _agents.AsItselfAsync(tenant, ep.Issuer, client, mcp?.Client!.client_id ?? audience, scopes, trace, mcp?.Uri);
+                }
                 catch (OAuthException ex)
                 {
                     AgentRefused(tenant, client, trace, ex, auth);
@@ -306,6 +329,33 @@ namespace Ark.oAuth.Oidc.Endpoints
         }
 
         /// <summary>
+        /// An access token for one of this server's own MCP endpoints, to a client acting as
+        /// itself. What it may do there is the endpoint's to decide (ArkMcpAuth): a token is proof
+        /// of who is calling, and here that is always this client.
+        /// </summary>
+        private async Task<IActionResult> McpTokenAsync(
+            ArkTenant tenant, ArkOidcEndpoints ep, ArkClient client, Mcp.ArkMcpResource resource, List<string> scopes)
+        {
+            var (accessToken, expiresAt, _) = await _tokens.IssueAccessTokenAsync(new TokenRequestContext
+            {
+                Tenant = tenant,
+                Client = client,
+                Issuer = ep.Issuer,
+                Audience = resource.Uri,
+                Subject = client.client_id,
+                Scopes = scopes,
+                // A client is nobody's administrator through an access mapping; what it may do is
+                // decided by which client it is.
+                AuthorizationClaims = new List<string>()
+            });
+            _da.Log("token", $"{tenant.tenant_id}/oauth2/token", "client_credentials issued for an mcp endpoint",
+                $"client: {client.client_id}, audience: {resource.Uri}");
+            Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.TokenIssued,
+                new { grant_type = "client_credentials", client_id = client.client_id, subject = client.client_id, scopes, audience = resource.Uri }, client.client_id);
+            return Ok(BuildResponse(accessToken, expiresAt, scopes, null, null));
+        }
+
+        /// <summary>
         /// Token exchange (RFC 8693), in the one form this server offers: an agent that holds a
         /// user's access token asks for one addressed to the next agent. See <see cref="ArkAgentTokens"/>.
         /// </summary>
@@ -320,7 +370,12 @@ namespace Ark.oAuth.Oidc.Endpoints
                 if (auth.Method == "none")
                     throw OAuthException.InvalidClient("token exchange requires client authentication.");
 
-                issued = await _agents.OnBehalfOfAsync(tenant, ep.Issuer, client, form, trace);
+                // The agent may be named by the MCP endpoint of the application it is for.
+                var mcp = await Mcp.ArkMcpIndicators.RequestedAsync(Ctx, ServerConfig, ep, tenant, form["audience"].Concat(form["resource"]));
+                if (mcp != null && (mcp.Level != Mcp.ArkMcpLevel.Client || !Mcp.ArkMcpIndicators.Same(mcp.Tenant!.tenant_id, tenant.tenant_id)))
+                    throw new OAuthException(ArkAgentTokens.InvalidTarget,
+                        "a user's token can be exchanged for one addressed to an application, not for one that administers a tenant.");
+                issued = await _agents.OnBehalfOfAsync(tenant, ep.Issuer, client, form, trace, mcp);
             }
             catch (OAuthException ex)
             {
@@ -374,13 +429,14 @@ namespace Ark.oAuth.Oidc.Endpoints
 
             // The approving session's sign-in time; left unset it defaulted to now.
             var session = await _grants.GetSessionAsync(entry.session_id);
+            var resource = await Mcp.ArkMcpIndicators.ForGrantAsync(Ctx, ServerConfig, ep, tenant, entry.resource, form["resource"]);
 
             var ctx = new TokenRequestContext
             {
                 Tenant = tenant,
                 Client = client,
                 Issuer = ep.Issuer,
-                Audience = tenant.audience,
+                Audience = resource ?? tenant.audience,
                 Subject = entry.subject!,
                 Scopes = scopes,
                 SessionId = entry.session_id,
@@ -394,7 +450,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 && client.EffectiveGrantTypes.Contains("refresh_token", StringComparer.OrdinalIgnoreCase))
             {
                 refreshToken = await _grants.CreateRefreshTokenAsync(
-                    client, tenant.tenant_id, entry.subject!, scopes, entry.session_id);
+                    client, tenant.tenant_id, entry.subject!, scopes, entry.session_id, resource: resource);
             }
 
             string? idToken = null;

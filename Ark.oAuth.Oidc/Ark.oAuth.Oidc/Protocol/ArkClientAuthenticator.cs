@@ -113,6 +113,35 @@ namespace Ark.oAuth.Oidc.Protocol
             return new ClientAuthResult { Client = client!, Method = method, UsedAuthorizationHeader = viaHeader };
         }
 
+        /// <summary>
+        /// Verifies a client's secret outside the token endpoint: at an MCP endpoint of this same
+        /// server, which takes one in place of a token (<c>Mcp:AllowClientSecret</c>). Null when it
+        /// does not verify. How the client authenticates at the token endpoint does not matter
+        /// here, so long as a secret is what it authenticates with.
+        /// </summary>
+        internal async Task<ArkClient?> VerifySecretAsync(string tenantId, string clientId, string? secret)
+        {
+            var client = await FindClientAsync(tenantId, clientId);
+            var options = ArkConfigSnapshot.Oidc(_ctx.Configuration);
+            ArkHashGate.Configure(options.MaxConcurrentPasswordHashes, options.MaxPasswordHashWaitSeconds);
+            async Task<bool> AcceptsAsync(ArkClient? c)
+            {
+                // The dummy hash, as at the token endpoint: an unknown client costs the same time.
+                var ok = await ArkSecretVerifier.VerifyAsync(secret, c?.client_secret_hash ?? DummyHash.Value, options.ClientSecretCacheSeconds);
+                return ok && c is { is_active: true }
+                    && (c.client_secret_expires_at == null || c.client_secret_expires_at > DateTime.UtcNow)
+                    && c.token_endpoint_auth_method is { } method
+                    && (method.Equals("client_secret_basic", StringComparison.OrdinalIgnoreCase)
+                        || method.Equals("client_secret_post", StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (await AcceptsAsync(client)) return client;
+            if (client == null) return null;
+            // Nothing is refused on a copy that may be stale: see ArkIdpCache.ClientIfChangedAsync.
+            var fresh = await ArkIdpCache.ClientIfChangedAsync(_ctx, client);
+            return !ReferenceEquals(fresh, client) && await AcceptsAsync(fresh) ? fresh : null;
+        }
+
         /// <summary>Why this client may not authenticate with this secret, or null when it may.</summary>
         private static async Task<OAuthException?> RefusalAsync(
             ArkClient? client, string? secret, string method, ArkOidcOptions options, bool viaHeader)
@@ -259,7 +288,7 @@ namespace Ark.oAuth.Oidc.Protocol
             }
         }
 
-        private static bool TryReadBasicHeader(HttpRequest request, out string? clientId, out string? secret)
+        internal static bool TryReadBasicHeader(HttpRequest request, out string? clientId, out string? secret)
         {
             clientId = null;
             secret = null;

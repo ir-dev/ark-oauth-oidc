@@ -27,6 +27,10 @@ namespace Ark.oAuth.Oidc.Endpoints
 
         [HttpGet("{tenant_id}/.well-known/openid-configuration")]
         [HttpGet("{tenant_id}/.well-known/oauth-authorization-server")]
+        // The same document where RFC 8414 puts it for an issuer with a path: the well-known
+        // segment inserted before the path. MCP clients try these two first.
+        [HttpGet(".well-known/oauth-authorization-server/{tenant_id}")]
+        [HttpGet(".well-known/openid-configuration/{tenant_id}")]
         public async Task<IActionResult> OpenIdConfiguration([FromRoute] string tenant_id)
         {
             return await ProtectAsync(async () =>
@@ -109,6 +113,16 @@ namespace Ark.oAuth.Oidc.Endpoints
 
                 if (opt.EnableDynamicRegistration)
                     doc["registration_endpoint"] = ep.Registration;
+
+                // RFC 9728 §4: the protected resources this issuer issues tokens for. The MCP
+                // endpoint of the tenant and, for the operator's issuer, that of the server.
+                var resources = new List<string>();
+                if (Mcp.ArkMcpResources.LevelEnabled(ServerConfig.Mcp, Mcp.ArkMcpLevel.Tenant))
+                    resources.Add(Mcp.ArkMcpResources.Tenant(ep.BaseUrl, tenant.tenant_id));
+                if (Mcp.ArkMcpResources.LevelEnabled(ServerConfig.Mcp, Mcp.ArkMcpLevel.Host)
+                    && Mcp.ArkMcpIndicators.Same(tenant.tenant_id, ServerConfig.TenantId))
+                    resources.Add(Mcp.ArkMcpResources.Host(ep.BaseUrl));
+                if (resources.Count > 0) doc["protected_resources"] = resources;
 
                 // discovery is public and stable; let clients cache it
                 Response.Headers["Cache-Control"] = "public, max-age=300";

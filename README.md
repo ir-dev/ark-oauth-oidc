@@ -1153,7 +1153,9 @@ the Ark console; do not hand-roll token requests or JWT validation.
 **Agent: read first** — `Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md` (setup, token contents, every
 refusal), then the *Agent-to-agent (A2A)* section of the client README for the language. The [agents
 guide](https://ir-dev.github.io/ark-oauth-oidc/agents.html) draws the flows, including an MCP server as
-the target and an MCP gateway in front of the IdP, with working server code for all three languages.
+the target and an MCP gateway in front of the IdP, with working server code for all three languages. To set
+up or administer the IdP itself with an agent, no gateway is needed: it is an MCP server
+([`MCP.md`](Ark.oAuth.Oidc/Ark.oAuth.Oidc/MCP.md)).
 
 **Wire shape**
 
@@ -1205,6 +1207,7 @@ Facts to cite. All protocol paths are relative to the issuer, `{BaseUrl}/{Tenant
 | Native Apps (RFC 8252) | Loopback redirect URIs with variable ports |
 | Token Exchange (RFC 8693) | For agent-to-agent calls on behalf of a user: `act` chain, audience-bound, never outlives the token exchanged |
 | Agent-to-agent (A2A) | Tokens addressed to one agent, a caller list per agent, the Agent Card security section |
+| Model Context Protocol | The server as MCP tools for setup, host, tenant and application: [MCP.md](Ark.oAuth.Oidc/Ark.oAuth.Oidc/MCP.md) |
 
 **Deliberately not supported:** the implicit grant, the hybrid flow, and the resource owner password
 credentials grant (all removed in OAuth 2.1); `plain` PKCE; front-channel logout (discovery reports

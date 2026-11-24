@@ -67,6 +67,23 @@
                             <li>Optionally: your logos, and SMTP details if users should receive activation emails.</li>
                         </ul>
                     </div>
+
+                    <div class="card subtle" id="mcpCard" hidden>
+                        <h2>Or have an agent do it</h2>
+                        <p>
+                            An AI agent can collect these answers from the people who have them and set the server up over MCP. Connect it to
+                            <code id="mcpUrl"></code> <button type="button" class="link" data-copy="#mcpUrl">Copy</button>, with the setup code from
+                            the server log as its bearer token.
+                        </p>
+                        <details class="advanced">
+                            <summary>MCP client configuration</summary>
+                            <label class="field">
+                                <span>mcpServers <button type="button" class="link" data-copy="#mcpConfig">Copy</button></span>
+                                <textarea id="mcpConfig" rows="11" readonly spellcheck="false"></textarea>
+                            </label>
+                        </details>
+                        <p class="note warn" id="mcpDraftNote" hidden></p>
+                    </div>
                 </section>
 
                 <!-- ============================================================ organization -->
@@ -609,6 +626,7 @@
                         <dt>Discovery</dt><dd><code id="doneDiscovery"></code> <button type="button" class="link" data-copy="#doneDiscovery">Copy</button></dd>
                         <dt>Settings</dt><dd><code id="doneSettings"></code></dd>
                         <dt id="doneAuditLabel" hidden>Audit trail</dt><dd id="doneAuditRow" hidden><code id="doneAudit"></code></dd>
+                        <dt id="doneMcpLabel" hidden>MCP server</dt><dd id="doneMcpRow" hidden><code id="doneMcp"></code> <button type="button" class="link" data-copy="#doneMcp">Copy</button></dd>
                     </dl>
                     <div class="card warn" id="doneSecretCard" hidden>
                         <h2>Machine client secret, shown once</h2>

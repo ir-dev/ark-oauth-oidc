@@ -309,6 +309,18 @@ namespace Ark.oAuth
         /// for something their password cannot fix.
         /// </summary>
         public bool is_active { get; set; } = true;
+        /// <summary>
+        /// The tenant that created the account and may manage it: set its password, switch it off,
+        /// end its sessions. Null, which is every account made by the operator, belongs to the
+        /// server and only the operator manages it.
+        ///
+        /// Accounts are shared by the whole server — a login id exists once, and a person may be
+        /// given access in several tenants — so without an owner an administrator of one tenant
+        /// could set the password of somebody who signs in at another. Other tenants may still
+        /// grant the person access; they cannot change the account. Null on a save means "not
+        /// carried", and the stored value stays.
+        /// </summary>
+        public string? home_tenant_id { get; set; }
         public string at { get; set; }
     }
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]

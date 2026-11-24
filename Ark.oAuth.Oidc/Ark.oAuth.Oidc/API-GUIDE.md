@@ -101,6 +101,16 @@ not seeded (tenant id must match; no key/client/account created).
 | `A2ATokenLifetimeSeconds` | `300` | Cap on an A2A token's life; the caller's `access_token_lifetime_seconds` applies when shorter, and a delegated token never outlives its subject token. |
 | `A2AMaxDelegationDepth` | `4` | Most agents in one `act` chain. |
 
+**`ArkMcpConfig`** (section `ark_oauth_server:Mcp`, see [MCP.md](MCP.md)):
+
+| Property | Default | Notes |
+|---|---|---|
+| `Enabled` | `true` | Every MCP endpoint, its metadata, and `resource` handling for them. |
+| `HostLevel`, `TenantLevel`, `ClientLevel` | `true` | `/ark-idp/mcp` (setup included), `/{tenant}/mcp`, `/{tenant}/mcp/{client_id}`. |
+| `ReadOnly` | `false` | Only the tools that look. Setup is not affected. |
+| `AllowClientSecret` | `true` | `Authorization: Basic` with the machine client's or the application's own secret. |
+| `MaxRequestKilobytes` | `1536` | Largest request body. |
+
 `ArkClient.is_agent` (`bool?`, column `clients.is_agent`) marks a client as an agent for the console
 badge and the audit trail. A label only; null on a save keeps the stored value.
 
@@ -185,6 +195,10 @@ Built by `Protocol.ArkOidcEndpoints`. All advertised in discovery.
 | Pushed authorization request | `/oauth2/par` (RFC 9126) |
 | Dynamic registration | `/oauth2/register` (RFC 7591/7592; only if enabled) |
 | Agent Card security (A2A) | `/a2a/agent-card-security` — `securitySchemes` + `securityRequirements` (A2A 1.0), `?spec=0.3` for `securitySchemes` + `security`; public, 404 when `EnableA2A` is off |
+| MCP, tenant level | `POST /mcp`; `GET /mcp/server-card`, `GET /mcp/config` — see [MCP.md](MCP.md) |
+| MCP, one application | `POST /mcp/{client_id}`; the same two documents beside it |
+| MCP, host level and setup | `POST {BaseUrl}/ark-idp/mcp`; the same two documents beside it |
+| Protected resource metadata (RFC 9728) | `{BaseUrl}/.well-known/oauth-protected-resource/{tenant}/mcp[/{client_id}]`, `…/ark-idp/mcp` |
 | Client setup page | `/oauth2/integrate/{client_id}` |
 
 **Discovery advertises** (verified in `OidcDiscoveryController`):

@@ -75,6 +75,11 @@ namespace Ark.oAuth
         public DateTime expires_at { get; set; }
         public DateTime created_at { get; set; } = DateTime.UtcNow;
         public bool consumed { get; set; }
+        /// <summary>
+        /// The MCP endpoint of this server the grant was made for (RFC 8707), which becomes the
+        /// audience of every access token that comes of it. Null for every other grant.
+        /// </summary>
+        public string? resource { get; set; }
     }
 
     /// <summary>
@@ -105,6 +110,11 @@ namespace Ark.oAuth
         public DateTime created_at { get; set; } = DateTime.UtcNow;
         public DateTime? consumed_at { get; set; }
         public bool revoked { get; set; }
+        /// <summary>
+        /// The MCP endpoint of this server the grant was made for (RFC 8707), which becomes the
+        /// audience of every access token that comes of it. Null for every other grant.
+        /// </summary>
+        public string? resource { get; set; }
     }
 
     /// <summary>Device authorization grant state (RFC 8628).</summary>
@@ -128,6 +138,11 @@ namespace Ark.oAuth
         public DateTime expires_at { get; set; }
         public DateTime created_at { get; set; } = DateTime.UtcNow;
         public DateTime? last_polled_at { get; set; }
+        /// <summary>
+        /// The MCP endpoint of this server the grant was made for (RFC 8707), which becomes the
+        /// audience of every access token that comes of it. Null for every other grant.
+        /// </summary>
+        public string? resource { get; set; }
     }
 
     /// <summary>A pushed authorization request (RFC 9126). Holds the parameter set until /authorize claims it.</summary>

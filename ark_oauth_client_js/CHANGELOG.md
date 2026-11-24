@@ -2,6 +2,12 @@
 
 ## Next release
 
+No change to this package. In this release the provider, `Ark.oAuth.Oidc`, is itself an MCP server, with
+which an agent sets it up and administers it. Nothing a client sees changes, and the two can be upgraded in
+either order.
+
+## 2.4.2
+
 No change to this package. The provider and the three server-side clients gain agent-to-agent (A2A)
 tokens in this release. A browser application is a public client and cannot be an agent, because
 nothing authenticates it. Its back end is the agent, and it uses `ark-oauth-client-node`,
