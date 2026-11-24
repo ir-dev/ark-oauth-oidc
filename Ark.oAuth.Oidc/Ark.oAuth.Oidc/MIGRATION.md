@@ -29,7 +29,9 @@
   under EF Core 9 opens as it is.
 
 > **Release-note headings:** the `PackageReleaseNotes` are headed by the version a change first
-> shipped in, newest first, and every later release carries it. Before 2.3.0 some entries were headed
+> shipped in, newest first, and every later release carries it, except that after 2.4.1 the entries
+> for 2.0.3 and earlier are dropped (nuget.org takes 35,000 characters at most; 2.4.1 has them in
+> full). Before 2.3.0 some entries were headed
 > "Next release" or "Earlier"; they now carry the version that shipped them (2.0.14, 2.1.3, 2.1.6).
 > Treat the shipped assembly and the schema scripts on disk as the source of truth.
 

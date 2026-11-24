@@ -257,6 +257,15 @@ jobs:
             leaked=$(unzip -l "$id.$VERSION.nupkg" | grep -icE "content/|contentFiles/|staticwebassets" || true)
             [ "$leaked" = 0 ] || { echo "::error::$id ships $leaked content entries"; exit 1; }
             unzip -l "$id.$VERSION.nupkg" | grep -q " README.md$" || { echo "::error::$id has no README"; exit 1; }
+            # nuget.org answers 400 to notes over 35,000 characters, and only at the push, by which
+            # time the other registries have taken the version for good (2.4.2, 2026-11-24).
+            notes=$(unzip -p "$id.$VERSION.nupkg" "$id.nuspec" | python3 -c '
+          import sys, xml.etree.ElementTree as ET
+          root = ET.fromstring(sys.stdin.buffer.read())
+          text = next((e.text or "" for e in root.iter() if e.tag.endswith("}releaseNotes")), "")
+          print(len(text.encode("utf-16-le")) // 2)')
+            echo "$id: release notes are $notes of 35000 characters"
+            [ "$notes" -le 35000 ] || { echo "::error::$id has $notes characters of <PackageReleaseNotes> and nuget.org takes 35000. Drop the oldest entries."; exit 1; }
           done
           [ "$(ls | wc -l)" = 4 ] || { echo "::error::expected exactly 4 files"; exit 1; }
 
