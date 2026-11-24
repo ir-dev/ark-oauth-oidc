@@ -43,7 +43,7 @@
 		<Product>Ark Identity Server</Product>
 		<Copyright>Copyright © 2022-2026 Immanuel</Copyright>
 		<PackageTags>oauth oauth2 oauth2.1 oidc openid openid-connect oauth2-client oidc-client identity authentication authorization jwt pkce sso single-sign-on aspnetcore security</PackageTags>
-		<PackageProjectUrl>https://github.com/ir-dev/ark-oauth-oidc</PackageProjectUrl>
+		<PackageProjectUrl>https://ir-dev.github.io/ark-oauth-oidc/#quickstart</PackageProjectUrl>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
 		<PackageIcon>ark_logo.png</PackageIcon>

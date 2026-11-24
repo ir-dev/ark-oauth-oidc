@@ -10,6 +10,8 @@ Built for [`Ark.oAuth.Oidc`](https://www.nuget.org/packages/Ark.oAuth.Oidc), but
 stock handler underneath, changing `Authority` and `ClientId` is enough to point the same
 application at Entra ID, Okta, Auth0 or Keycloak.
 
+**Project website:** <https://ir-dev.github.io/ark-oauth-oidc/#quickstart>
+
 > **For AI coding agents** — prompt-oriented, source-verified docs live beside this README:
 > [`AI-PROMPT.md`](AI-PROMPT.md) (rules + capability map + injectable context block),
 > [`AI-RECIPES.md`](AI-RECIPES.md) (task → code recipes), [`API-GUIDE.md`](API-GUIDE.md) (exact
@@ -249,6 +251,8 @@ migrating off the v1 endpoints. It does not validate `state` or `nonce` — trea
 aid, not a supported configuration.
 
 ## Documentation
+
+The quick start is on the project website: <https://ir-dev.github.io/ark-oauth-oidc/#quickstart>.
 
 A complete, runnable client application and the full walkthrough are in the repository:
 <https://github.com/ir-dev/ark-oauth-oidc>

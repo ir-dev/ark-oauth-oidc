@@ -7,6 +7,8 @@ discovery document.
 Multi-tenant, runs on SQLite / MySQL / PostgreSQL / SQL Server, and ships its own sign-in, consent
 and admin UI. The matching client package is [`Ark.oAuth.Client`](https://www.nuget.org/packages/Ark.oAuth.Client).
 
+**Project website:** <https://ir-dev.github.io/ark-oauth-oidc/>
+
 > **For AI coding agents** — prompt-oriented, source-verified docs live beside this README:
 > [`AI-PROMPT.md`](AI-PROMPT.md) (rules + capability map + injectable context block),
 > [`AI-RECIPES.md`](AI-RECIPES.md) (task → code recipes), [`API-GUIDE.md`](API-GUIDE.md) (host APIs,
@@ -809,6 +811,8 @@ off the request path, and is kept for ever unless `AuditRetentionDays` says othe
    `Management:AllowMigrationEndpoint` off.
 
 ## Documentation
+
+The project website is <https://ir-dev.github.io/ark-oauth-oidc/>.
 
 Full documentation, flow walkthroughs, the configuration reference and the v1 migration guide are
 in the repository: <https://github.com/ir-dev/ark-oauth-oidc>
