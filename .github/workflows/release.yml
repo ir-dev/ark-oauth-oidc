@@ -510,8 +510,11 @@ jobs:
     environment: release
     permissions:
       id-token: write
+    outputs:
+      already: ${{ steps.publish.outputs.already }}
     env:
       PACKAGE: ark-oauth-client-node
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -538,12 +541,28 @@ jobs:
       # Trusted Publishing needs npm 11.5.1 or later; provenance is attached automatically. npm's
       # own reason is raised as an annotation, because raw logs need auth to read. The tarball is
       # given as ./npm/...: a bare npm/x.tgz is read as the GitHub shorthand owner/repo, which
-      # current npm refuses with EALLOWGIT.
+      # current npm refuses with EALLOWGIT. npm shows a version some minutes after accepting it (four,
+      # for 2.4.2), so a run started in between is told by prepare that it is not there and is then
+      # refused here as a duplicate: that is a package already live, not a failure.
       - name: Publish
+        id: publish
         run: |
           set -o pipefail
           npm install -g npm@latest
           if ! npm publish ./npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
+            if grep -qi 'cannot publish over the previously published version' "$RUNNER_TEMP/npm.log"; then
+              for _ in $(seq 40); do
+                code=$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$PACKAGE/$VERSION") || code=000
+                if [ "$code" = 200 ]; then
+                  echo "::notice::$PACKAGE $VERSION was already on npm: an earlier run published it, and npm did not show it yet when this run started."
+                  echo "already=true" >> "$GITHUB_OUTPUT"
+                  exit 0
+                fi
+                sleep 15
+              done
+              echo "::error::npm refuses $PACKAGE $VERSION as already published, but does not serve it after 10 minutes. Look at the package on npmjs.com: a version that was unpublished cannot be used again."
+              exit 1
+            fi
             reason=$(grep -m1 -E 'npm (error|ERR!) (code |404|403|401)|ENEEDAUTH|E40[134]' "$RUNNER_TEMP/npm.log" || true)
             echo "::error::npm publish of $PACKAGE failed: ${reason:-see the job log}. The package exists (the step above checked), so E404 on the PUT means no trusted publisher on npmjs.com matched this run and npm went on without credentials: add or correct the one for $PACKAGE with owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release. E403 'OIDC permission denied for this action' means it matched but 'npm publish' is not ticked under Allowed actions (publishers created after 2026-09-03 allow only 'npm stage publish'). The OIDC token is minted per attempt, so 'Re-run failed jobs' picks up a fix made on npmjs.com."
             exit 1
@@ -556,8 +575,11 @@ jobs:
     environment: release
     permissions:
       id-token: write
+    outputs:
+      already: ${{ steps.publish.outputs.already }}
     env:
       PACKAGE: ark-oauth-client-js
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -582,10 +604,24 @@ jobs:
       # As in publish-npm-node. The tarball already holds dist/: publishing a tarball runs no
       # prepack, so what was verified in build-js is exactly what ships.
       - name: Publish
+        id: publish
         run: |
           set -o pipefail
           npm install -g npm@latest
           if ! npm publish ./npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
+            if grep -qi 'cannot publish over the previously published version' "$RUNNER_TEMP/npm.log"; then
+              for _ in $(seq 40); do
+                code=$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$PACKAGE/$VERSION") || code=000
+                if [ "$code" = 200 ]; then
+                  echo "::notice::$PACKAGE $VERSION was already on npm: an earlier run published it, and npm did not show it yet when this run started."
+                  echo "already=true" >> "$GITHUB_OUTPUT"
+                  exit 0
+                fi
+                sleep 15
+              done
+              echo "::error::npm refuses $PACKAGE $VERSION as already published, but does not serve it after 10 minutes. Look at the package on npmjs.com: a version that was unpublished cannot be used again."
+              exit 1
+            fi
             reason=$(grep -m1 -E 'npm (error|ERR!) (code |404|403|401)|ENEEDAUTH|E40[134]' "$RUNNER_TEMP/npm.log" || true)
             echo "::error::npm publish of $PACKAGE failed: ${reason:-see the job log}. The package exists (the step above checked), so E404 on the PUT means no trusted publisher on npmjs.com matched this run and npm went on without credentials: add or correct the one for $PACKAGE with owner ir-dev, repository ark-oauth-oidc, workflow release.yml, environment release. E403 'OIDC permission denied for this action' means it matched but 'npm publish' is not ticked under Allowed actions (publishers created after 2026-09-03 allow only 'npm stage publish'). The OIDC token is minted per attempt, so 'Re-run failed jobs' picks up a fix made on npmjs.com."
             exit 1
@@ -604,8 +640,8 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
       NUGET_LIVE: ${{ needs.prepare.outputs.nuget_live }}
       PYPI_LIVE: ${{ needs.prepare.outputs.pypi_live }}
-      NPM_NODE_LIVE: ${{ needs.prepare.outputs.npm_node_live }}
-      NPM_JS_LIVE: ${{ needs.prepare.outputs.npm_js_live }}
+      NPM_NODE_LIVE: ${{ needs.prepare.outputs.npm_node_live == 'true' || needs.publish-npm-node.outputs.already == 'true' }}
+      NPM_JS_LIVE: ${{ needs.prepare.outputs.npm_js_live == 'true' || needs.publish-npm-js.outputs.already == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
