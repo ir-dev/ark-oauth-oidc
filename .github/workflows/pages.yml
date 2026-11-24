@@ -17,26 +17,71 @@ on:
     paths: ["site/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# Each job asks for what it needs, below.
+permissions: {}
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: read      # configure-pages reads the Pages settings
+    outputs:
+      # Named after the attempt, and handed to the deploy job rather than rebuilt there: deploy-pages
+      # sees the artifacts of every attempt of a run and refuses two with one name. "Re-run all jobs"
+      # uploads a new name; "Re-run failed jobs" still deploys the one already uploaded.
+      artifact: github-pages-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
+          name: github-pages-${{ github.run_attempt }}
           path: site
-      - id: deployment
+
+  # Three attempts, because deploy-pages looks the artifact up once and gives up, and an artifact that
+  # has just been uploaded is sometimes not listed yet: 'No artifacts named "github-pages" were found'
+  # (https://github.com/actions/deploy-pages/issues/451). A fixed sleep before it is not enough. When
+  # a release of deploy-pages retries the lookup itself (pull request 455), one attempt will do.
+  # A run that needed a second attempt is green and still shows the first one's error.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write     # create the deployment
+      id-token: write  # prove to Pages which workflow is deploying
+    environment:
+      name: github-pages
+      url: ${{ steps.first.outputs.page_url || steps.second.outputs.page_url || steps.third.outputs.page_url }}
+    steps:
+      - id: first
+        name: Deploy
+        continue-on-error: true
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        with:
+          artifact_name: ${{ needs.build.outputs.artifact }}
+
+      - name: Wait 20 seconds
+        if: steps.first.outcome == 'failure'
+        run: sleep 20
+      - id: second
+        name: Deploy (second attempt)
+        if: steps.first.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        with:
+          artifact_name: ${{ needs.build.outputs.artifact }}
+
+      - name: Wait 60 seconds
+        if: steps.second.outcome == 'failure'
+        run: sleep 60
+      - id: third
+        name: Deploy (last attempt)
+        if: steps.second.outcome == 'failure'
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+        with:
+          artifact_name: ${{ needs.build.outputs.artifact }}
