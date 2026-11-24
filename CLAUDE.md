@@ -113,12 +113,14 @@ These apply in every language and are the source of most "it just says the passw
 * **Releases go through `.github/workflows/release.yml`** (manual dispatch): all five packages at
   one version, Trusted Publishing on every registry, then a `vX.Y.Z` GitHub release. The two npm
   packages are separate libraries with separate jobs and separate trusted publishers
-  (`build-node`/`publish-npm-node`, `build-js`/`publish-npm-js`). Type the
-  version into the run and it is stamped into every manifest on the runner (nothing committed);
-  leave it blank and the run fails unless every committed manifest agrees, including the Python
-  `__version__` and the browser client's `src/version.js`, which hold the version as literals (the
-  Python one has drifted from `pyproject.toml` more than once). Bump locally with
-  `scripts/version.sh set X.Y.Z`, never by hand. Plain `X.Y.Z` only: npm rejects a fourth number.
+  (`build-node`/`publish-npm-node`, `build-js`/`publish-npm-js`). The version is automatic
+  (`scripts/version.sh next`): the highest `vX.Y.Z` tag with the patch number raised, or minor or
+  major if the run asks; typing an exact version overrides it. Each runner stamps it into every
+  manifest and over the "Next release" heading of the notes (`scripts/version.sh stamp`), and
+  nothing is committed, so git lags until `stamp X.Y.Z` is run locally and committed. Do that
+  before writing notes for the release after. Change versions with `set` or `stamp`, never by hand:
+  the Python `__version__` and the browser client's `src/version.js` hold the version as literals,
+  and the Python one has drifted more than once. Plain `X.Y.Z` only: npm rejects a fourth number.
 * **Tests:** `pytest` in `ark_oauth_client_py` (142 tests), `npm test` in
   `ark_oauth_client_nodejs`, and `npm ci && npm test && npm run typecheck` in `ark_oauth_client_js`.
   All run against a stub IdP (`tests/stub_idp.py`, `test/stub-idp.js`)

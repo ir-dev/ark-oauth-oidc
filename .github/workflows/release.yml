@@ -11,20 +11,31 @@
 # being live already (or failing) says nothing about the other.
 #
 # HOW TO RELEASE
-#   1. Write the notes (CHANGELOG.md, <PackageReleaseNotes>), commit and push.
-#   2. Actions -> Release -> Run workflow, on that branch, typing the version to release.
-#      Tick "dry run" to build and test without publishing.
+#   1. Write the notes under "Next release" (the heading in each CHANGELOG.md, the first line of
+#      the entry in each <PackageReleaseNotes>), commit and push.
+#   2. Actions -> Release -> Run workflow, on that branch. Nothing needs typing: the run takes
+#      the next version by itself. Tick "dry run" to build and test without publishing.
 #
-# The version is either typed into the run or, left blank, read from the manifests:
-#   typed  `scripts/version.sh set X.Y.Z` stamps it into every csproj, pyproject.toml,
-#          __init__.py and package.json on each runner before building. Nothing is committed,
-#          so the manifests in git may lag the release; the tag and the GitHub release record it.
-#   blank  `scripts/version.sh check` fails the run unless every manifest already agrees.
-# Either way a version is consumed only by a registry accepting it, so a failed run, a dry run
-# or a re-run burns nothing. A registry that
+# The version is worked out by the run, unless one is typed into it:
+#   automatic  `scripts/version.sh next <bump>`: the highest vX.Y.Z tag with one part raised,
+#              the patch number unless the run asks for minor or major (2.4.1 -> 2.4.2, 2.5.0 or
+#              3.0.0). Manifests somebody has already set past that are released as they stand.
+#              A commit that is already released is refused, so a second click or "Re-run all
+#              jobs" does not publish the same code again under the next number.
+#   typed      exactly that version, whatever the tags and the manifests say.
+# `scripts/version.sh stamp X.Y.Z` then writes it into every csproj, pyproject.toml, __init__.py
+# and package.json, and over the "Next release" heading of the notes, on each runner before
+# building. Nothing is committed, so git describes the release before this one until the same
+# `stamp` is run locally and committed (the run's summary says when that is owed). Do it before
+# writing notes for the release after: notes left under "Next release" are released again under
+# the next number. The tag and the GitHub release are the record of what went out.
+#
+# A version is consumed only by a registry accepting it, so a failed run, a dry run or a re-run
+# burns nothing: the tag is what raises the next number, and it comes last. A registry that
 # already has the version is skipped, not failed, so a half-finished release can be finished by
-# re-running ("Re-run failed jobs" reuses the artifacts already built and published). The tag
-# vX.Y.Z is created by the GitHub release, LAST, so a tag never names something unpublished.
+# re-running ("Re-run failed jobs" reuses the artifacts already built and published) or by a new
+# run, which works out the same number. The tag vX.Y.Z is created by the GitHub release, LAST,
+# so a tag never names something unpublished.
 #
 # ONE-TIME SETUP -- no tokens anywhere; all three registries use Trusted Publishing (OIDC).
 # Every registry is given the same four values: owner ir-dev, repository ark-oauth-oidc,
@@ -49,8 +60,13 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      bump:
+        description: "Automatic version: the part of the last release's number to raise. Ignored when a version is typed below."
+        type: choice
+        options: [patch, minor, major]
+        default: patch
       version:
-        description: "Version to release, X.Y.Z (optional). Stamped into every package for this run; blank = what the manifests say."
+        description: "Exact version to release instead, X.Y.Z (optional). Blank = automatic."
         required: false
         default: ""
       dry_run:
@@ -81,7 +97,8 @@ jobs:
         id: version
         env:
           REQUESTED: ${{ inputs.version }}
-        # A typed version is stamped here too, so a bad one (not X.Y.Z, or a manifest the stamp
+          BUMP: ${{ inputs.bump }}
+        # The version is stamped here too, so a bad one (not X.Y.Z, or a manifest the stamp
         # cannot find) fails before anything builds; the build jobs repeat the stamp on their own
         # checkout. Assign rather than `echo "...$(cmd)"`, which swallows a failing check's exit
         # code and hands every later job an empty VERSION. The script's own reason is raised as
@@ -89,30 +106,53 @@ jobs:
         run: |
           fail() {
             cat "$RUNNER_TEMP/version.err" >&2
-            reason=$(grep '^error:\|^no match' "$RUNNER_TEMP/version.err" | head -1 | sed 's/^error: //')
-            echo "::error::${reason:-$1} (input was '$REQUESTED')"
+            reason=$(grep '^error:\|^no match\|^usage:' "$RUNNER_TEMP/version.err" | head -1 | sed 's/^error: //')
+            echo "::error::${reason:-$1} (version input was '$REQUESTED', bump '$BUMP')"
             exit 1
           }
           requested=$(printf '%s' "$REQUESTED" | tr -d '[:space:]')
           requested=${requested#v}
-          if [ -n "$requested" ]; then
-            scripts/version.sh set "$requested" 2>"$RUNNER_TEMP/version.err" || fail "scripts/version.sh set failed"
+          how="typed into the run"
+          if [ -z "$requested" ]; then
+            requested=$(scripts/version.sh next "${BUMP:-patch}" 2>"$RUNNER_TEMP/version.err") || fail "scripts/version.sh next failed"
+            cat "$RUNNER_TEMP/version.err" >&2
+            # Without the tags the last release is unknown, and a guess here is a version number
+            # spent on five registries.
+            if grep -q '^warning: origin cannot be reached' "$RUNNER_TEMP/version.err"; then
+              echo "::error::The tags on origin could not be listed, so the last release is unknown. Run again, or type the version."
+              exit 1
+            fi
+            how=$(sed -n 's/^next: [^ ]* (\(.*\))$/automatic, \1/p' "$RUNNER_TEMP/version.err")
           fi
+          scripts/version.sh stamp "$requested" 2>"$RUNNER_TEMP/version.err" || fail "scripts/version.sh stamp failed"
           version=$(scripts/version.sh check "$requested" 2>"$RUNNER_TEMP/version.err") || fail "scripts/version.sh check failed"
           cat "$RUNNER_TEMP/version.err" >&2
           [ -n "$version" ] || { echo "::error::scripts/version.sh check printed no version"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "how=$how" >> "$GITHUB_OUTPUT"
 
       - name: Not released yet
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
+          REQUESTED: ${{ inputs.version }}
           DRY_RUN: ${{ inputs.dry_run }}
+        # An automatic version is always a free one, so it cannot stop "Re-run all jobs" or a second
+        # click from releasing one commit twice. The tags do: a released commit carries one.
         run: |
           tag="v$VERSION"
           problem=""
-          if gh release view "$tag" >/dev/null 2>&1; then
-            problem="GitHub release $tag already exists. Bump with scripts/version.sh set."
+          if [ -z "$(printf '%s' "$REQUESTED" | tr -d '[:space:]')" ]; then
+            tags=$(git ls-remote --tags origin 'v*')
+            done_as=$(printf '%s\n' "$tags" | sed -nE "s#^$GITHUB_SHA[[:space:]]+refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)(\^\{\})?\$#\1#p" | tail -1)
+            if [ -n "$done_as" ]; then
+              problem="This commit is already released as $done_as, so there is nothing new to release. To release it again anyway, type a version."
+            fi
+          fi
+          if [ -n "$problem" ]; then
+            :
+          elif gh release view "$tag" >/dev/null 2>&1; then
+            problem="GitHub release $tag already exists. Leave the version blank to release the one after the last."
           else
             at=$(git ls-remote origin "refs/tags/$tag^{}" "refs/tags/$tag" | head -1 | cut -f1)
             if [ -n "$at" ] && [ "$at" != "$GITHUB_SHA" ]; then
@@ -130,6 +170,7 @@ jobs:
         id: live
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          HOW: ${{ steps.version.outputs.how }}
         run: |
           # 200 -> true, 404 -> false, anything else stops the run rather than guessing.
           live() {
@@ -161,6 +202,8 @@ jobs:
           {
             echo "### Release $VERSION from \`${GITHUB_SHA::7}\` ($GITHUB_REF_NAME)"
             echo
+            echo "Version: $HOW."
+            echo
             echo "| Package | Already on the registry? |"
             echo "|---|---|"
             echo "| NuGet Ark.oAuth.Oidc | $oidc |"
@@ -180,10 +223,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The version decided by prepare, into every manifest on this runner. A no-op when the
-      # manifests already say it.
+      # The version decided by prepare, into every manifest on this runner and over the "Next
+      # release" heading of the notes that ship in the package. A no-op when git already says it.
       - name: Stamp the version
-        run: scripts/version.sh set "$VERSION"
+        run: scripts/version.sh stamp "$VERSION"
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -234,10 +277,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # As in build-dotnet. Before setup-uv, so `set` skips refreshing the gitignored uv.lock.
+      # As in build-dotnet. Before setup-uv, so `stamp` skips refreshing the gitignored uv.lock.
       - name: Stamp the version
         working-directory: .
-        run: scripts/version.sh set "$VERSION"
+        run: scripts/version.sh stamp "$VERSION"
 
       # uv.lock is gitignored, so the cache keys on pyproject.toml.
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
@@ -293,7 +336,7 @@ jobs:
       # As in build-dotnet.
       - name: Stamp the version
         working-directory: .
-        run: scripts/version.sh set "$VERSION"
+        run: scripts/version.sh stamp "$VERSION"
 
       # No runtime dependencies, so nothing to install before testing.
       - name: Test
@@ -334,7 +377,7 @@ jobs:
       # sees a lock file that agrees with package.json.
       - name: Stamp the version
         working-directory: .
-        run: scripts/version.sh set "$VERSION"
+        run: scripts/version.sh stamp "$VERSION"
 
       # Dev dependencies only: the React, Vue and Angular adapter tests, the typecheck and the
       # dist/ build. The package itself has no runtime dependencies.
@@ -557,6 +600,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # As in build-dotnet: the release notes below quote each changelog's entry for this
+      # version, which in git may still be headed "Next release".
+      - name: Stamp the version
+        run: scripts/version.sh stamp "$VERSION"
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: built
@@ -624,3 +672,14 @@ jobs:
             --notes-file notes.md \
             --generate-notes
           echo "Released [v$VERSION]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/v$VERSION)" >> "$GITHUB_STEP_SUMMARY"
+          # The stamp above changed tracked files, so git does not say this version yet.
+          if ! git diff --quiet; then
+            {
+              echo
+              echo "Git still describes the release before this one. Record $VERSION there before writing notes for the next release, or they are released again under the next number:"
+              echo
+              echo '```'
+              echo "scripts/version.sh stamp $VERSION    # then commit and push"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -7,10 +7,13 @@
 FROM CI INSTEAD  (the preferred path now)
 --------------------------------------------------------------------------------
   .github/workflows/release.yml does STEPS 1 and 3-8 for both NuGet packages,
-  and for PyPI and npm at the same version: scripts/version.sh set X.Y.Z,
-  commit, push, then Actions -> Release -> Run workflow. It pushes with NuGet
-  Trusted Publishing (NuGet/login, a key that lives an hour), so STEP 0's API
-  key is not needed. One-time setup is in the workflow's header comment.
+  and for PyPI and npm at the same version: commit, push, then Actions ->
+  Release -> Run workflow. Nothing needs typing: the version is the last
+  release's with the patch number raised (choose minor or major in the run, or
+  type an exact X.Y.Z). It pushes with NuGet Trusted Publishing (NuGet/login, a
+  key that lives an hour), so STEP 0's API key is not needed. One-time setup is
+  in the workflow's header comment. The run commits nothing: afterwards run
+  scripts/version.sh stamp X.Y.Z with the released version and commit that.
 
   Two things it does differently from the steps below, on purpose:
   * restore uses --source nuget.org, because Ark.oAuth.Oidc/nuget.config adds

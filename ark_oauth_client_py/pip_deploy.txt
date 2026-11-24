@@ -644,9 +644,11 @@ PATHS
      required reviewer to get a click before anything is published).
 
   3. Release:
-        scripts/version.sh set 2.0.15          # every manifest, incl. __version__
-        # write the CHANGELOG.md entry, commit, push
-        # Actions -> Release -> Run workflow (tick "dry run" to rehearse)
+        # write the CHANGELOG.md entry under "## Next release", commit, push
+        # Actions -> Release -> Run workflow (tick "dry run" to rehearse). The
+        # version is automatic: the last release's, with the patch number raised.
+        # Afterwards, to record the released version in git:
+        scripts/version.sh stamp X.Y.Z         # every manifest, incl. __version__
 
   What the workflow does for this package: pytest, uv build, twine check, the
   STEP 5e test against the INSTALLED wheel, a check that the wheel's

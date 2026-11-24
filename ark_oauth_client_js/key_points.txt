@@ -3,7 +3,8 @@ ark-oauth-client-js  --  npm publish, key points
 
 --- republish (after the first publish): the release workflow
 
-    GitHub -> Actions -> Release -> Run workflow, typing X.Y.Z.
+    GitHub -> Actions -> Release -> Run workflow. The version is automatic (the
+    last release's, with the patch number raised); type X.Y.Z only to override.
     Jobs build-js -> publish-npm-js release this package, separately from the
     Node client (build-node -> publish-npm-node), at the same version as the
     others. Tick "dry run" to build, test and verify without publishing.
