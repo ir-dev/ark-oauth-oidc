@@ -150,6 +150,28 @@ namespace Ark.oAuth.Oidc.Controllers
             return View();
         }
 
+        /// <summary>
+        /// Every MCP endpoint of this server, to look through and open: the host's, one per tenant
+        /// and one per application (see <see cref="global::Ark.oAuth.Oidc.Mcp.ArkMcpDirectory"/>).
+        ///
+        /// Operator only, because it names every tenant and application on the server. Answers 404
+        /// when MCP is switched off (<c>Mcp:Enabled</c>), as the endpoints themselves do.
+        /// </summary>
+        [HttpGet("/{tenant_id}/admin/mcp")]
+        public async Task<IActionResult> Mcp([FromRoute] string tenant_id)
+        {
+            var tenant = await _da.GetTenant(tenant_id);
+            if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
+            if (!McpEnabled) return NotFound();
+            if (!IsOperator())
+                return StatusCode(403, "The list of MCP endpoints is restricted to the administrator account.");
+
+            BuildConsoleView(tenant, "mcp");
+            return View();
+        }
+
+        private bool McpEnabled => global::Ark.oAuth.Oidc.Mcp.ArkMcpDirectory.Any(ServerConfig.Mcp);
+
         /// <summary>Whether the host registered the webhook module (<c>AddArkWebhooks()</c>).</summary>
         private bool WebhooksEnabled =>
             HttpContext.RequestServices.GetService(typeof(global::Ark.oAuth.Oidc.Webhooks.ArkWebhookRegistry)) != null;
@@ -219,6 +241,8 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.DataToolsEnabled = DataToolsEnabled;
             ViewBag.WebhooksUrl = $"{appRoot}/{tenant.tenant_id}/admin/webhooks";
             ViewBag.WebhooksEnabled = WebhooksEnabled;
+            ViewBag.McpUrl = $"{appRoot}/{tenant.tenant_id}/admin/mcp";
+            ViewBag.McpEnabled = McpEnabled;
         }
 
         /// <summary>Whether the signed-in principal is the operator account — see <see cref="ArkOperator"/>.</summary>

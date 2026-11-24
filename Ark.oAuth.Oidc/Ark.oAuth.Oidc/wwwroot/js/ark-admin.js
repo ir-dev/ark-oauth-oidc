@@ -17,9 +17,9 @@
      * No third-party helper libraries. Tabulator is the single external
        dependency, pinned; the toast and DOM helpers below are ~20 lines.
 
-   One script, three pages. The console (/{tenant}/admin), the provisioning page
-   (/{tenant}/admin/provisioning) and the data page (/{tenant}/admin/data) share
-   it, and none of them draws all of it, so every
+   One script, four pages. The console (/{tenant}/admin), the provisioning page
+   (/{tenant}/admin/provisioning), the MCP page (/{tenant}/admin/mcp) and the data
+   page (/{tenant}/admin/data) share it, and none of them draws all of it, so every
    section here is wired only when the elements it drives are actually present —
    see byId/on/fillSelect below. A section that binds blindly throws on the page
    that does not have it, which stops the script before the sections that page
@@ -1620,23 +1620,26 @@
         }).catch(function () { });
     });
 
-    on("cu-copy", "click", function () {
-        var text = byId("cu-out").textContent;
+    /** Copies what an element says; `what` names it in the toast. */
+    function copyFrom(element, what) {
+        var text = element.textContent;
         if (!text) return;
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(
-                function () { toast("s", "command copied", 2500); },
+                function () { toast("s", what + " copied", 2500); },
                 function () { toast("f", "the browser refused clipboard access - select and copy it by hand", 5000); });
             return;
         }
         // No clipboard API without a secure context; selecting it is the next best thing.
         var range = document.createRange();
-        range.selectNodeContents(byId("cu-out"));
+        range.selectNodeContents(element);
         var selection = window.getSelection();
         selection.removeAllRanges();
         selection.addRange(range);
-        toast("w", "this browser exposes no clipboard here - the command is selected, copy it", 5000);
-    });
+        toast("w", "this browser exposes no clipboard here - the " + what + " is selected, copy it", 5000);
+    }
+
+    on("cu-copy", "click", function () { copyFrom(byId("cu-out"), "command"); });
 
     // Every field on the page feeds one of the two requests, so the preview follows the whole
     // form rather than a list of ids that would have to be kept in step with the markup.
@@ -2237,6 +2240,94 @@
             });
     });
 
+    // --------------------------------------------------------- mcp endpoints
+
+    /*
+     * The MCP page (/{tenant}/admin/mcp). Names come from dynamic registration and provisioning,
+     * so they reach the page through textContent only.
+     */
+    var MCP_LEVELS = { host: "Host", tenant: "Tenant", client: "Client" };
+    var mcpEndpoints = [];
+
+    function loadMcp() {
+        return getJson(API + "/mcp/endpoints").then(function (res) {
+            if (res.error) throw new Error(res.msg);
+            mcpEndpoints = res.data.endpoints || [];
+
+            var seen = {};
+            fillSelect("mcp-tenant", mcpEndpoints.filter(function (e) {
+                if (!e.tenant_id || seen[e.tenant_id]) return false;
+                return (seen[e.tenant_id] = true);
+            }).map(function (e) { return { value: e.tenant_id, label: e.tenant_id }; }), "", "All tenants");
+
+            var off = Object.keys(MCP_LEVELS).filter(function (level) { return !res.data.levels[level]; });
+            byId("mcp-off").textContent = off.length
+                ? "Switched off on this server, so not listed: " +
+                  off.map(function (level) { return "Mcp:" + MCP_LEVELS[level] + "Level"; }).join(", ") + "."
+                : "";
+            renderMcp();
+        });
+    }
+
+    function renderMcp() {
+        var body = byId("mcp-rows");
+        if (!body) return;
+        var words = byId("mcp-search").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        var tenant = byId("mcp-tenant").value;
+        var level = byId("mcp-level").value;
+        var shown = mcpEndpoints.filter(function (e) {
+            if (tenant && e.tenant_id !== tenant) return false;
+            if (level && e.level !== level) return false;
+            var text = [e.name, e.tenant_id, e.client_id, e.url].join(" ").toLowerCase();
+            return words.every(function (w) { return text.indexOf(w) > -1; });
+        });
+
+        byId("mcp-count").textContent = shown.length === mcpEndpoints.length
+            ? mcpEndpoints.length + (mcpEndpoints.length === 1 ? " endpoint" : " endpoints")
+            : shown.length + " of " + mcpEndpoints.length + " endpoints";
+
+        body.textContent = "";
+        shown.forEach(function (e) { body.appendChild(mcpRow(e)); });
+        if (!shown.length) {
+            var cell = node("td");
+            cell.colSpan = 4;
+            cell.appendChild(node("p", "ark-empty", mcpEndpoints.length ? "No endpoint matches." : "No MCP endpoints."));
+            body.appendChild(node("tr")).appendChild(cell);
+        }
+    }
+
+    function mcpRow(e) {
+        var row = node("tr");
+        row.appendChild(node("td")).appendChild(
+            node("span", "ark-badge " + (e.level === "host" ? "ark-badge-agent" : "ark-badge-off"), MCP_LEVELS[e.level]));
+
+        var name = row.appendChild(node("td"));
+        name.appendChild(node("div", null, e.name + " "));
+        if (e.client_id || e.tenant_id) name.appendChild(node("div", "ark-note", e.client_id || e.tenant_id));
+        if (!e.is_active) name.firstChild.appendChild(node("span", "ark-badge ark-badge-warn", "inactive"));
+
+        var address = row.appendChild(node("td")).appendChild(node("div", "ark-mcp-address"));
+        var code = address.appendChild(node("code", null, e.url));
+        var copy = address.appendChild(node("button", "ark-btn-ghost ark-btn-sm", "Copy"));
+        copy.type = "button";
+        copy.setAttribute("aria-label", "Copy the address of " + e.name);
+        copy.addEventListener("click", function () { copyFrom(code, "address"); });
+
+        var links = row.appendChild(node("td")).appendChild(node("div", "ark-mcp-links"));
+        [["Server card", e.server_card], ["Configuration", e.config], ["Metadata", e.resource_metadata]].forEach(function (d) {
+            var a = links.appendChild(node("a", null, d[0] + " \u2197"));
+            a.href = d[1];
+            a.target = "_blank";
+            a.rel = "noopener";
+            a.setAttribute("aria-label", d[0] + " of " + e.name + ", opens in a new tab");
+        });
+        return row;
+    }
+
+    on("mcp-search", "input", renderMcp);
+    on("mcp-tenant", "change", renderMcp);
+    on("mcp-level", "change", renderMcp);
+
     // ----------------------------------------------------------------- start
 
     // Each page loads what it draws. The provisioning page needs the three lists its selects and
@@ -2247,6 +2338,8 @@
         ? loadTenants().then(loadClients).then(loadUsers).then(renderCurl)
         : PAGE === "data"
         ? loadDataSummary()
+        : PAGE === "mcp"
+        ? loadMcp()
         : Promise.all([loadTenants(), loadScopes(), loadClaims()])
             .then(loadClients)
             .then(loadUsers)

@@ -288,6 +288,7 @@ Configuration, all optional (`ark_oauth_server:Management`):
 | Tenants | `v1/tenant/list`, `v1/tenant/upsert` |
 | Clients | `v1/client/list`, `v1/client/upsert`, `v1/client/delete`, `v1/client/secret/reset` |
 | Audit trail | `GET v1/watch/status` → `{ enabled, reason, endpoint, application, environment, spool, protocol_trace, logged, sent, spooled, replayed, rejected, dropped, send_failures, breaker, health }` (never the key) |
+| MCP endpoints | `GET v1/mcp/endpoints` → `{ levels: { host, tenant, client }, endpoints: [{ level, name, tenant_id, client_id, is_active, url, server_card, config, resource_metadata }] }`; `404` while MCP is off |
 | Claims | `v1/claim/list`, `v1/claim/upsert`, `v1/claim/delete` |
 | Scopes | `v1/scope/list`, `v1/scope/upsert`, `v1/scope/delete` |
 | Users | `v1/user/list`, `v1/user/upsert`, `v1/user/pw/reset/init`, `v1/user/pw/set` |
@@ -579,6 +580,7 @@ Inject `IArkWebhookPublisher` to raise events of your own (`Publish` — non-blo
 | Console | `/{tenant_id}/admin` (`/admin` → configured tenant) |
 | Provisioning page (admin-only) | `/{tenant_id}/admin/provisioning` |
 | Data page — export, import, factory reset (admin-only; `DataTools:Enabled`) | `/{tenant_id}/admin/data` |
+| MCP page — every MCP endpoint, its documents opened in a new tab (admin-only; `Mcp:Enabled`) | `/{tenant_id}/admin/mcp` |
 | Webhooks page (admin-only; only with `AddArkWebhooks()`) | `/{tenant_id}/admin/webhooks` |
 | Assets (from assembly) | `/ark-admin/asset/ark-admin.css`, `/ark-admin/asset/ark-admin.js` (+ `ark-webhooks.css`, `ark-webhooks.js` on the Webhooks page) |
 

@@ -108,6 +108,9 @@ code {
 .ark-lockup-sep { width: 1px; align-self: stretch; min-height: 20px; background: var(--ark-border); flex: none; }
 .ark-topbar-title { font-weight: 650; letter-spacing: -.01em; font-size: calc(15px * var(--ark-text-scale, 1)); }
 .ark-topbar-sub { font-size: calc(12.5px * var(--ark-text-scale, 1)); color: var(--ark-fg-muted); }
+/* The console's name and issuer give way to the navigation: they shorten rather than wrap out of the bar. */
+.ark-topbar-id { flex: 0 100 auto; min-width: 0; }
+.ark-topbar-id > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ark-topbar-spacer { flex: 1; }
 .ark-topbar-user { display: flex; align-items: center; gap: 10px; font-size: calc(13px * var(--ark-text-scale, 1)); color: var(--ark-fg-muted); }
 .ark-avatar {
@@ -731,6 +734,15 @@ button.ark-btn-danger-solid:hover { background: color-mix(in srgb, var(--ark-dan
 .ark-outcome-head { margin-bottom: 12px; }
 .ark-outcome .ark-btn { display: inline-block; }
 
+/* ---------- mcp page ---------- */
+.ark-mcp-note { margin: 0 0 14px; max-width: 900px; font-size: calc(13px * var(--ark-text-scale, 1)); color: var(--ark-fg-muted); }
+.ark-mcp-note strong { color: var(--ark-fg); font-weight: 600; }
+.ark-mcp-table td { vertical-align: middle; }
+.ark-mcp-address { display: flex; align-items: center; gap: 10px; }
+/* The table scrolls sideways before an address is broken into a column of letters. */
+.ark-mcp-address code { min-width: 240px; }
+.ark-mcp-links { display: flex; flex-wrap: wrap; gap: 2px 14px; white-space: nowrap; }
+
 /* ---------- tabulator theming ---------- */
 .tabulator {
     /* Tabulator's own sheet pins 14px; follow the viewer's text size instead. */
@@ -759,6 +771,10 @@ button.ark-btn-danger-solid:hover { background: color-mix(in srgb, var(--ark-dan
 .tabulator .tabulator-cell button { padding: 3px 9px; font-size: calc(12px * var(--ark-text-scale, 1)); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* Below this the name would be down to a letter or two, so it goes and the rest of the bar may wrap. */
+@media (max-width: 1080px) { .ark-topbar-id { display: none; } }
+@media (min-width: 1081px) { .ark-nav, .ark-topbar-user { flex: none; white-space: nowrap; } }
 
 @media (max-width: 720px) {
     .ark-topbar { padding: 0 14px; }

@@ -518,6 +518,9 @@ and arguments. The tools, who may call them, people as administrators, and the s
 [MCP.md](MCP.md). `ark_oauth_server:Mcp:Enabled = false` removes all of it; `Mcp:ReadOnly` leaves only
 the tools that look.
 
+The operator account finds every endpoint of the server on the console's **MCP** page
+(`/{tenant_id}/admin/mcp`), with its address to copy and its documents to open in a new tab.
+
 ## Audit trail (ARK-RAPID Watch)
 
 Optional. The server can send a structured record of everything it does to an

@@ -138,6 +138,43 @@ namespace Ark.oAuth.Oidc
                 data = audit?.Status() ?? new ArkWatchStatus { reason = "not registered" }
             });
         }
+        /// <summary>
+        /// Every MCP endpoint of this server with the addresses of the public documents beside it
+        /// (MCP.md), the host's first, then each tenant followed by its applications. What the
+        /// console's MCP page draws. 404 when MCP is switched off, like the endpoints themselves.
+        /// </summary>
+        [HttpGet]
+        [Route("v1/mcp/endpoints")]
+        public async Task<IActionResult> McpEndpoints([FromServices] DataAccess da, [FromServices] ArkUtil util)
+        {
+            var config = util.ServerConfig;
+            if (!Mcp.ArkMcpDirectory.Any(config.Mcp)) return NotFound();
+            Response.Headers["Cache-Control"] = "no-store";
+            try
+            {
+                var root = Protocol.ArkOidcEndpoints.For(Request, config, config.TenantId ?? "").BaseUrl;
+                return Ok(new
+                {
+                    error = false,
+                    msg = "MCP endpoints loaded.",
+                    data = new
+                    {
+                        levels = new
+                        {
+                            host = Mcp.ArkMcpResources.LevelEnabled(config.Mcp, Mcp.ArkMcpLevel.Host),
+                            tenant = Mcp.ArkMcpResources.LevelEnabled(config.Mcp, Mcp.ArkMcpLevel.Tenant),
+                            client = Mcp.ArkMcpResources.LevelEnabled(config.Mcp, Mcp.ArkMcpLevel.Client)
+                        },
+                        endpoints = Mcp.ArkMcpDirectory.List(config, root, await da.GetTenants(), await da.GetClients())
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                da.LogError(ex, "mcp_endpoints", "v1/mcp/endpoints", "loading the MCP endpoints failed");
+                return Ok(new { error = true, msg = $"{ex.Message}" });
+            }
+        }
         [Route("v1/client/list")]
         public async Task<dynamic> ClientList([FromServices] DataAccess da)
         {

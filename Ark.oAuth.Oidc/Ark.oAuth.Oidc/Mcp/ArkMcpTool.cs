@@ -342,6 +342,9 @@ namespace Ark.oAuth.Oidc.Mcp
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
 
+        /// <summary>For the public documents: people open those in a browser tab as well.</summary>
+        public static readonly JsonSerializerOptions Indented = new(Options) { WriteIndented = true };
+
         public static JsonNode? Node(object? value) => JsonSerializer.SerializeToNode(value, Options);
     }
 }

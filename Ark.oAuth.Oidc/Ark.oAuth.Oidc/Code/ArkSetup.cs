@@ -388,7 +388,7 @@ namespace Ark.oAuth.Oidc
                 context.Response.Headers.CacheControl = "no-store";
                 context.Response.Headers.XContentTypeOptions = "nosniff";
                 var document = rest == "/config" ? Mcp.ArkMcpDocuments.Config(endpoint) : Mcp.ArkMcpDocuments.Card(endpoint, PackageVersion);
-                await context.Response.WriteAsync(document.ToJsonString(Mcp.ArkMcpJson.Options));
+                await context.Response.WriteAsync(document.ToJsonString(Mcp.ArkMcpJson.Indented));
                 return;
             }
             if (rest is not ("" or "/"))

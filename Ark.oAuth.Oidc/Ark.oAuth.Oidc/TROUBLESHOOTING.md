@@ -95,6 +95,8 @@ Diagnose against the provider's actual behaviour. Verify .NET changes against a 
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| An endpoint's address opened in a browser shows an empty `405` | Only `POST` is served there, to an MCP client with a credential. | Open the documents beside it: `{endpoint}/server-card`, `{endpoint}/config`. The console's **MCP** page links them for every endpoint. |
+| No **MCP** link in the console; `/{tenant}/admin/mcp` answers 404 or 403 | 404: `ark_oauth_server:Mcp:Enabled` is `false`, or all three levels are off. 403, or no link: not signed in as the administrator. | Set it `true` (the default); sign in as `AdminUser:Username`, or grant the account `admin` on the console client. |
 | `401` "the token is not addressed to this endpoint" | The token was requested without `resource`, or for another endpoint. | Request it with `resource=` the exact address of the endpoint. One token per endpoint. |
 | `403 insufficient_scope` | A tool that changes something, and a token without `mcp.manage`. | Ask for `scope=mcp.read mcp.manage`. A client other than the machine client has to be registered for it, by an operator. |
 | `invalid_scope` from an MCP client signing a person in | The client is not registered for `mcp.read`. | Add it to the client's scopes (`client_update`), or register with kind `mcp_client`. |

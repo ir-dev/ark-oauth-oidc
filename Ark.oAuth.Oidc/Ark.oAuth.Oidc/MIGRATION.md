@@ -151,6 +151,9 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
     API still admits the operator's machine client alone. Before upgrading, check that nobody registered a client
     of that name in another tenant for something else.
   - Bootstrap fix: a database holding only the webhook module's tables is now given the core schema.
+  - Console: an **MCP** page for the operator, `/{tenant}/admin/mcp`, over `GET /api/oauth/v1/mcp/endpoints`.
+    A host that overrides `Views/Admin/_ConsoleHeader.cshtml` has no link to it until it adds one
+    (`ViewBag.McpEnabled`, `ViewBag.McpUrl`). The public documents beside an endpoint are now indented JSON.
   - No new dependency. **Upgrade action:** none.
 
 - **2.4.2 — agent-to-agent (A2A) tokens; inert until an operator lists a caller.**

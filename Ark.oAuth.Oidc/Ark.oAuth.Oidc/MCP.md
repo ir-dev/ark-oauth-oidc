@@ -28,6 +28,13 @@ After setup the third is named in every `401`, and the issuer's discovery docume
 endpoint under `protected_resources`. The server card follows SEP-2127, whose format is not final; what is
 specific to this server is under `_meta`.
 
+**All of them in one list:** the **MCP** page of the console, `/{tenant_id}/admin/mcp`, for the operator
+account. It names the host's endpoint, every tenant's and every application's, can be searched and filtered
+by tenant and level, and opens the three documents of each in a new tab. The address itself is there to be
+copied: an endpoint answers only `POST`, so a browser that opens it gets an empty `405`. A script gets the
+same list from `GET /api/oauth/v1/mcp/endpoints` (management API). A level that is switched off is left out,
+and with all of them off the page and the route answer `404`.
+
 ## Setting a server up
 
 Start the server with nothing configured. Its log prints the setup code and the address:

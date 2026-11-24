@@ -93,7 +93,7 @@ namespace Ark.oAuth.Oidc.Mcp
             if (endpoint == null) return NotFound();
             Response.Headers.CacheControl = "public, max-age=300";
             Response.Headers.XContentTypeOptions = "nosniff";
-            return Content(build(endpoint).ToJsonString(ArkMcpJson.Options), "application/json; charset=utf-8");
+            return Content(build(endpoint).ToJsonString(ArkMcpJson.Indented), "application/json; charset=utf-8");
         }
 
         private async Task ServeAsync(ArkMcpLevel level, string? tenantId, string? clientId)

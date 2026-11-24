@@ -76,6 +76,9 @@ Sign-in, discovery, tokens, pages, the management API and existing configuration
   null, which is every existing one, is the operator.
 * **Every change over MCP, and every call refused for want of permission, is recorded**, whatever
   EnableLogTrace says.
+* **The console lists every MCP endpoint**, for the operator, at /{tenant}/admin/mcp: search, filter by
+  tenant and level, and open the documents of each in a new tab. GET /api/oauth/v1/mcp/endpoints
+  returns the same list.
 * Settings under ark_oauth_server:Mcp (Enabled, HostLevel, TenantLevel, ClientLevel, ReadOnly,
   AllowClientSecret, MaxRequestKilobytes). See MCP.md.
 * Discovery is also served at /.well-known/oauth-authorization-server/{tenant} and

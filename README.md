@@ -1234,8 +1234,9 @@ credentials grant (all removed in OAuth 2.1); `plain` PKCE; front-channel logout
 
 Outside the issuer: setup wizard `/ark-idp/setup` (only while unconfigured; 404 afterwards), admin
 console `/{tenant_id}/admin` (`/admin` redirects to the configured tenant), provisioning UI
-`/{tenant_id}/admin/provisioning`, data tools `/{tenant_id}/admin/data`, management, provisioning,
-activation and data API `/api/oauth/v1/…` (operator only).
+`/{tenant_id}/admin/provisioning`, MCP endpoints `/{tenant_id}/admin/mcp`, data tools
+`/{tenant_id}/admin/data`, management, provisioning, activation and data API `/api/oauth/v1/…`
+(operator only).
 
 ### Flows
 
@@ -1405,9 +1406,10 @@ dependency, pinned. A host overrides it by placing its own `Views/Admin/Manage.c
 session is the host's auth cookie, and only the host can drop it — hence `Admin:SignOutUrl`. The v1
 console at `/oauth/{tenant}/v1/server/{client_id}/manage` is still served and no longer developed.
 
-Two operator-only pages sit beside it: **Provisioning** (`/{tenant_id}/admin/provisioning`, one-call
-onboarding plus the activation switches, each showing the equivalent `curl`) and **Data**
-(`/{tenant_id}/admin/data`, export, analysed import and factory reset). Every IdP page, including
+Three operator-only pages sit beside it: **Provisioning** (`/{tenant_id}/admin/provisioning`, one-call
+onboarding plus the activation switches, each showing the equivalent `curl`), **MCP**
+(`/{tenant_id}/admin/mcp`, every MCP endpoint of the server, its documents opened in a new tab) and
+**Data** (`/{tenant_id}/admin/data`, export, analysed import and factory reset). Every IdP page, including
 sign-in, consent, console and wizard, carries an **Appearance** picker: 11 themes including two
 high-contrast ones and a custom accent, and text size from 80 to 160%. The choice is kept per browser
 and the picker is CSP-safe. Sign-in pages show the host logo and the client's own logo
