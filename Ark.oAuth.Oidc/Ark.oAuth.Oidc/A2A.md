@@ -24,6 +24,10 @@ and every client that never asks for an agent token, is exactly as before.
                                    act web-app     act agent-a ◀ web-app
 ```
 
+New to this? The [agents guide](https://ir-dev.github.io/ark-oauth-oidc/agents.html) draws each flow
+step by step, with MCP servers as well as agents, and shows the recorded reply for each request that
+is refused.
+
 ## Set it up
 
 Everything is on the **client** drawer of the admin console (`/{tenant}/admin`).

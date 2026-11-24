@@ -144,6 +144,8 @@
   @media (min-width: 980px) { .nav-links .hide-sm { display: inline; } }
   .nav-links .hide-md { display: none; }   /* one link more than fits from 980 px */
   @media (min-width: 1100px) { .nav-links .hide-md { display: inline; } }
+  .nav-links .hide-lg { display: none; }
+  @media (min-width: 1200px) { .nav-links .hide-lg { display: inline; } }
   .theme-btn {
     border: 1px solid var(--line); background: var(--surface); color: var(--muted);
     width: 34px; height: 34px; border-radius: 9px; cursor: pointer; display: grid; place-items: center;
@@ -451,6 +453,23 @@
   @media (min-width: 860px) { .webhooks-teaser { grid-template-columns: 1fr auto; padding: 28px 32px; } }
   .webhooks-teaser p { color: var(--muted); margin: 12px 0 0; max-width: 760px; }
 
+  /* agents, A2A and MCP teaser: a ticket and the door it opens share a colour */
+  #agent-flows { padding-top: 0; }
+  .agents-teaser { padding: 24px; display: grid; gap: 22px; align-items: center; --c1: #7a35b8; --c2: #12805a; --c3: #96600a; }
+  @media (min-width: 900px) { .agents-teaser { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); padding: 28px 32px; } }
+  .agents-teaser p { color: var(--muted); margin: 12px 0 18px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .agents-teaser { --c1: #c7a2ff; --c2: #54cf96; --c3: #f2c14e; } }
+  :root[data-theme="dark"] .agents-teaser { --c1: #c7a2ff; --c2: #54cf96; --c3: #f2c14e; }
+  .agents-map { width: 100%; max-width: 480px; height: auto; justify-self: center; }
+  .agents-map text { font: 600 13px Inter, system-ui, sans-serif; fill: var(--ink); }
+  .agents-map .s { font-weight: 500; font-size: 11px; fill: var(--muted); }
+  .agents-map .m { font: 500 11px "JetBrains Mono", ui-monospace, monospace; }
+  .agents-map .l { stroke: var(--muted); stroke-width: 1.5; fill: none; } .agents-map .h { fill: var(--muted); }
+  .agents-map .n rect { fill: var(--brand-soft); stroke: var(--brand); stroke-width: 1.6; }
+  .agents-map .c1 { --c: var(--c1); } .agents-map .c2 { --c: var(--c2); } .agents-map .c3 { --c: var(--c3); }
+  .agents-map .chip { fill: var(--surface); stroke: var(--c); } .agents-map .m { fill: var(--c); }
+  .agents-map .door { fill: color-mix(in srgb, var(--c) 9%, var(--surface)); stroke: var(--c); stroke-width: 1.8; }
+
   /* standards */
   .specs { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
   @media (min-width: 720px) { .specs { grid-template-columns: repeat(2, 1fr); } }
@@ -533,6 +552,7 @@
       <a class="hide-sm" href="#onboard">Onboard</a>
       <a class="hide-sm" href="#govern">Govern</a>
       <a class="hide-md" href="webhooks.html">Webhooks</a>
+      <a class="hide-lg" href="agents.html">A2A &amp; MCP</a>
       <a class="hide-sm" href="#quickstart">Quickstart</a>
       <a class="hide-sm" href="#agents">AI agents</a>
       <a class="hide-sm" href="#try">Try it</a>
@@ -868,6 +888,29 @@ curl -s -X POST https://idp.example.com/api/oauth/v1/activation/user \
           <p>Sign-ins, failed and refused sign-ins, lockouts, issued tokens, and changes to apps and users are POSTed to your endpoints as signed JSON (Standard Webhooks), with retries, a dead-letter queue and replay. Opt in with one line, <code>builder.Services.AddArkWebhooks()</code>. The guide gets a RequestBin URL receiving real events in ten minutes, before you write a receiver.</p>
         </div>
         <a class="btn-report" href="webhooks.html">Webhooks guide <span aria-hidden="true">→</span></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Agents, A2A and MCP ===== -->
+  <section id="agent-flows">
+    <div class="wrap">
+      <div class="card agents-teaser">
+        <div>
+          <div class="kicker">Agents, A2A and MCP <span class="pill">new in 2.4.2</span></div>
+          <h2>One ticket per call. Good at one door.</h2>
+          <p>An agent calling another agent, an agent calling an MCP server, and an agent using this identity provider through MCP. Each flow is drawn step by step, with tokens and refusals recorded from a running server, 24 ways in that are refused, and a plain list of what ARK does not do.</p>
+          <a class="btn-report" href="agents.html">See the flows <span aria-hidden="true">→</span></a>
+        </div>
+<svg class="agents-map" viewBox="0 0 420 190" role="img" aria-label="An agent holding three tickets, each addressed to one receiver: another agent, an MCP server and the identity gateway.">
+<g class="n"><rect x="6" y="70" width="104" height="50" rx="11"/><text x="58" y="92" text-anchor="middle">Agent</text><text class="s" x="58" y="108" text-anchor="middle">for Alice</text></g>
+<path class="l" d="M110 95H136V31H268"/><polygon class="h" points="278,31 269,26.5 269,35.5"/>
+<g class="c1"><rect class="chip" x="154" y="20" width="100" height="22" rx="5"/><text class="m" x="204" y="35" text-anchor="middle">aud: ledger</text><rect class="door" x="280" y="6" width="134" height="50" rx="11"/><text x="347" y="28" text-anchor="middle">Another agent</text><text class="s" x="347" y="44" text-anchor="middle">A2A</text></g>
+<path class="l" d="M110 95H136V95H268"/><polygon class="h" points="278,95 269,90.5 269,99.5"/>
+<g class="c2"><rect class="chip" x="154" y="84" width="100" height="22" rx="5"/><text class="m" x="204" y="99" text-anchor="middle">aud: orders</text><rect class="door" x="280" y="70" width="134" height="50" rx="11"/><text x="347" y="92" text-anchor="middle">MCP server</text><text class="s" x="347" y="108" text-anchor="middle">tools</text></g>
+<path class="l" d="M110 95H136V159H268"/><polygon class="h" points="278,159 269,154.5 269,163.5"/>
+<g class="c3"><rect class="chip" x="154" y="148" width="100" height="22" rx="5"/><text class="m" x="204" y="163" text-anchor="middle">aud: idp-mcp</text><rect class="door" x="280" y="134" width="134" height="50" rx="11"/><text x="347" y="156" text-anchor="middle">Identity gateway</text><text class="s" x="347" y="172" text-anchor="middle">the IdP, by MCP</text></g>
+</svg>
       </div>
     </div>
   </section>

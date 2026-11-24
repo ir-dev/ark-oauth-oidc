@@ -1,0 +1,1969 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents, A2A and MCP · ARK Identity</title>
+<meta name="description" content="How ARK Identity secures agents: agent-to-agent (A2A) calls, an agent calling an MCP server, and an agent using the identity provider through MCP. Drawn step by step, with tokens and refusals recorded from a running server.">
+<meta property="og:title" content="Agents, A2A and MCP on ARK Identity">
+<meta property="og:description" content="One ticket per call, good at one door. Every flow drawn step by step, with recorded tokens and refusals, and a plain list of what it does not do.">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://ir-dev.github.io/ark-oauth-oidc/assets/img/og-card.jpg">
+<meta name="theme-color" content="#0b1533">
+<meta name="robots" content="index, follow">
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>  :root {
+    --brand: #2450d8; --brand-strong: #1b3fb0; --brand-soft: #e9eefc; --ink: #0b1533; --text: #24304d; --muted: #5d6883;
+    --line: #e1e6f0; --bg: #f5f7fb; --surface: #ffffff; --code-bg: #0b1226; --code-ink: #dbe4ff; --code-muted: #8090b8;
+    --ok: #12805a; --warn: #a16207; --bad: #b4232c; --info: #2f6f8f;
+    --radius: 14px;
+    --shadow: 0 1px 2px rgba(11, 21, 51, .05), 0 8px 28px rgba(11, 21, 51, .07);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --brand: #7fa2ff; --brand-strong: #9db8ff; --brand-soft: #13214a; --ink: #eef3ff; --text: #ccd5ea; --muted: #8e9ab7;
+      --line: #1d2a4b; --bg: #060c1d; --surface: #0d1630; --code-bg: #050a18; --code-ink: #dbe4ff; --code-muted: #7d8bb0;
+      --ok: #4cc38a; --warn: #f2c14e; --bad: #ff7a82; --info: #6cc4e8;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px rgba(0, 0, 0, .35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --brand: #7fa2ff; --brand-strong: #9db8ff; --brand-soft: #13214a; --ink: #eef3ff; --text: #ccd5ea; --muted: #8e9ab7;
+    --line: #1d2a4b; --bg: #060c1d; --surface: #0d1630; --code-bg: #050a18; --code-ink: #dbe4ff; --code-muted: #7d8bb0;
+    --ok: #4cc38a; --warn: #f2c14e; --bad: #ff7a82; --info: #6cc4e8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 28px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  code { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: .86em; background: var(--brand-soft); color: var(--ink); padding: .1em .38em; border-radius: 6px; overflow-wrap: anywhere; }
+  kbd { font-family: Inter, system-ui, sans-serif; font-size: .85em; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: .05em .45em; white-space: nowrap; }
+  h1, h2, h3 { color: var(--ink); line-height: 1.2; margin: 0; }
+  h1, h2 { font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif; letter-spacing: -.02em; }
+  h1 { font-size: clamp(1.9rem, 4.6vw, 2.9rem); font-weight: 800; color: #fff; }
+  h2 { font-size: clamp(1.4rem, 3vw, 1.9rem); font-weight: 800; }
+  h3 { font-size: 1.04rem; font-weight: 600; }
+  p { margin: 10px 0 0; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 720px) { .wrap { padding: 0 32px; } }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* ---------- nav ---------- */
+  .nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  .nav .wrap { display: flex; align-items: center; gap: 16px; height: 58px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-weight: 700; font-family: "Plus Jakarta Sans", Inter, sans-serif; white-space: nowrap; }
+  .brand:hover { text-decoration: none; }
+  .brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .nav-links { margin-left: auto; display: flex; align-items: center; gap: 18px; font-size: .9rem; }
+  .nav-links a { color: var(--muted); font-weight: 500; white-space: nowrap; }
+  .nav-links a:hover { color: var(--ink); text-decoration: none; }
+  .hide-sm { display: none; }
+  @media (min-width: 900px) { .hide-sm { display: inline; } }
+  .theme-btn { border: 1px solid var(--line); background: var(--surface); color: var(--muted); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; display: grid; place-items: center; flex: none; }
+  .theme-btn:hover { color: var(--ink); }
+
+  /* ---------- hero ---------- */
+  .hero { background: radial-gradient(800px 420px at 90% -20%, rgba(36, 80, 216, .55), transparent 62%), radial-gradient(600px 360px at -10% 120%, rgba(18, 128, 90, .35), transparent 62%), #050b1d; color: #c3cde6; }
+  .hero .wrap { padding-top: 48px; padding-bottom: 52px; }
+  .kicker { font-size: .78rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--brand); margin-bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .hero .kicker { color: #8fb0ff; }
+  .pill { font-size: .72rem; letter-spacing: .02em; text-transform: none; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid currentColor; }
+  .hero .pill { color: #f2c14e; }
+  .hero .lead { font-size: 1.05rem; max-width: 760px; margin: 16px 0 0; }
+  .hero .lead b { color: #fff; font-weight: 600; }
+  .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+  @media (min-width: 720px) { .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .tile { border-radius: 12px; padding: 14px 16px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .12); }
+  .tile .n { font: 800 1.7rem/1.05 "Plus Jakarta Sans", Inter, sans-serif; color: #fff; }
+  .tile .l { font-size: .82rem; color: #aab6d3; margin-top: 6px; }
+  .hero-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: .92rem; border: 1px solid transparent; cursor: pointer; font-family: inherit; }
+  .btn:hover { text-decoration: none; }
+  .btn-primary { background: #2f5ff0; color: #fff; }
+  .btn-primary:hover { background: #4370ff; }
+  .btn-ghost { color: #e7edfb; border-color: rgba(255, 255, 255, .22); background: transparent; }
+  .btn-ghost:hover { background: rgba(255, 255, 255, .06); }
+
+  /* ---------- sections ---------- */
+  main section { padding: 48px 0 8px; scroll-margin-top: 58px; }
+  .section-head p { color: var(--muted); max-width: 780px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .callout { padding: 16px 20px; border-left: 4px solid var(--brand); margin-top: 18px; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout h3 { margin-bottom: 4px; }
+  .callout p:first-of-type { margin-top: 4px; }
+  .callout ul, .callout ol { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+  .note { font-size: .9rem; color: var(--muted); }
+
+
+  /* ---------- code ---------- */
+  .code { position: relative; margin-top: 12px; }
+  pre { margin: 0; background: var(--code-bg); color: var(--code-ink); border-radius: 12px; padding: 16px 18px; overflow-x: auto; font: 13px/1.6 "JetBrains Mono", ui-monospace, Menlo, monospace; border: 1px solid color-mix(in srgb, var(--line) 40%, transparent); }
+  pre .c { color: var(--code-muted); }
+  pre .k { color: #8fb0ff; }
+  pre .s { color: #7ee2b8; }
+  .copy { position: absolute; top: 8px; right: 8px; font: 600 .74rem Inter, sans-serif; color: #cdd7f5; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .16); border-radius: 7px; padding: 4px 9px; cursor: pointer; }
+  .copy:hover { background: rgba(255, 255, 255, .14); }
+
+  /* ---------- tables ---------- */
+  .tablewrap { overflow-x: auto; margin-top: 16px; }
+  table.ref { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 620px; }
+  table.ref th, table.ref td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.ref th { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  table.ref td:first-child { white-space: nowrap; }
+  .card > .tablewrap { margin-top: 0; padding: 6px 8px; }
+
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 20px; }
+  @media (min-width: 860px) { .grid2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+  .grid2 > .card { padding: 18px 20px; }
+  .grid2 ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: .93rem; }
+
+  .st { display: inline-block; font: 600 .74rem "JetBrains Mono", monospace; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .st.ok { color: var(--ok); } .st.warn { color: var(--warn); } .st.bad { color: var(--bad); } .st.info { color: var(--info); } .st.muted { color: var(--muted); }
+
+  /* ---------- tabs ---------- */
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; }
+  .tab { font: 600 .88rem Inter, sans-serif; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 7px 14px; cursor: pointer; }
+  .tab[aria-selected="true"] { color: #fff; background: var(--brand); border-color: var(--brand); }
+  :root[data-theme="dark"] .tab[aria-selected="true"] { color: #071030; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tab[aria-selected="true"] { color: #071030; } }
+
+  /* after every font shorthand, which would reset it: no => or === ligatures in code */
+  pre, code { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+
+  footer { margin-top: 64px; border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--muted); font-size: .88rem; }
+  footer p { margin: 6px 0 0; }
+
+  /* ---------- one colour per audience: a ticket and the door it opens share it ---------- */
+  :root { --a-tenant: #5d6883; --a-planner: #2450d8; --a-ledger: #7a35b8; --a-orders: #12805a; --a-catalog: #0c7480; --a-idp: #96600a; --a-ops: #b0421d; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --a-tenant: #a3afca; --a-planner: #86a7ff; --a-ledger: #c7a2ff; --a-orders: #54cf96; --a-catalog: #57cbd6; --a-idp: #f2c14e; --a-ops: #ff9f7a; } }
+  :root[data-theme="dark"] { --a-tenant: #a3afca; --a-planner: #86a7ff; --a-ledger: #c7a2ff; --a-orders: #54cf96; --a-catalog: #57cbd6; --a-idp: #f2c14e; --a-ops: #ff9f7a; }
+  .a-tenant { --c: var(--a-tenant); } .a-planner { --c: var(--a-planner); } .a-ledger { --c: var(--a-ledger); } .a-orders { --c: var(--a-orders); }
+  .a-catalog { --c: var(--a-catalog); } .a-idp { --c: var(--a-idp); } .a-ops { --c: var(--a-ops); }
+
+  /* ---------- diagrams ---------- */
+  .figure { margin: 22px 0 0; padding: 18px; }
+  .figure figcaption { margin-top: 12px; font-size: .9rem; color: var(--muted); }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 10px; }
+  .scroll:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  svg.seq { display: block; width: 100%; height: auto; }
+  .seq text { font: 500 12.5px Inter, system-ui, sans-serif; fill: var(--text); }
+  .seq .mono { font: 500 11px "JetBrains Mono", ui-monospace, monospace; }
+  .seq .sm { font-size: 12px; fill: var(--ink); }
+  .seq .sub { font-size: 11.5px; fill: var(--muted); }
+  .seq .sub.ops { fill: var(--a-ops); }
+  .seq .lab.bad { fill: var(--bad); }
+  .seq .life { stroke: var(--line); stroke-width: 2; }
+  .seq .ln { stroke: var(--text); stroke-width: 1.6; fill: none; }
+  .seq .ln.res { stroke: var(--muted); stroke-dasharray: 5 4; }
+  .seq .ln.bad { stroke: var(--bad); stroke-dasharray: 3 4; }
+  .seq .hd { fill: var(--text); } .seq .hd.res { fill: var(--muted); }
+  .seq .op .ln { stroke: var(--c); stroke-width: 2; } .seq .op .hd { fill: var(--c); }
+  .seq .xmark circle { fill: var(--surface); stroke: var(--bad); stroke-width: 2; } .seq .xmark path { stroke: var(--bad); stroke-width: 2; fill: none; stroke-linecap: round; }
+  .seq .lane rect { fill: var(--bg); stroke: var(--line); stroke-width: 1.4; }
+  .seq .lane .t { font: 700 13.5px "Plus Jakarta Sans", Inter, sans-serif; fill: var(--ink); }
+  .seq .lane .t.big { font-size: 17px; }
+  .seq .lane .s { font-size: 11px; fill: var(--muted); }
+  .seq .lane.app rect { fill: var(--surface); }
+  .seq .lane.idp rect { fill: #0b1533; stroke: #0b1533; } .seq .lane.idp .t { fill: #fff; } .seq .lane.idp .s { fill: #b9c6e8; }
+  :root[data-theme="dark"] .seq .lane.idp rect { fill: #1a2a5c; stroke: #31458a; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .seq .lane.idp rect { fill: #1a2a5c; stroke: #31458a; } }
+  .seq .lane.door rect { fill: color-mix(in srgb, var(--c) 9%, var(--surface)); stroke: var(--c); stroke-width: 2; }
+  .seq .lane.sub rect { fill: color-mix(in srgb, var(--c) 18%, #0b1533); stroke: var(--c); }
+  .seq .lane.sub .t { fill: #fff; font-size: 13px; } .seq .lane.sub .s { fill: #d6dcf0; }
+  .seq .tk rect { fill: color-mix(in srgb, var(--c) 12%, var(--surface)); stroke: var(--c); }
+  .seq .tk .bar { fill: var(--c); stroke: none; }
+  .seq .tk text { fill: color-mix(in srgb, var(--c) 78%, var(--ink)); }
+  .seq .flow { font: 600 12px Inter, sans-serif; fill: var(--c); }
+  .seq .chk { fill: color-mix(in srgb, var(--ok) 8%, var(--surface)); stroke: color-mix(in srgb, var(--ok) 55%, var(--line)); }
+  .seq .tick { stroke: var(--ok); stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .seq .zone { fill: color-mix(in srgb, var(--a-ops) 5%, transparent); stroke: color-mix(in srgb, var(--a-ops) 45%, transparent); stroke-dasharray: 6 5; }
+  .seq .num circle { fill: var(--ink); } .seq .num text { font: 700 11.5px Inter, sans-serif; fill: var(--surface); }
+  .seq .band { fill: transparent; }
+  .js .seq .msg { cursor: pointer; }
+  .js .seq .msg:hover .band { fill: color-mix(in srgb, var(--brand) 5%, transparent); }
+  .js .seq .msg.on .band { fill: color-mix(in srgb, var(--brand) 10%, transparent); }
+  .js .seq .msg.on .num circle { fill: var(--brand); }
+  .tl .axis { stroke: var(--ink); stroke-width: 1.6; } .tl .axis.t { stroke: var(--muted); stroke-width: 1; }
+  .tl .t { font: 700 13px "Plus Jakarta Sans", Inter, sans-serif; fill: var(--ink); }
+  .tl .bar rect { fill: color-mix(in srgb, var(--k) 15%, var(--surface)); stroke: color-mix(in srgb, var(--k) 55%, var(--line)); } .tl .bar text { fill: color-mix(in srgb, var(--k) 75%, var(--ink)); font-weight: 600; }
+  .tl .ok { --k: var(--ok); } .tl .bad { --k: var(--bad); } .tl .warn { --k: var(--warn); } .tl .off { --k: var(--muted); }
+
+  /* ---------- the step-through ---------- */
+  .player { margin-top: 16px; padding: 18px; }
+  .pbar { display: none; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .js .pbar { display: flex; }
+  .pbtn { font: 600 .88rem Inter, sans-serif; border-radius: 9px; padding: 8px 14px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; white-space: nowrap; }
+  .pbtn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  :root[data-theme="dark"] .pbtn.primary { color: #071030; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pbtn.primary { color: #071030; } }
+  .pbtn:disabled { opacity: .4; cursor: default; }
+  .dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .dot { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg); color: var(--muted); font: 600 .8rem Inter, sans-serif; cursor: pointer; }
+  .dot[aria-current="step"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+  :root[data-theme="dark"] .dot[aria-current="step"] { color: #071030; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .dot[aria-current="step"] { color: #071030; } }
+  @media (min-width: 860px) and (min-height: 700px) { .js .pfoot { position: sticky; bottom: 0; background: var(--surface); margin: 0 -18px -18px; padding: 0 18px 18px; border-radius: 0 0 var(--radius) var(--radius); box-shadow: 0 -10px 18px -14px rgba(11, 21, 51, .28); z-index: 2; } .js .pfoot .pbar { margin-top: 8px; padding-top: 12px; } }
+  .psteps { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 22px; }
+  .pstep { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  @media (min-width: 860px) { .pstep { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 24px; } }
+  .pstep h4 { margin: 0; color: var(--ink); font-size: 1.04rem; line-height: 1.35; font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+  .pnum { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font: 700 .78rem/24px Inter, sans-serif; text-align: center; }
+  .pstep p { margin: 8px 0 0 34px; }
+  .js .pstep { display: none; } .js .pstep.on { display: grid; }
+  .js .psteps { min-height: 178px; align-content: start; }
+  .code-head { display: flex; justify-content: space-between; align-items: center; min-height: 34px; padding: 6px 12px 6px 18px; font: 600 .74rem Inter, sans-serif; color: #a9b6da; background: #101a36; border-radius: 12px 12px 0 0; letter-spacing: .02em; }
+  .code-head + pre { border-radius: 0 0 12px 12px; border-top: 0; }
+  .code-head .copy { position: static; }
+  .pstep .code { margin-top: 0; }
+  .atkd pre, .pstep pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+  /* ---------- tabs without script show every panel ---------- */
+  .tabs { display: none; } .js .tabs { display: flex; }
+  .panel-h { margin-top: 22px; } .js .panel-h { display: none; }
+  .js .panel[hidden] { display: none; }
+
+  /* ---------- anatomy of a ticket ---------- */
+  .anat { margin: 22px 0 0; padding: 8px 18px; }
+  .anat > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 20px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .anat > div:last-child { border-bottom: 0; }
+  @media (min-width: 760px) { .anat > div { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: center; } }
+  .anat dt { font: 500 .88rem/1.5 "JetBrains Mono", ui-monospace, monospace; color: var(--ink); background: var(--bg); border-left: 4px solid var(--brand); border-radius: 6px; padding: 7px 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-variant-ligatures: none; }
+  .anat dd { margin: 0; font-size: .95rem; } .anat dd b { color: var(--ink); }
+
+  /* ---------- the three flows ---------- */
+  .flows { display: grid; gap: 14px; margin-top: 22px; }
+  @media (min-width: 860px) { .flows { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .fcard { padding: 18px 20px; border-top: 4px solid var(--c); display: flex; flex-direction: column; gap: 10px; color: var(--text); }
+  .fcard:hover { text-decoration: none; }
+  .fcard h3 { font-size: 1.08rem; } .fcard p { margin: 0; font-size: .93rem; }
+  .fcard dl { margin: 0; font-size: .88rem; display: grid; gap: 6px; } .fcard dt { color: var(--muted); font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; } .fcard dd { margin: 0; }
+  .fcard .go { margin-top: auto; color: var(--brand); font-weight: 600; font-size: .9rem; }
+
+  /* ---------- gates ---------- */
+  .gates { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (min-width: 640px) { .gates { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .gates li { position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px 9px 40px; background: var(--bg); font-size: .84rem; line-height: 1.35; min-height: 54px; }
+  .gates .gk { position: absolute; left: 9px; top: 9px; width: 23px; height: 23px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font: 700 .76rem/23px Inter, sans-serif; text-align: center; }
+  .gates .gt { display: block; color: var(--ink); font-weight: 500; }
+  .gates code { font-size: .74rem; background: none; padding: 0; color: var(--muted); }
+  @media (max-width: 480px) { .gates code { font-size: .6rem; } }
+  .swipe { font-size: .8rem; color: var(--muted); margin: 8px 0 0; } @media (min-width: 860px) { .swipe { display: none; } }
+  .gates li.ok { border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); background: color-mix(in srgb, var(--ok) 7%, var(--surface)); }
+  .gates li.ok .gk { background: var(--ok); color: var(--surface); }
+  .gates li.no { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 9%, var(--surface)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 22%, transparent); }
+  .gates li.no .gk { background: var(--bad); color: var(--surface); }
+  .gates li.off { opacity: .42; }
+  .gates-h { font-size: .76rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; margin-top: 18px; }
+
+  /* ---------- try to break it ---------- */
+  .breaker { margin-top: 22px; display: grid; gap: 18px; padding: 18px; }
+  @media (min-width: 900px) { .js .breaker { grid-template-columns: 330px minmax(0, 1fr); gap: 24px; } }
+  .alist { display: none; } .js .alist { display: grid; gap: 14px; align-content: start; }
+  @media (min-width: 900px) { .js .adetail { position: sticky; top: 78px; align-self: start; } }
+  .ah { font-size: .74rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+  .ag { display: grid; gap: 5px; }
+  .atk { text-align: left; font: 500 .88rem/1.35 Inter, sans-serif; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 8px 11px; cursor: pointer; }
+  .atk:hover { border-color: var(--brand); color: var(--ink); }
+  .atk[aria-current="true"] { border-color: var(--brand); background: var(--brand-soft); color: var(--ink); font-weight: 600; }
+  .atk.through { border-left: 3px solid var(--warn); }
+  .adetail { scroll-margin-top: 76px; display: grid; gap: 30px; align-content: start; min-width: 0; }
+  .js .atkd { display: none; } .js .atkd.on { display: block; }
+  .js .adetail { min-height: 420px; }
+  .where { font-size: .78rem; color: var(--muted); font-weight: 600; }
+  .atkd h3 { margin-top: 2px; font-size: 1.15rem; } .atkd .verdict { margin-top: 8px; font-size: .93rem; }
+  .atkd .why { font-size: .97rem; }
+
+  /* ---------- records ---------- */
+  .twin { display: grid; gap: 14px; margin-top: 20px; }
+  @media (min-width: 900px) { .twin { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+  .twin > div { min-width: 0; }
+  .twin h3 { font-size: .95rem; }
+  .twin pre, .wrapcode { white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre mark { background: #2a3f86; color: #fff; border-radius: 4px; padding: 0 3px; }
+  .qa { margin-top: 18px; display: grid; gap: 10px; }
+  .qa details { padding: 0 18px; } .qa summary { cursor: pointer; padding: 14px 0; font-weight: 600; color: var(--ink); } .qa details p { margin: 0 0 16px; }
+  .limits { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 12px; }
+  @media (min-width: 860px) { .limits { grid-template-columns: 1fr 1fr; } }
+  .limits li { padding: 16px 18px; border-left: 4px solid var(--warn); } .limits h3 { margin-bottom: 4px; } .limits p { margin: 0; font-size: .93rem; }
+  .next { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+  .btn-solid { background: var(--brand); color: #fff; } .btn-line { background: transparent; color: var(--ink); border-color: var(--line); }
+  :root[data-theme="dark"] .btn-solid { color: #071030; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn-solid { color: #071030; } }
+  .steps-mini { margin: 14px 0 0; padding-left: 22px; display: grid; gap: 8px; }
+  @media print { .pstep, .atkd, .panel { display: block !important; } .pbar, .alist, .tabs { display: none !important; } }
+</style>
+<script>
+  (function () {
+    document.documentElement.classList.add('js');
+    try { var t = localStorage.getItem('ark-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="ARK Identity, back to the home page">
+      <img src="assets/img/ark-shield-64.png" alt="" width="30" height="30">
+      ARK Identity
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a class="hide-sm" href="#idea">The idea</a>
+      <a class="hide-sm" href="#a2a">A2A</a>
+      <a class="hide-sm" href="#mcp">Agent → MCP</a>
+      <a class="hide-sm" href="#idp">Agent → IdP</a>
+      <a class="hide-sm" href="#break">Break it</a>
+      <a href="#limits">Limits</a>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle colour theme">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="kicker">Agents, A2A and MCP <span class="pill">since 2.4.2</span></div>
+    <h1>One ticket per call.<br>Good at one door.</h1>
+    <p class="lead">
+      When an AI agent calls another agent, an MCP server, or this identity provider itself, the one being called
+      needs three answers: which agent is this, who is it for, and was this token meant for me?
+      This page draws how ARK answers them, hop by hop. <b>The tokens, replies and refusals shown were recorded
+      from a running server</b>, and the last sections say plainly what ARK does not do.
+    </p>
+    <div class="tiles">
+      <div class="tile"><div class="n">0</div><div class="l">callers allowed, until an operator lists one</div></div>
+      <div class="tile"><div class="n">1</div><div class="l">door per ticket, named inside it</div></div>
+      <div class="tile"><div class="n">5 min</div><div class="l">the longest a ticket lives, by default</div></div>
+      <div class="tile"><div class="n">54 / 54</div><div class="l">scripted checks behaved as drawn here</div></div>
+    </div>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#a2a">Follow a ticket →</a>
+      <a class="btn btn-ghost" href="#break">Try to break it</a>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+
+  <!-- ===== The picture ===== -->
+  <section id="picture">
+    <div class="section-head">
+      <div class="kicker">The whole picture</div>
+      <h2>Follow the colour: a ticket opens only the door it matches.</h2>
+      <p>
+        Alice signs in once. After that, every call between agents and tools carries its own short-lived access token,
+        called a <em>ticket</em> on this page, and the name of the receiver is written inside it.
+        A ticket for the ledger is refused by the Orders server, and the other way round.
+      </p>
+    </div>
+    <figure class="card figure">
+      <div class="scroll" tabindex="0" role="group" aria-label="Overview diagram">
+<svg class="seq map" viewBox="0 0 1000 500" role="img" style="min-width:820px" aria-label="Alice signs in to Team Portal. The portal calls the Planner agent, and Planner calls the Ledger agent, the Orders MCP server and an identity gateway. Each call carries a ticket addressed to that one receiver, printed by ARK Identity. Only the gateway holds the operator credential for the management API.">
+<g class="lane idp"><rect x="20" y="14" width="960" height="78" rx="14"/><text class="t big" x="44" y="46">ARK Identity</text><text class="s" x="44" y="68">prints one ticket per call, after checking the caller, the person and the target’s own list</text></g>
+<g class="lane a-ops sub"><rect x="806" y="30" width="154" height="46" rx="10"/><text class="t" x="883" y="50" text-anchor="middle">management API</text><text class="s" x="883" y="66" text-anchor="middle">users, clients, access</text></g>
+<g class="lane person"><rect x="20" y="270" width="104" height="56" rx="12"/><text class="t" x="72" y="295" text-anchor="middle">Alice</text><text class="s" x="72" y="313" text-anchor="middle">signs in once</text></g>
+<g class="lane app"><rect x="186" y="270" width="134" height="56" rx="12"/><text class="t" x="253" y="295" text-anchor="middle">Team Portal</text><text class="s" x="253" y="313" text-anchor="middle">an ordinary app</text></g>
+<g class="lane door a-planner"><rect x="440" y="270" width="130" height="56" rx="12"/><text class="t" x="505" y="295" text-anchor="middle">Planner</text><text class="s" x="505" y="313" text-anchor="middle">agent</text></g>
+<g class="lane door a-ledger"><rect x="756" y="138" width="180" height="58" rx="12"/><text class="t" x="846" y="164" text-anchor="middle">Ledger</text><text class="s" x="846" y="182" text-anchor="middle">agent</text></g>
+<g class="lane door a-orders"><rect x="756" y="269" width="180" height="58" rx="12"/><text class="t" x="846" y="295" text-anchor="middle">Orders</text><text class="s" x="846" y="313" text-anchor="middle">MCP server</text></g>
+<g class="lane door a-idp"><rect x="756" y="400" width="180" height="58" rx="12"/><text class="t" x="846" y="426" text-anchor="middle">Identity gateway</text><text class="s" x="846" y="444" text-anchor="middle">MCP server you run</text></g>
+<path class="ln req" d="M124 298H177"/><polygon class="hd req" points="186,298 177,293.5 177,302.5"/>
+<path class="ln req" d="M320 298H431"/><polygon class="hd req" points="440,298 431,293.5 431,302.5"/>
+<g class="tk a-planner"><rect x="326" y="288" width="103" height="20" rx="5"/><rect class="bar" x="326" y="288" width="5" height="20" rx="2"/><text class="mono" x="340" y="302">aud: planner</text></g>
+<path class="ln req" d="M570 288H598V167H747"/><polygon class="hd req" points="756,167 747,162.5 747,171.5"/>
+<g class="tk a-ledger"><rect x="626" y="157" width="97" height="20" rx="5"/><rect class="bar" x="626" y="157" width="5" height="20" rx="2"/><text class="mono" x="640" y="171">aud: ledger</text></g>
+<path class="ln req" d="M570 298H747"/><polygon class="hd req" points="756,298 747,293.5 747,302.5"/>
+<g class="tk a-orders"><rect x="612" y="288" width="123" height="20" rx="5"/><rect class="bar" x="612" y="288" width="5" height="20" rx="2"/><text class="mono" x="626" y="302">aud: orders-mcp</text></g>
+<path class="ln req" d="M570 308H598V429H747"/><polygon class="hd req" points="756,429 747,424.5 747,433.5"/>
+<g class="tk a-idp"><rect x="622" y="419" width="103" height="20" rx="5"/><rect class="bar" x="622" y="419" width="5" height="20" rx="2"/><text class="mono" x="636" y="433">aud: idp-mcp</text></g>
+<path class="ln res" d="M253 262V101"/><polygon class="hd res" points="253,92 248.5,101 257.5,101"/><polygon class="hd res" points="253,270 248.5,261 257.5,261"/>
+<text class="sub" x="264" y="180" text-anchor="start">exchanges</text><text class="sub" x="264" y="196" text-anchor="start">her token</text>
+<path class="ln res" d="M505 262V101"/><polygon class="hd res" points="505,92 500.5,101 509.5,101"/><polygon class="hd res" points="505,270 500.5,261 509.5,261"/>
+<text class="sub" x="516" y="180" text-anchor="start">one exchange</text><text class="sub" x="516" y="196" text-anchor="start">per door</text>
+<g class="a-ops op"><path class="ln" d="M936 429H966V110H883V85"/><polygon class="hd" points="883,76 878.5,85 887.5,85"/></g>
+<text class="sub ops" x="956" y="366" text-anchor="end">operator credential,</text><text class="sub ops" x="956" y="382" text-anchor="end">never leaves the gateway</text>
+<text class="flow a-ledger" x="756" y="130" text-anchor="start">Flow 1 · agent to agent</text>
+<text class="flow a-orders" x="756" y="261" text-anchor="start">Flow 2 · agent to MCP server</text>
+<text class="flow a-idp" x="756" y="478" text-anchor="start">Flow 3 · agent to the IdP, through MCP</text>
+</svg>
+      </div>
+      <p class="swipe">Swipe the diagram sideways to see all of it.</p>
+      <figcaption>Solid arrows are calls. Dotted lines are trips to ARK for a ticket. The calls themselves never pass through ARK. All names are examples, and Alice, her portal and the agents belong to one tenant, <code>acme</code>.</figcaption>
+    </figure>
+
+    <div class="flows">
+      <a class="card fcard a-ledger" href="#a2a">
+        <h3>1 · Agent to agent</h3>
+        <p>One agent asks another to do something, in its own name or for a person.</p>
+        <dl><div><dt>ARK provides</dt><dd>the tickets, the caller list, the security section of the A2A Agent Card</dd></div>
+        <div><dt>You do</dt><dd>list the callers, and put one guard on the agent</dd></div></dl>
+        <div><span class="st ok">built in</span></div><span class="go">See the flow →</span>
+      </a>
+      <a class="card fcard a-orders" href="#mcp">
+        <h3>2 · Agent to MCP server</h3>
+        <p>An agent uses tools. The MCP server is one more client, with its own list of callers.</p>
+        <dl><div><dt>ARK provides</dt><dd>the same tickets, addressed to the server’s own URL</dd></div>
+        <div><dt>You do</dt><dd>plug the token check into your MCP SDK</dd></div></dl>
+        <div><span class="st ok">built in</span> <span class="st info">your server verifies</span></div><span class="go">See the flow →</span>
+      </a>
+      <a class="card fcard a-idp" href="#idp">
+        <h3>3 · Agent to the IdP, through MCP</h3>
+        <p>An agent looks up clients or switches off a leaver, using ARK itself as tools.</p>
+        <dl><div><dt>ARK provides</dt><dd>the management API. <strong>It does not include an MCP server</strong></dd></div>
+        <div><dt>You do</dt><dd>run a small gateway, shown in full below</dd></div></dl>
+        <div><span class="st warn">pattern you deploy</span></div><span class="go">See the flow →</span>
+      </a>
+    </div>
+    <p class="note">A2A’s own documentation puts the difference this way: “A2A connects the agents to each other; MCP connects each agent to its own tools” (<a href="https://a2a-protocol.org/latest/topics/a2a-and-mcp/" target="_blank" rel="noopener">A2A and MCP</a>). ARK issues the same kind of ticket for both.</p>
+  </section>
+
+  <!-- ===== The idea ===== -->
+  <section id="idea">
+    <div class="section-head">
+      <div class="kicker">The idea</div>
+      <h2>Three questions, answered inside the ticket.</h2>
+      <p>A ticket is a signed access token (a JWT). The receiver reads it without calling anyone. This one was issued to the planner for Alice, to use at the ledger.</p>
+    </div>
+    <dl class="card anat">
+      <div class="a-ledger"><dt style="border-color:var(--c)">"aud": "ledger"</dt><dd><b>Was this meant for me?</b> The one door it opens. The ledger compares it with its own name.</dd></div>
+      <div><dt>"sub": "alice@example.com"</dt><dd><b>Who is it for?</b> The person whose errand this is. When an agent works alone, its own name is here instead.</dd></div>
+      <div class="a-planner"><dt style="border-color:var(--c)">"act": { "sub": "planner",
+         "act": { "sub": "team-portal" } }</dt><dd><b>Which agent is this?</b> Everyone Alice was handed through, newest first. She is carried, never impersonated.</dd></div>
+      <div><dt>"ark_claims": ["orders.read"]</dt><dd><b>What may it do?</b> Alice’s own rights at the ledger, decided by the operator. An agent cannot add to them.</dd></div>
+      <div><dt>"exp": no later than the token it came from</dt><dd><b>For how long?</b> Five minutes at most by default, and never longer than the ticket before it. There is no refresh token.</dd></div>
+      <div><dt>"sid": "nj0znPrh0JNY…"</dt><dd><b>From which sign-in?</b> When Alice’s session ends, no further ticket is printed from it.</dd></div>
+    </dl>
+    <p class="note">The server also lists the identity claim names it released (<code>sub</code>, <code>name</code>, <code>email</code>, <code>email_verified</code>) in <code>ark_claims</code> for a person. They are left out on this page for width, along with <code>iss</code>, <code>iat</code>, <code>nbf</code>, <code>jti</code> and <code>scope</code>.</p>
+  </section>
+
+  <!-- ===== Flow 1 ===== -->
+  <section id="a2a">
+    <div class="section-head">
+      <div class="kicker">Flow 1 · agent to agent</div>
+      <h2>The agent being called decides who may call it.</h2>
+      <p>
+        An agent is an ordinary confidential client. Nothing about it is special until another client lists it as a
+        caller. Step through the diagram, or press a number on it.
+      </p>
+    </div>
+    <div class="tabset" data-tabs="a2a">
+    <div class="tabs" role="tablist"><button type="button" class="tab" role="tab" id="t-a2a-user" aria-controls="p-a2a-user" aria-selected="true">For a person</button><button type="button" class="tab" role="tab" id="t-a2a-self" aria-controls="p-a2a-self" aria-selected="false">As itself</button></div>
+    <div class="panel" role="tabpanel" id="p-a2a-user" aria-labelledby="t-a2a-user"><h3 class="panel-h">For a person</h3>
+    <div class="card player" data-player="a2a-user">
+      <div class="scroll" tabindex="0" role="group" aria-label="Sequence diagram">
+<svg class="seq" viewBox="0 0 1000 640" role="img" aria-label="Sequence: Alice signs in to Team Portal; the portal exchanges her token for one addressed to the Planner agent; Planner exchanges that for one addressed to the Ledger agent, which checks it is addressed to it and that Alice holds orders.read" style="min-width:860px">
+  <line class="life" x1="100" y1="58" x2="100" y2="634"/>
+  <g class="lane person"><rect x="12" y="10" width="176" height="50" rx="11"/><text class="t" x="100" y="31" text-anchor="middle">Alice</text><text class="s" x="100" y="48" text-anchor="middle">a person, in a browser</text></g>
+  <line class="life" x1="300" y1="58" x2="300" y2="634"/>
+  <g class="lane app"><rect x="212" y="10" width="176" height="50" rx="11"/><text class="t" x="300" y="31" text-anchor="middle">Team Portal</text><text class="s" x="300" y="48" text-anchor="middle">the app she signed in to</text></g>
+  <line class="life" x1="500" y1="58" x2="500" y2="634"/>
+  <g class="lane idp"><rect x="412" y="10" width="176" height="50" rx="11"/><text class="t" x="500" y="31" text-anchor="middle">ARK Identity</text><text class="s" x="500" y="48" text-anchor="middle">token endpoint</text></g>
+  <line class="life" x1="700" y1="58" x2="700" y2="634"/>
+  <g class="lane door a-planner"><rect x="612" y="10" width="176" height="50" rx="11"/><text class="t" x="700" y="31" text-anchor="middle">Planner</text><text class="s" x="700" y="48" text-anchor="middle">agent</text></g>
+  <line class="life" x1="900" y1="58" x2="900" y2="634"/>
+  <g class="lane door a-ledger"><rect x="812" y="10" width="176" height="50" rx="11"/><text class="t" x="900" y="31" text-anchor="middle">Ledger</text><text class="s" x="900" y="48" text-anchor="middle">agent</text></g>
+  <g class="msg" data-step="1">
+    <rect class="band" x="0" y="72" width="1000" height="107" rx="8"/>
+    <text class="lab req" x="200" y="91" text-anchor="middle">opens the app</text>
+    <line class="ln req" x1="100" y1="99" x2="291" y2="99"/>
+    <polygon class="hd req" points="298,99 289,94.5 289,103.5"/>
+    <text class="lab req" x="400" y="120" text-anchor="middle">browser sign-in</text>
+    <line class="ln req" x1="300" y1="128" x2="491" y2="128"/>
+    <polygon class="hd req" points="498,128 489,123.5 489,132.5"/>
+    <text class="lab res" x="400" y="149" text-anchor="middle">her sign-in token</text>
+    <line class="ln res" x1="500" y1="166" x2="309" y2="166"/>
+    <polygon class="hd res" points="302,166 311,161.5 311,170.5"/>
+    <g class="tk a-tenant"><rect x="338" y="156" width="123" height="20" rx="5"/><rect class="bar" x="338" y="156" width="5" height="20" rx="2"/><text class="mono" x="352" y="170">aud: the tenant</text></g>
+    <g class="num"><circle cx="100" cy="99" r="10.5"/><text x="100" y="103" text-anchor="middle">1</text></g>
+  </g>
+  <g class="msg" data-step="2">
+    <rect class="band" x="0" y="178" width="1000" height="48" rx="8"/>
+    <text class="lab req" x="400" y="197" text-anchor="middle">exchange it</text>
+    <line class="ln req" x1="300" y1="205" x2="491" y2="205"/>
+    <polygon class="hd req" points="498,205 489,200.5 489,209.5"/>
+    <text class="sub req" x="400" y="220" text-anchor="middle">audience=planner</text>
+    <g class="num"><circle cx="300" cy="205" r="10.5"/><text x="300" y="209" text-anchor="middle">2</text></g>
+  </g>
+  <g class="msg" data-step="3">
+    <rect class="band" x="0" y="225" width="1000" height="86" rx="8"/>
+    <rect class="chk " x="436" y="235" width="127" height="29" rx="8"/>
+    <path class="tick " d="M453 250l4 4 8-9"/>
+    <text class="sm" x="473" y="253">eight checks</text>
+    <text class="lab res" x="400" y="281" text-anchor="middle">a ticket</text>
+    <line class="ln res" x1="500" y1="298" x2="309" y2="298"/>
+    <polygon class="hd res" points="302,298 311,293.5 311,302.5"/>
+    <g class="tk a-planner"><rect x="348" y="288" width="103" height="20" rx="5"/><rect class="bar" x="348" y="288" width="5" height="20" rx="2"/><text class="mono" x="362" y="302">aud: planner</text></g>
+    <g class="num"><circle cx="436" cy="250" r="10.5"/><text x="436" y="254" text-anchor="middle">3</text></g>
+  </g>
+  <g class="msg" data-step="4">
+    <rect class="band" x="0" y="310" width="1000" height="49" rx="8"/>
+    <text class="lab req" x="500" y="329" text-anchor="middle">“reconcile my orders”</text>
+    <line class="ln req" x1="300" y1="346" x2="691" y2="346"/>
+    <polygon class="hd req" points="698,346 689,341.5 689,350.5"/>
+    <g class="tk a-planner"><rect x="448" y="336" width="103" height="20" rx="5"/><rect class="bar" x="448" y="336" width="5" height="20" rx="2"/><text class="mono" x="462" y="350">aud: planner</text></g>
+    <g class="num"><circle cx="300" cy="346" r="10.5"/><text x="300" y="350" text-anchor="middle">4</text></g>
+  </g>
+  <g class="msg" data-step="5">
+    <rect class="band" x="0" y="358" width="1000" height="48" rx="8"/>
+    <text class="lab req" x="600" y="377" text-anchor="middle">exchange that ticket</text>
+    <line class="ln req" x1="700" y1="385" x2="509" y2="385"/>
+    <polygon class="hd req" points="502,385 511,380.5 511,389.5"/>
+    <text class="sub req" x="600" y="400" text-anchor="middle">audience=ledger</text>
+    <g class="num"><circle cx="700" cy="385" r="10.5"/><text x="700" y="389" text-anchor="middle">5</text></g>
+  </g>
+  <g class="msg" data-step="6">
+    <rect class="band" x="0" y="405" width="1000" height="86" rx="8"/>
+    <rect class="chk " x="408" y="415" width="185" height="29" rx="8"/>
+    <path class="tick " d="M425 430l4 4 8-9"/>
+    <text class="sm" x="445" y="433">the same eight checks</text>
+    <text class="lab res" x="600" y="461" text-anchor="middle">a new ticket</text>
+    <line class="ln res" x1="500" y1="478" x2="691" y2="478"/>
+    <polygon class="hd res" points="698,478 689,473.5 689,482.5"/>
+    <g class="tk a-ledger"><rect x="552" y="468" width="97" height="20" rx="5"/><rect class="bar" x="552" y="468" width="5" height="20" rx="2"/><text class="mono" x="566" y="482">aud: ledger</text></g>
+    <g class="num"><circle cx="408" cy="430" r="10.5"/><text x="408" y="434" text-anchor="middle">6</text></g>
+  </g>
+  <g class="msg" data-step="7">
+    <rect class="band" x="0" y="490" width="1000" height="49" rx="8"/>
+    <text class="lab req" x="800" y="509" text-anchor="middle">POST /a2a/tasks</text>
+    <line class="ln req" x1="700" y1="526" x2="891" y2="526"/>
+    <polygon class="hd req" points="898,526 889,521.5 889,530.5"/>
+    <g class="tk a-ledger"><rect x="752" y="516" width="97" height="20" rx="5"/><rect class="bar" x="752" y="516" width="5" height="20" rx="2"/><text class="mono" x="766" y="530">aud: ledger</text></g>
+    <g class="num"><circle cx="700" cy="526" r="10.5"/><text x="700" y="530" text-anchor="middle">7</text></g>
+  </g>
+  <g class="msg" data-step="8">
+    <rect class="band" x="0" y="538" width="1000" height="91" rx="8"/>
+    <rect class="chk " x="796" y="548" width="198" height="46" rx="8"/>
+    <path class="tick " d="M813 571l4 4 8-9"/>
+    <text class="sm" x="833" y="566">addressed to me</text>
+    <text class="sm" x="833" y="583">Alice holds orders.read</text>
+    <text class="lab res" x="800" y="611" text-anchor="middle">the answer</text>
+    <line class="ln res" x1="900" y1="619" x2="709" y2="619"/>
+    <polygon class="hd res" points="702,619 711,614.5 711,623.5"/>
+    <g class="num"><circle cx="796" cy="571" r="10.5"/><text x="796" y="575" text-anchor="middle">8</text></g>
+  </g>
+</svg>
+      </div>
+      <div class="pfoot">
+      <div class="pbar">
+        <button type="button" class="pbtn" data-move="-1">← Back</button>
+        <div class="dots"><button type="button" class="dot" data-go="1" aria-label="Step 1: Alice signs in to an ordinary app.">1</button><button type="button" class="dot" data-go="2" aria-label="Step 2: The portal asks for a ticket to the planner.">2</button><button type="button" class="dot" data-go="3" aria-label="Step 3: ARK checks, then prints a ticket for that one door.">3</button><button type="button" class="dot" data-go="4" aria-label="Step 4: The portal calls the planner.">4</button><button type="button" class="dot" data-go="5" aria-label="Step 5: The planner needs the ledger, so it asks for its own ticket.">5</button><button type="button" class="dot" data-go="6" aria-label="Step 6: The second ticket carries the whole chain.">6</button><button type="button" class="dot" data-go="7" aria-label="Step 7: The planner calls the ledger.">7</button><button type="button" class="dot" data-go="8" aria-label="Step 8: The ledger decides for itself.">8</button></div>
+        <button type="button" class="pbtn primary" data-move="1">Next →</button>
+      </div>
+      <ol class="psteps">
+        <li class="pstep" data-step="1">
+          <div class="ptext"><h4><span class="pnum">1</span>Alice signs in to an ordinary app.</h4><p>A standard browser sign-in with PKCE. Her token stays in the portal’s server-side session. It is addressed to the tenant, so every agent and MCP server on this page refuses it.</p></div>
+          <div class="code"><div class="code-head">her sign-in token</div><pre>{
+  "aud": "https://idp.example.com/acme/api",
+  "sub": "alice@example.com",
+  "client_id": "team-portal",
+  "sid": "nj0znPrh0JNY…",
+  "ark_claims": ["portal.use"]
+}</pre></div>
+        </li>
+        <li class="pstep" data-step="2">
+          <div class="ptext"><h4><span class="pnum">2</span>The portal asks for a ticket to the planner.</h4><p>It proves who it is, shows Alice’s token, and names one target. This is OAuth token exchange (RFC 8693). Nothing is forwarded to the agent yet.</p></div>
+          <div class="code"><div class="code-head">request</div><pre>POST /acme/oauth2/token
+Authorization: Basic team-portal:•••
+
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+subject_token=&lt;Alice’s sign-in token&gt;
+subject_token_type=urn:ietf:params:oauth:token-type:access_token
+audience=planner</pre></div>
+        </li>
+        <li class="pstep" data-step="3">
+          <div class="ptext"><h4><span class="pnum">3</span>ARK checks, then prints a ticket for that one door.</h4><p>The ticket still names Alice, because it is her errand. <code>act</code> records that the portal is acting for her. What it allows is what Alice may do <em>at the planner</em>, not what the portal may do.</p></div>
+          <div class="code"><div class="code-head">ticket</div><pre>{
+  "aud": "planner",
+  "sub": "alice@example.com",
+  "client_id": "team-portal",
+  "act": { "sub": "team-portal" },
+  "ark_claims": ["planner.use"],
+  "sid": "nj0znPrh0JNY…"
+}</pre></div>
+        </li>
+        <li class="pstep" data-step="4">
+          <div class="ptext"><h4><span class="pnum">4</span>The portal calls the planner.</h4><p>An ordinary HTTP call with an <code>Authorization: Bearer</code> header, which is where A2A says identity belongs. The call goes straight from app to agent and does not pass through ARK.</p></div>
+          <div class="code"><div class="code-head">call</div><pre>POST https://planner.example.com/a2a/tasks
+Authorization: Bearer &lt;the planner ticket&gt;</pre></div>
+        </li>
+        <li class="pstep" data-step="5">
+          <div class="ptext"><h4><span class="pnum">5</span>The planner needs the ledger, so it asks for its own ticket.</h4><p>It presents the ticket it was sent. Only the agent a ticket is addressed to may do this: the same request from any other client is refused.</p></div>
+          <div class="code"><div class="code-head">request</div><pre>POST /acme/oauth2/token
+Authorization: Basic planner:•••
+
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+subject_token=&lt;the planner ticket&gt;
+subject_token_type=urn:ietf:params:oauth:token-type:access_token
+audience=ledger</pre></div>
+        </li>
+        <li class="pstep" data-step="6">
+          <div class="ptext"><h4><span class="pnum">6</span>The second ticket carries the whole chain.</h4><p><code>act</code> grows by one, newest first. <code>ark_claims</code> are now Alice’s rights at the ledger. It expires no later than the ticket it came from: in the recorded run, one second earlier.</p></div>
+          <div class="code"><div class="code-head">ticket</div><pre>{
+  "aud": "ledger",
+  "sub": "alice@example.com",
+  "client_id": "planner",
+  "act": { "sub": "planner",
+           "act": { "sub": "team-portal" } },
+  "ark_claims": ["orders.read"],
+  "sid": "nj0znPrh0JNY…"
+}</pre></div>
+        </li>
+        <li class="pstep" data-step="7">
+          <div class="ptext"><h4><span class="pnum">7</span>The planner calls the ledger.</h4><p>Same call shape. The planner cannot use this ticket anywhere else, and the ledger cannot use the planner’s.</p></div>
+          <div class="code"><div class="code-head">call</div><pre>POST https://ledger.example.com/a2a/tasks
+Authorization: Bearer &lt;the ledger ticket&gt;</pre></div>
+        </li>
+        <li class="pstep" data-step="8">
+          <div class="ptext"><h4><span class="pnum">8</span>The ledger decides for itself.</h4><p>It checks the signature against ARK’s published keys, the issuer, the type, the expiry and that <code>aud</code> is its own name. Then it decides on <code>ark_claims</code>, and reads <code>act</code> to see which agents brought Alice here.</p></div>
+          <div class="code"><div class="code-head">guard · Python</div><pre>@app.post("/a2a/tasks")
+@agent.require(claims=["orders.read"])
+def tasks():
+    current_ark.sub      # alice@example.com
+    current_ark.actors   # ["planner", "team-portal"]</pre></div>
+        </li>
+      </ol>
+      </div>
+    </div>
+    </div>
+    <div class="panel" role="tabpanel" id="p-a2a-self" aria-labelledby="t-a2a-self"><h3 class="panel-h">As itself</h3>
+    <div class="card player" data-player="a2a-self">
+      <div class="scroll" tabindex="0" role="group" aria-label="Sequence diagram">
+<svg class="seq" viewBox="0 0 1000 371" role="img" aria-label="Sequence: the Planner agent asks ARK for a ticket to Ledger with client_credentials and audience; ARK checks that Ledger lists Planner, and issues it; Planner calls Ledger, which verifies it" style="min-width:640px">
+  <line class="life" x1="167" y1="58" x2="167" y2="365"/>
+  <g class="lane idp"><rect x="79" y="10" width="176" height="50" rx="11"/><text class="t" x="167" y="31" text-anchor="middle">ARK Identity</text><text class="s" x="167" y="48" text-anchor="middle">token endpoint</text></g>
+  <line class="life" x1="500" y1="58" x2="500" y2="365"/>
+  <g class="lane door a-planner"><rect x="412" y="10" width="176" height="50" rx="11"/><text class="t" x="500" y="31" text-anchor="middle">Planner</text><text class="s" x="500" y="48" text-anchor="middle">agent</text></g>
+  <line class="life" x1="833" y1="58" x2="833" y2="365"/>
+  <g class="lane door a-ledger"><rect x="745" y="10" width="176" height="50" rx="11"/><text class="t" x="833" y="31" text-anchor="middle">Ledger</text><text class="s" x="833" y="48" text-anchor="middle">agent</text></g>
+  <g class="msg" data-step="1">
+    <rect class="band" x="0" y="72" width="1000" height="48" rx="8"/>
+    <text class="lab req" x="333" y="91" text-anchor="middle">client_credentials</text>
+    <line class="ln req" x1="500" y1="99" x2="176" y2="99"/>
+    <polygon class="hd req" points="169,99 178,94.5 178,103.5"/>
+    <text class="sub req" x="333" y="114" text-anchor="middle">audience=ledger</text>
+    <g class="num"><circle cx="500" cy="99" r="10.5"/><text x="500" y="103" text-anchor="middle">1</text></g>
+  </g>
+  <g class="msg" data-step="2">
+    <rect class="band" x="0" y="119" width="1000" height="103" rx="8"/>
+    <rect class="chk " x="61" y="129" width="210" height="46" rx="8"/>
+    <path class="tick " d="M78 152l4 4 8-9"/>
+    <text class="sm" x="98" y="147">is this really planner?</text>
+    <text class="sm" x="98" y="164">does ledger list planner?</text>
+    <text class="lab res" x="333" y="192" text-anchor="middle">a ticket, good for 5 minutes</text>
+    <line class="ln res" x1="167" y1="209" x2="491" y2="209"/>
+    <polygon class="hd res" points="498,209 489,204.5 489,213.5"/>
+    <g class="tk a-ledger"><rect x="285" y="199" width="97" height="20" rx="5"/><rect class="bar" x="285" y="199" width="5" height="20" rx="2"/><text class="mono" x="299" y="213">aud: ledger</text></g>
+    <g class="num"><circle cx="61" cy="152" r="10.5"/><text x="61" y="156" text-anchor="middle">2</text></g>
+  </g>
+  <g class="msg" data-step="3">
+    <rect class="band" x="0" y="221" width="1000" height="49" rx="8"/>
+    <text class="lab req" x="667" y="240" text-anchor="middle">POST /a2a/tasks</text>
+    <line class="ln req" x1="500" y1="257" x2="824" y2="257"/>
+    <polygon class="hd req" points="831,257 822,252.5 822,261.5"/>
+    <g class="tk a-ledger"><rect x="618" y="247" width="97" height="20" rx="5"/><rect class="bar" x="618" y="247" width="5" height="20" rx="2"/><text class="mono" x="632" y="261">aud: ledger</text></g>
+    <g class="num"><circle cx="500" cy="257" r="10.5"/><text x="500" y="261" text-anchor="middle">3</text></g>
+  </g>
+  <g class="msg" data-step="4">
+    <rect class="band" x="0" y="269" width="1000" height="91" rx="8"/>
+    <rect class="chk " x="712" y="279" width="243" height="46" rx="8"/>
+    <path class="tick " d="M729 302l4 4 8-9"/>
+    <text class="sm" x="749" y="297">addressed to me</text>
+    <text class="sm" x="749" y="314">planner holds orders.read here</text>
+    <text class="lab res" x="667" y="342" text-anchor="middle">the answer</text>
+    <line class="ln res" x1="833" y1="350" x2="509" y2="350"/>
+    <polygon class="hd res" points="502,350 511,345.5 511,354.5"/>
+    <g class="num"><circle cx="712" cy="302" r="10.5"/><text x="712" y="306" text-anchor="middle">4</text></g>
+  </g>
+</svg>
+      </div>
+      <div class="pfoot">
+      <div class="pbar">
+        <button type="button" class="pbtn" data-move="-1">← Back</button>
+        <div class="dots"><button type="button" class="dot" data-go="1" aria-label="Step 1: The planner asks in its own name.">1</button><button type="button" class="dot" data-go="2" aria-label="Step 2: ARK looks at the ledger’s list, not the planner’s.">2</button><button type="button" class="dot" data-go="3" aria-label="Step 3: The planner calls the ledger.">3</button><button type="button" class="dot" data-go="4" aria-label="Step 4: The ledger verifies and decides.">4</button></div>
+        <button type="button" class="pbtn primary" data-move="1">Next →</button>
+      </div>
+      <ol class="psteps">
+        <li class="pstep" data-step="1">
+          <div class="ptext"><h4><span class="pnum">1</span>The planner asks in its own name.</h4><p>For a scheduled job, or any work with no person behind it. A client secret or a signed JWT (<code>private_key_jwt</code>) proves who is asking.</p></div>
+          <div class="code"><div class="code-head">request</div><pre>POST /acme/oauth2/token
+Authorization: Basic planner:•••
+
+grant_type=client_credentials
+audience=ledger</pre></div>
+        </li>
+        <li class="pstep" data-step="2">
+          <div class="ptext"><h4><span class="pnum">2</span>ARK looks at the ledger’s list, not the planner’s.</h4><p>The client being called names its callers and what each holds there. An empty list, which is how every client starts, means nobody. The same refusal covers a client that does not exist, so the list cannot be probed.</p></div>
+          <div class="code"><div class="code-head">ticket</div><pre>{
+  "aud": "ledger",
+  "sub": "planner",
+  "client_id": "planner",
+  "ark_claims": ["orders.read"],
+  "exp": iat + 300
+}</pre></div>
+        </li>
+        <li class="pstep" data-step="3">
+          <div class="ptext"><h4><span class="pnum">3</span>The planner calls the ledger.</h4><p>With a client library, asking, caching and renewing is one call.</p></div>
+          <div class="code"><div class="code-head">call · Python</div><pre>token = ark.agent_token("ledger").access_token</pre></div>
+        </li>
+        <li class="pstep" data-step="4">
+          <div class="ptext"><h4><span class="pnum">4</span>The ledger verifies and decides.</h4><p>There is no <code>act</code> claim, because nobody is being acted for. <code>sub</code> is the agent itself, and it holds only what the ledger granted it.</p></div>
+          <div class="code"><div class="code-head">guard · Node</div><pre>const agent = arkBearer({ authority, clientId: 'ledger', agent: true });
+app.post('/a2a/tasks', agent, agent.require({ claims: ['orders.read'] }), handler);</pre></div>
+        </li>
+      </ol>
+      </div>
+    </div>
+    </div>
+    </div>
+
+    <div class="gates-h">What ARK checks before it prints a ticket for a person, in order, and the error when it fails</div>
+    <ol class="gates g8 static"><li><span class="gk">1</span><span class="gt">Caller proves who it is</span><code>invalid_client</code></li><li><span class="gk">2</span><span class="gt">Registered for this grant</span><code>unauthorized_client</code></li><li><span class="gk">3</span><span class="gt">Token is genuine and live</span><code>invalid_grant</code></li><li><span class="gk">4</span><span class="gt">…and this caller’s to use</span><code>invalid_grant</code></li><li><span class="gk">5</span><span class="gt">Live person and session</span><code>invalid_grant</code></li><li><span class="gk">6</span><span class="gt">At most 4 agents deep</span><code>invalid_grant</code></li><li><span class="gk">7</span><span class="gt">Target lists the caller</span><code>invalid_target</code></li><li><span class="gk">8</span><span class="gt">Person has access there</span><code>invalid_target</code></li></ol>
+    <div class="gates-h">What the receiver checks, without calling ARK</div>
+    <ol class="gates g4 static"><li><span class="gk">A</span><span class="gt">Signed by this issuer</span><code>401</code></li><li><span class="gk">B</span><span class="gt">Access token, not expired</span><code>401</code></li><li><span class="gk">C</span><span class="gt">Addressed to me</span><code>401</code></li><li><span class="gk">D</span><span class="gt">Claim for this action</span><code>403 or tool error</code></li></ol>
+    <p class="note">In its own name, an agent meets checks 1, 2 and 7. None of these rely on what the calling agent says about itself.</p>
+
+    <div class="card callout">
+      <h3>Set it up, in the admin console</h3>
+      <ol class="steps-mini">
+        <li><strong>Give each agent a client</strong> with the <code>client_credentials</code> grant, and <code>token-exchange</code> for those that act for people.</li>
+        <li><strong>Open the client being called</strong>, find <em>Agent-to-agent (A2A)</em>, press <em>Add calling client</em>, choose the caller, the claims it holds there, and whether it <em>may act for users</em>.</li>
+        <li><strong>For people, map the person to the target</strong>, as for any application.</li>
+      </ol>
+      <p class="note">Full reference: <a href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md" target="_blank" rel="noopener">A2A.md</a>, with the API form of the list and one-line guards for .NET, Python and Node. ARK also writes the security section of your <a href="https://a2a-protocol.org/latest/specification/" target="_blank" rel="noopener">Agent Card</a>, at <code>{issuer}/a2a/agent-card-security</code>.</p>
+    </div>
+  </section>
+
+  <!-- ===== Flow 2 ===== -->
+  <section id="mcp">
+    <div class="section-head">
+      <div class="kicker">Flow 2 · agent to MCP server</div>
+      <h2>An MCP server is one more door with its own name.</h2>
+      <p>
+        The MCP authorization specification asks for a token issued for that server and nobody else.
+        That is what an ARK ticket is. Three cases: an agent alone, an agent for a person, and a server that calls onward.
+      </p>
+    </div>
+    <div class="tabset" data-tabs="mcp">
+    <div class="tabs" role="tablist"><button type="button" class="tab" role="tab" id="t-mcp-self" aria-controls="p-mcp-self" aria-selected="true">As itself, by discovery</button><button type="button" class="tab" role="tab" id="t-mcp-user" aria-controls="p-mcp-user" aria-selected="false">For a person</button><button type="button" class="tab" role="tab" id="t-mcp-onward" aria-controls="p-mcp-onward" aria-selected="false">The server calls onward</button></div>
+    <div class="panel" role="tabpanel" id="p-mcp-self" aria-labelledby="t-mcp-self"><h3 class="panel-h">As itself, by discovery</h3>
+    <div class="card player" data-player="mcp-self">
+      <div class="scroll" tabindex="0" role="group" aria-label="Sequence diagram">
+<svg class="seq" viewBox="0 0 1000 516" role="img" aria-label="Sequence: an unmodified MCP client calls the Catalog MCP server, is answered 401 with a metadata pointer, discovers ARK, asks for a token with resource set to the MCP server address, and calls the tool" style="min-width:640px">
+  <line class="life" x1="167" y1="58" x2="167" y2="510"/>
+  <g class="lane idp"><rect x="79" y="10" width="176" height="50" rx="11"/><text class="t" x="167" y="31" text-anchor="middle">ARK Identity</text><text class="s" x="167" y="48" text-anchor="middle">token endpoint</text></g>
+  <line class="life" x1="500" y1="58" x2="500" y2="510"/>
+  <g class="lane door a-planner"><rect x="412" y="10" width="176" height="50" rx="11"/><text class="t" x="500" y="31" text-anchor="middle">Planner</text><text class="s" x="500" y="48" text-anchor="middle">agent</text></g>
+  <line class="life" x1="833" y1="58" x2="833" y2="510"/>
+  <g class="lane door a-catalog"><rect x="745" y="10" width="176" height="50" rx="11"/><text class="t" x="833" y="31" text-anchor="middle">Catalog</text><text class="s" x="833" y="48" text-anchor="middle">MCP server</text></g>
+  <g class="msg" data-step="1">
+    <rect class="band" x="0" y="72" width="1000" height="77" rx="8"/>
+    <text class="lab req" x="667" y="91" text-anchor="middle">POST /mcp, with no ticket</text>
+    <line class="ln req" x1="500" y1="99" x2="824" y2="99"/>
+    <polygon class="hd req" points="831,99 822,94.5 822,103.5"/>
+    <text class="lab res" x="667" y="120" text-anchor="middle">401, and where to look</text>
+    <line class="ln res" x1="833" y1="128" x2="509" y2="128"/>
+    <polygon class="hd res" points="502,128 511,123.5 511,132.5"/>
+    <text class="sub res" x="667" y="143" text-anchor="middle">WWW-Authenticate: resource_metadata=…</text>
+    <g class="num"><circle cx="500" cy="99" r="10.5"/><text x="500" y="103" text-anchor="middle">1</text></g>
+  </g>
+  <g class="msg" data-step="2">
+    <rect class="band" x="0" y="148" width="1000" height="66" rx="8"/>
+    <text class="lab req" x="667" y="167" text-anchor="middle">who protects you?</text>
+    <line class="ln req" x1="500" y1="175" x2="824" y2="175"/>
+    <polygon class="hd req" points="831,175 822,170.5 822,179.5"/>
+    <text class="lab res" x="667" y="196" text-anchor="middle">ARK does, and this is my name</text>
+    <line class="ln res" x1="833" y1="204" x2="509" y2="204"/>
+    <polygon class="hd res" points="502,204 511,199.5 511,208.5"/>
+    <g class="num"><circle cx="500" cy="175" r="10.5"/><text x="500" y="179" text-anchor="middle">2</text></g>
+  </g>
+  <g class="msg" data-step="3">
+    <rect class="band" x="0" y="213" width="1000" height="66" rx="8"/>
+    <text class="lab req" x="333" y="232" text-anchor="middle">where is your token endpoint?</text>
+    <line class="ln req" x1="500" y1="240" x2="176" y2="240"/>
+    <polygon class="hd req" points="169,240 178,235.5 178,244.5"/>
+    <text class="lab res" x="333" y="261" text-anchor="middle">found on the third address</text>
+    <line class="ln res" x1="167" y1="269" x2="491" y2="269"/>
+    <polygon class="hd res" points="498,269 489,264.5 489,273.5"/>
+    <g class="num"><circle cx="500" cy="240" r="10.5"/><text x="500" y="244" text-anchor="middle">3</text></g>
+  </g>
+  <g class="msg" data-step="4">
+    <rect class="band" x="0" y="278" width="1000" height="89" rx="8"/>
+    <text class="lab req" x="333" y="297" text-anchor="middle">client_credentials</text>
+    <line class="ln req" x1="500" y1="305" x2="176" y2="305"/>
+    <polygon class="hd req" points="169,305 178,300.5 178,309.5"/>
+    <text class="sub req" x="333" y="320" text-anchor="middle">resource=https://mcp.example.com/mcp</text>
+    <text class="lab res" x="333" y="337" text-anchor="middle">a ticket</text>
+    <line class="ln res" x1="167" y1="354" x2="491" y2="354"/>
+    <polygon class="hd res" points="498,354 489,349.5 489,358.5"/>
+    <g class="tk a-catalog"><rect x="215" y="344" width="236" height="20" rx="5"/><rect class="bar" x="215" y="344" width="5" height="20" rx="2"/><text class="mono" x="229" y="358">aud: https://mcp.example.com/mcp</text></g>
+    <g class="num"><circle cx="500" cy="305" r="10.5"/><text x="500" y="309" text-anchor="middle">4</text></g>
+  </g>
+  <g class="msg" data-step="5">
+    <rect class="band" x="0" y="366" width="1000" height="49" rx="8"/>
+    <text class="lab req" x="667" y="385" text-anchor="middle">tools/call search</text>
+    <line class="ln req" x1="500" y1="402" x2="824" y2="402"/>
+    <polygon class="hd req" points="831,402 822,397.5 822,406.5"/>
+    <g class="tk a-catalog"><rect x="549" y="392" width="236" height="20" rx="5"/><rect class="bar" x="549" y="392" width="5" height="20" rx="2"/><text class="mono" x="563" y="406">aud: https://mcp.example.com/mcp</text></g>
+    <g class="num"><circle cx="500" cy="402" r="10.5"/><text x="500" y="406" text-anchor="middle">5</text></g>
+  </g>
+  <g class="msg" data-step="6">
+    <rect class="band" x="0" y="414" width="1000" height="91" rx="8"/>
+    <rect class="chk " x="725" y="424" width="217" height="46" rx="8"/>
+    <path class="tick " d="M742 447l4 4 8-9"/>
+    <text class="sm" x="762" y="442">aud is my own address</text>
+    <text class="sm" x="762" y="459">planner holds catalog.read</text>
+    <text class="lab res" x="667" y="487" text-anchor="middle">the result</text>
+    <line class="ln res" x1="833" y1="495" x2="509" y2="495"/>
+    <polygon class="hd res" points="502,495 511,490.5 511,499.5"/>
+    <g class="num"><circle cx="725" cy="447" r="10.5"/><text x="725" y="451" text-anchor="middle">6</text></g>
+  </g>
+</svg>
+      </div>
+      <div class="pfoot">
+      <div class="pbar">
+        <button type="button" class="pbtn" data-move="-1">← Back</button>
+        <div class="dots"><button type="button" class="dot" data-go="1" aria-label="Step 1: The MCP client knocks without a ticket.">1</button><button type="button" class="dot" data-go="2" aria-label="Step 2: The MCP server says who protects it.">2</button><button type="button" class="dot" data-go="3" aria-label="Step 3: The client finds ARK’s metadata.">3</button><button type="button" class="dot" data-go="4" aria-label="Step 4: It asks for a ticket, naming the server by its address.">4</button><button type="button" class="dot" data-go="5" aria-label="Step 5: It calls the tool.">5</button><button type="button" class="dot" data-go="6" aria-label="Step 6: The server checks the name on the ticket.">6</button></div>
+        <button type="button" class="pbtn primary" data-move="1">Next →</button>
+      </div>
+      <ol class="psteps">
+        <li class="pstep" data-step="1">
+          <div class="ptext"><h4><span class="pnum">1</span>The MCP client knocks without a ticket.</h4><p>This is the official Python MCP SDK with its client-credentials provider, and no ARK code in the client. The server’s refusal tells it where to look.</p></div>
+          <div class="code"><div class="code-head">recorded</div><pre>POST https://mcp.example.com/mcp
+
+401 Unauthorized
+WWW-Authenticate: Bearer error="invalid_token",
+  resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource/mcp"</pre></div>
+        </li>
+        <li class="pstep" data-step="2">
+          <div class="ptext"><h4><span class="pnum">2</span>The MCP server says who protects it.</h4><p>Protected resource metadata (RFC 9728). The MCP SDKs serve it from two settings: the issuer and the server’s own address.</p></div>
+          <div class="code"><div class="code-head">recorded</div><pre>GET /.well-known/oauth-protected-resource/mcp
+
+{ "resource": "https://mcp.example.com/mcp",
+  "authorization_servers": ["https://idp.example.com/acme"],
+  "scopes_supported": ["profile"] }</pre></div>
+        </li>
+        <li class="pstep" data-step="3">
+          <div class="ptext"><h4><span class="pnum">3</span>The client finds ARK’s metadata.</h4><p>MCP clients must try three addresses, in this order, for an issuer with a path. ARK answers the third. It advertises <code>S256</code>, which MCP clients insist on.</p></div>
+          <div class="code"><div class="code-head">recorded</div><pre>404  /.well-known/oauth-authorization-server/acme
+404  /.well-known/openid-configuration/acme
+200  /acme/.well-known/openid-configuration</pre></div>
+        </li>
+        <li class="pstep" data-step="4">
+          <div class="ptext"><h4><span class="pnum">4</span>It asks for a ticket, naming the server by its address.</h4><p>MCP clients send the server’s address as <code>resource</code> (RFC 8707). ARK reads it as the target’s <code>client_id</code>, so the MCP server is registered under its own address.</p></div>
+          <div class="code"><div class="code-head">recorded</div><pre>POST /acme/oauth2/token
+
+grant_type=client_credentials
+client_id=planner&amp;client_secret=•••
+resource=https://mcp.example.com/mcp
+scope=profile</pre></div>
+        </li>
+        <li class="pstep" data-step="5">
+          <div class="ptext"><h4><span class="pnum">5</span>It calls the tool.</h4><p>The SDK keeps the ticket and asks again when it runs out. There is no refresh token to steal.</p></div>
+          <div class="code"><div class="code-head">ticket</div><pre>{
+  "aud": "https://mcp.example.com/mcp",
+  "sub": "planner",
+  "client_id": "planner",
+  "ark_claims": ["catalog.read"],
+  "scope": "profile"
+}</pre></div>
+        </li>
+        <li class="pstep" data-step="6">
+          <div class="ptext"><h4><span class="pnum">6</span>The server checks the name on the ticket.</h4><p>MCP requires a server to accept only tokens issued for it. Here that is one comparison: <code>aud</code> against its own address. Then the tool checks the claim.</p></div>
+          <div class="code"><div class="code-head">recorded result</div><pre>{ "for": "planner", "acting": [], "hits": ["x"] }</pre></div>
+        </li>
+      </ol>
+      </div>
+    </div>
+    </div>
+    <div class="panel" role="tabpanel" id="p-mcp-user" aria-labelledby="t-mcp-user"><h3 class="panel-h">For a person</h3>
+    <div class="card player" data-player="mcp-user">
+      <div class="scroll" tabindex="0" role="group" aria-label="Sequence diagram">
+<svg class="seq" viewBox="0 0 1000 365" role="img" aria-label="Sequence: Planner exchanges Alice&#x27;s ticket for one addressed to the Orders MCP server and calls refund, which is allowed because Alice holds orders.refund; the same call in Planner&#x27;s own name is refused" style="min-width:640px">
+  <line class="life" x1="167" y1="58" x2="167" y2="359"/>
+  <g class="lane idp"><rect x="79" y="10" width="176" height="50" rx="11"/><text class="t" x="167" y="31" text-anchor="middle">ARK Identity</text><text class="s" x="167" y="48" text-anchor="middle">token endpoint</text></g>
+  <line class="life" x1="500" y1="58" x2="500" y2="359"/>
+  <g class="lane door a-planner"><rect x="412" y="10" width="176" height="50" rx="11"/><text class="t" x="500" y="31" text-anchor="middle">Planner</text><text class="s" x="500" y="48" text-anchor="middle">agent</text></g>
+  <line class="life" x1="833" y1="58" x2="833" y2="359"/>
+  <g class="lane door a-orders"><rect x="745" y="10" width="176" height="50" rx="11"/><text class="t" x="833" y="31" text-anchor="middle">Orders</text><text class="s" x="833" y="48" text-anchor="middle">MCP server</text></g>
+  <g class="msg" data-step="1">
+    <rect class="band" x="0" y="72" width="1000" height="48" rx="8"/>
+    <text class="lab req" x="333" y="91" text-anchor="middle">exchange Alice’s planner ticket</text>
+    <line class="ln req" x1="500" y1="99" x2="176" y2="99"/>
+    <polygon class="hd req" points="169,99 178,94.5 178,103.5"/>
+    <text class="sub req" x="333" y="114" text-anchor="middle">audience=orders-mcp</text>
+    <g class="num"><circle cx="500" cy="99" r="10.5"/><text x="500" y="103" text-anchor="middle">1</text></g>
+  </g>
+  <g class="msg" data-step="2">
+    <rect class="band" x="0" y="119" width="1000" height="49" rx="8"/>
+    <text class="lab res" x="333" y="138" text-anchor="middle">a ticket for Alice, by planner</text>
+    <line class="ln res" x1="167" y1="155" x2="491" y2="155"/>
+    <polygon class="hd res" points="498,155 489,150.5 489,159.5"/>
+    <g class="tk a-orders"><rect x="272" y="145" width="123" height="20" rx="5"/><rect class="bar" x="272" y="145" width="5" height="20" rx="2"/><text class="mono" x="286" y="159">aud: orders-mcp</text></g>
+    <g class="num"><circle cx="167" cy="155" r="10.5"/><text x="167" y="159" text-anchor="middle">2</text></g>
+  </g>
+  <g class="msg" data-step="3">
+    <rect class="band" x="0" y="167" width="1000" height="49" rx="8"/>
+    <text class="lab req" x="667" y="186" text-anchor="middle">tools/call refund A-1</text>
+    <line class="ln req" x1="500" y1="203" x2="824" y2="203"/>
+    <polygon class="hd req" points="831,203 822,198.5 822,207.5"/>
+    <g class="tk a-orders"><rect x="605" y="193" width="123" height="20" rx="5"/><rect class="bar" x="605" y="193" width="5" height="20" rx="2"/><text class="mono" x="619" y="207">aud: orders-mcp</text></g>
+    <g class="num"><circle cx="500" cy="203" r="10.5"/><text x="500" y="207" text-anchor="middle">3</text></g>
+  </g>
+  <g class="msg" data-step="4">
+    <rect class="band" x="0" y="215" width="1000" height="91" rx="8"/>
+    <rect class="chk " x="728" y="225" width="210" height="46" rx="8"/>
+    <path class="tick " d="M745 248l4 4 8-9"/>
+    <text class="sm" x="765" y="243">addressed to me</text>
+    <text class="sm" x="765" y="260">Alice holds orders.refund</text>
+    <text class="lab res" x="667" y="288" text-anchor="middle">refunded, by Alice, through planner</text>
+    <line class="ln res" x1="833" y1="296" x2="509" y2="296"/>
+    <polygon class="hd res" points="502,296 511,291.5 511,300.5"/>
+    <g class="num"><circle cx="728" cy="248" r="10.5"/><text x="728" y="252" text-anchor="middle">4</text></g>
+  </g>
+  <g class="msg" data-step="5">
+    <rect class="band" x="0" y="305" width="1000" height="49" rx="8"/>
+    <text class="lab bad" x="667" y="324" text-anchor="middle">the same call in its own name</text>
+    <line class="ln bad" x1="500" y1="341" x2="775" y2="341"/>
+    <g class="xmark"><circle cx="787" cy="341" r="10"/><path d="M783 337l8 8m0-8l-8 8"/></g>
+    <g class="tk a-orders"><rect x="605" y="331" width="123" height="20" rx="5"/><rect class="bar" x="605" y="331" width="5" height="20" rx="2"/><text class="mono" x="619" y="345">aud: orders-mcp</text></g>
+    <g class="num"><circle cx="500" cy="341" r="10.5"/><text x="500" y="345" text-anchor="middle">5</text></g>
+  </g>
+</svg>
+      </div>
+      <div class="pfoot">
+      <div class="pbar">
+        <button type="button" class="pbtn" data-move="-1">← Back</button>
+        <div class="dots"><button type="button" class="dot" data-go="1" aria-label="Step 1: The planner brings Alice along.">1</button><button type="button" class="dot" data-go="2" aria-label="Step 2: The ticket holds Alice’s rights at that server.">2</button><button type="button" class="dot" data-go="3" aria-label="Step 3: The planner calls the tool.">3</button><button type="button" class="dot" data-go="4" aria-label="Step 4: The tool checks the claim and knows both names.">4</button><button type="button" class="dot" data-go="5" aria-label="Step 5: Without Alice, the planner may only read.">5</button></div>
+        <button type="button" class="pbtn primary" data-move="1">Next →</button>
+      </div>
+      <ol class="psteps">
+        <li class="pstep" data-step="1">
+          <div class="ptext"><h4><span class="pnum">1</span>The planner brings Alice along.</h4><p>It was called with a ticket for Alice (flow 1, step 4). It exchanges that ticket for one addressed to the MCP server. To ARK, an MCP server is one more client.</p></div>
+          <div class="code"><div class="code-head">client library · Python</div><pre>token = ark.agent_token("orders-mcp", subject_token=incoming).access_token</pre></div>
+        </li>
+        <li class="pstep" data-step="2">
+          <div class="ptext"><h4><span class="pnum">2</span>The ticket holds Alice’s rights at that server.</h4><p>The operator mapped her to the Orders server with two claims, and those are what the ticket carries. The planner’s own grant there is smaller and is not mixed in.</p></div>
+          <div class="code"><div class="code-head">ticket</div><pre>{
+  "aud": "orders-mcp",
+  "sub": "alice@example.com",
+  "client_id": "planner",
+  "act": { "sub": "planner",
+           "act": { "sub": "team-portal" } },
+  "ark_claims": ["orders.read", "orders.refund"]
+}</pre></div>
+        </li>
+        <li class="pstep" data-step="3">
+          <div class="ptext"><h4><span class="pnum">3</span>The planner calls the tool.</h4><p>Any MCP client can send it: the ticket is an ordinary bearer header.</p></div>
+          <div class="code"><div class="code-head">call · Python</div><pre>async with httpx2.AsyncClient(headers={"Authorization": f"Bearer {token}"}) as http:
+    async with Client(streamable_http_client(url, http_client=http)) as mcp:
+        await mcp.call_tool("refund", {"order": "A-1"})</pre></div>
+        </li>
+        <li class="pstep" data-step="4">
+          <div class="ptext"><h4><span class="pnum">4</span>The tool checks the claim and knows both names.</h4><p>It runs because <em>Alice</em> may refund, and it can record that the planner did it for her.</p></div>
+          <div class="code"><div class="code-head">recorded result</div><pre>{ "refunded": "A-1", "by": "alice@example.com",
+  "acting": ["planner", "team-portal"] }</pre></div>
+        </li>
+        <li class="pstep" data-step="5">
+          <div class="ptext"><h4><span class="pnum">5</span>Without Alice, the planner may only read.</h4><p>Calling in its own name, the planner holds what the Orders server granted it: <code>orders.read</code>. The same tool refuses.</p></div>
+          <div class="code"><div class="code-head">recorded</div><pre>ticket  { "aud": "orders-mcp", "sub": "planner", "ark_claims": ["orders.read"] }
+reply   Error executing tool refund</pre></div>
+        </li>
+      </ol>
+      </div>
+    </div>
+    </div>
+    <div class="panel" role="tabpanel" id="p-mcp-onward" aria-labelledby="t-mcp-onward"><h3 class="panel-h">The server calls onward</h3>
+    <div class="card player" data-player="mcp-onward">
+      <div class="scroll" tabindex="0" role="group" aria-label="Sequence diagram">
+<svg class="seq" viewBox="0 0 1000 345" role="img" aria-label="Sequence: the Orders MCP server cannot pass the received ticket on to Ledger because it is addressed to Orders; it exchanges it for one addressed to Ledger and calls with that" style="min-width:820px">
+  <line class="life" x1="125" y1="58" x2="125" y2="339"/>
+  <g class="lane door a-planner"><rect x="37" y="10" width="176" height="50" rx="11"/><text class="t" x="125" y="31" text-anchor="middle">Planner</text><text class="s" x="125" y="48" text-anchor="middle">agent</text></g>
+  <line class="life" x1="375" y1="58" x2="375" y2="339"/>
+  <g class="lane door a-orders"><rect x="287" y="10" width="176" height="50" rx="11"/><text class="t" x="375" y="31" text-anchor="middle">Orders</text><text class="s" x="375" y="48" text-anchor="middle">MCP server</text></g>
+  <line class="life" x1="625" y1="58" x2="625" y2="339"/>
+  <g class="lane idp"><rect x="537" y="10" width="176" height="50" rx="11"/><text class="t" x="625" y="31" text-anchor="middle">ARK Identity</text><text class="s" x="625" y="48" text-anchor="middle">token endpoint</text></g>
+  <line class="life" x1="875" y1="58" x2="875" y2="339"/>
+  <g class="lane door a-ledger"><rect x="787" y="10" width="176" height="50" rx="11"/><text class="t" x="875" y="31" text-anchor="middle">Ledger</text><text class="s" x="875" y="48" text-anchor="middle">agent</text></g>
+  <g class="msg" data-step="1">
+    <rect class="band" x="0" y="72" width="1000" height="49" rx="8"/>
+    <text class="lab req" x="250" y="91" text-anchor="middle">tools/call balance</text>
+    <line class="ln req" x1="125" y1="108" x2="366" y2="108"/>
+    <polygon class="hd req" points="373,108 364,103.5 364,112.5"/>
+    <g class="tk a-orders"><rect x="188" y="98" width="123" height="20" rx="5"/><rect class="bar" x="188" y="98" width="5" height="20" rx="2"/><text class="mono" x="202" y="112">aud: orders-mcp</text></g>
+    <g class="num"><circle cx="125" cy="108" r="10.5"/><text x="125" y="112" text-anchor="middle">1</text></g>
+  </g>
+  <g class="msg" data-step="2">
+    <rect class="band" x="0" y="120" width="1000" height="49" rx="8"/>
+    <text class="lab bad" x="625" y="139" text-anchor="middle">passes the same ticket on</text>
+    <line class="ln bad" x1="375" y1="156" x2="817" y2="156"/>
+    <g class="xmark"><circle cx="829" cy="156" r="10"/><path d="M825 152l8 8m0-8l-8 8"/></g>
+    <g class="tk a-orders"><rect x="563" y="146" width="123" height="20" rx="5"/><rect class="bar" x="563" y="146" width="5" height="20" rx="2"/><text class="mono" x="577" y="160">aud: orders-mcp</text></g>
+    <g class="num"><circle cx="375" cy="156" r="10.5"/><text x="375" y="160" text-anchor="middle">2</text></g>
+  </g>
+  <g class="msg" data-step="3">
+    <rect class="band" x="0" y="168" width="1000" height="89" rx="8"/>
+    <text class="lab req" x="500" y="187" text-anchor="middle">exchange it instead</text>
+    <line class="ln req" x1="375" y1="195" x2="616" y2="195"/>
+    <polygon class="hd req" points="623,195 614,190.5 614,199.5"/>
+    <text class="sub req" x="500" y="210" text-anchor="middle">audience=ledger</text>
+    <text class="lab res" x="500" y="227" text-anchor="middle">a ticket of its own</text>
+    <line class="ln res" x1="625" y1="244" x2="384" y2="244"/>
+    <polygon class="hd res" points="377,244 386,239.5 386,248.5"/>
+    <g class="tk a-ledger"><rect x="452" y="234" width="97" height="20" rx="5"/><rect class="bar" x="452" y="234" width="5" height="20" rx="2"/><text class="mono" x="466" y="248">aud: ledger</text></g>
+    <g class="num"><circle cx="375" cy="195" r="10.5"/><text x="375" y="199" text-anchor="middle">3</text></g>
+  </g>
+  <g class="msg" data-step="4">
+    <rect class="band" x="0" y="256" width="1000" height="78" rx="8"/>
+    <text class="lab req" x="625" y="275" text-anchor="middle">POST /a2a/tasks</text>
+    <line class="ln req" x1="375" y1="292" x2="866" y2="292"/>
+    <polygon class="hd req" points="873,292 864,287.5 864,296.5"/>
+    <g class="tk a-ledger"><rect x="577" y="282" width="97" height="20" rx="5"/><rect class="bar" x="577" y="282" width="5" height="20" rx="2"/><text class="mono" x="591" y="296">aud: ledger</text></g>
+    <text class="lab res" x="625" y="316" text-anchor="middle">the answer</text>
+    <line class="ln res" x1="875" y1="324" x2="384" y2="324"/>
+    <polygon class="hd res" points="377,324 386,319.5 386,328.5"/>
+    <g class="num"><circle cx="375" cy="292" r="10.5"/><text x="375" y="296" text-anchor="middle">4</text></g>
+  </g>
+</svg>
+      </div>
+      <div class="pfoot">
+      <div class="pbar">
+        <button type="button" class="pbtn" data-move="-1">← Back</button>
+        <div class="dots"><button type="button" class="dot" data-go="1" aria-label="Step 1: A tool needs something from another agent.">1</button><button type="button" class="dot" data-go="2" aria-label="Step 2: Passing the ticket along does not work.">2</button><button type="button" class="dot" data-go="3" aria-label="Step 3: It exchanges the ticket for its own.">3</button><button type="button" class="dot" data-go="4" aria-label="Step 4: The ledger sees the full path.">4</button></div>
+        <button type="button" class="pbtn primary" data-move="1">Next →</button>
+      </div>
+      <ol class="psteps">
+        <li class="pstep" data-step="1">
+          <div class="ptext"><h4><span class="pnum">1</span>A tool needs something from another agent.</h4><p>The Orders server holds a ticket for Alice addressed to <code>orders-mcp</code>.</p></div>
+          <div class="code"><div class="code-head">ticket</div><pre>{
+  "aud": "orders-mcp",
+  "sub": "alice@example.com",
+  "act": { "sub": "planner",
+           "act": { "sub": "team-portal" } }
+}</pre></div>
+        </li>
+        <li class="pstep" data-step="2">
+          <div class="ptext"><h4><span class="pnum">2</span>Passing the ticket along does not work.</h4><p>MCP forbids token passthrough. Here it is also useless: the ledger reads the name on the ticket and refuses.</p></div>
+          <div class="code"><div class="code-head">recorded</div><pre>the token is addressed to 'orders-mcp', not to 'ledger'.</pre></div>
+        </li>
+        <li class="pstep" data-step="3">
+          <div class="ptext"><h4><span class="pnum">3</span>It exchanges the ticket for its own.</h4><p>Allowed only because the ledger lists <code>orders-mcp</code> as a caller that may act for users. Before it did, the same request was refused with <code>invalid_target</code>.</p></div>
+          <div class="code"><div class="code-head">ticket</div><pre>{
+  "aud": "ledger",
+  "sub": "alice@example.com",
+  "client_id": "orders-mcp",
+  "act": { "sub": "orders-mcp",
+           "act": { "sub": "planner",
+                    "act": { "sub": "team-portal" } } },
+  "ark_claims": ["orders.read"]
+}</pre></div>
+        </li>
+        <li class="pstep" data-step="4">
+          <div class="ptext"><h4><span class="pnum">4</span>The ledger sees the full path.</h4><p>Three names deep, newest first. Four is the limit by default, so a loop between agents ends.</p></div>
+          <div class="code"><div class="code-head">recorded, the fifth agent</div><pre>400 invalid_grant
+the delegation chain is too long: 5 agents, and at most 4 are allowed.</pre></div>
+        </li>
+      </ol>
+      </div>
+    </div>
+    </div>
+    </div>
+
+    <h3 style="margin-top:34px">The MCP server, complete</h3>
+    <p class="note">Each of these was run as printed, with only the host names changed, and met six tokens: two good ones (the agent alone, and for Alice) and four bad ones (another server’s ticket, a sign-in token, an ID token, an edited ticket). All three answered all six correctly.</p>
+    <div class="tabset" data-tabs="srv">
+    <div class="tabs" role="tablist"><button type="button" class="tab" role="tab" id="t-srv-py" aria-controls="p-srv-py" aria-selected="true">Python</button><button type="button" class="tab" role="tab" id="t-srv-net" aria-controls="p-srv-net" aria-selected="false">.NET</button><button type="button" class="tab" role="tab" id="t-srv-node" aria-controls="p-srv-node" aria-selected="false">Node</button></div>
+    <div class="panel" role="tabpanel" id="p-srv-py" aria-labelledby="t-srv-py"><h3 class="panel-h">Python</h3>
+<div class="code"><div class="code-head">server.py · mcp 2.3.0, ark-oauth-client<button class="copy" type="button">Copy</button></div><pre>import asyncio
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.settings import AuthSettings
+from mcp.server.auth.middleware.auth_context import get_access_token
+from ark_oauth_client import ArkOAuthClient, agent_actors
+
+AUTHORITY = "https://idp.example.com/acme"
+URL = "https://mcp.example.com/mcp"        <span class="c"># this server's address, and its client_id in ARK</span>
+ark = ArkOAuthClient(authority=AUTHORITY, client_id=URL)
+
+class ArkTokens:
+    async def verify_token(self, token):
+        try:                               <span class="c"># signature, issuer, typ, expiry, and aud == URL</span>
+            p = await asyncio.to_thread(ark.verify_agent_token, token)
+        except Exception:
+            return None                    <span class="c"># the SDK answers 401 and says where to get a token</span>
+        return AccessToken(token=token, client_id=p["client_id"], subject=p["sub"], claims=p,
+                           scopes=p.get("scope", "").split(), expires_at=p["exp"])
+
+mcp = MCPServer("catalog", token_verifier=ArkTokens(), auth=AuthSettings(
+    issuer_url=AUTHORITY, resource_server_url=URL,
+    required_scopes=["profile"],           <span class="c"># a scope your callers hold; permissions are ark_claims</span>
+    validate_token_resource=False))        <span class="c"># verify_agent_token has already checked the audience</span>
+
+@mcp.tool()
+def search(q: str) -&gt; dict:
+    """Search the catalogue."""
+    t = get_access_token()
+    if "catalog.read" not in t.claims.get("ark_claims", []):
+        raise ToolError("needs catalog.read")  <span class="c"># allowed in, not allowed to do this</span>
+    return {"for": t.subject, "acting": agent_actors(t.claims), "hits": [q]}
+
+app = mcp.streamable_http_app()            <span class="c"># uvicorn server:app</span></pre></div>
+    </div>
+    <div class="panel" role="tabpanel" id="p-srv-net" aria-labelledby="t-srv-net"><h3 class="panel-h">.NET</h3>
+<div class="code"><div class="code-head">Program.cs · ModelContextProtocol.AspNetCore 2.4.0, Ark.oAuth.Client<button class="copy" type="button">Copy</button></div><pre>using Ark.oAuth;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using ModelContextProtocol.AspNetCore.Authentication;
+using ModelContextProtocol.Server;
+
+const string Authority = "https://idp.example.com/acme";
+const string Url = "https://mcp.example.com/mcp";    <span class="c">// this server's address, and its client_id in ARK</span>
+
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddAuthentication(o =&gt;
+    {
+        o.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        o.DefaultChallengeScheme = McpAuthenticationDefaults.AuthenticationScheme; // 401 + resource_metadata
+    })
+    .AddArkAgentApi(new ArkAuthConfig { Authority = Authority, ClientId = Url })   <span class="c">// aud must be Url</span>
+    .AddMcp(o =&gt; o.ResourceMetadata = new()
+    {
+        Resource = Url,
+        AuthorizationServers = { Authority },
+        ScopesSupported = ["profile"]                <span class="c">// a scope your callers hold; permissions are ark_claims</span>
+    });
+builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddMcpServer().WithHttpTransport(o =&gt; o.Stateless = true).WithTools&lt;CatalogTools&gt;();
+
+var app = builder.Build();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapMcp("/mcp").RequireAuthorization(p =&gt; p.RequireClaim("ark_claims", "catalog.read"));
+app.Run();
+
+[McpServerToolType]
+public class CatalogTools(IHttpContextAccessor http)
+{
+    [McpServerTool(Name = "search")]
+    public object Search(string q)
+    {
+        var user = http.HttpContext!.User;
+        return new { @for = user.FindFirst("sub")?.Value, acting = user.ArkActors(), hits = new[] { q } };
+    }
+}</pre></div>
+    </div>
+    <div class="panel" role="tabpanel" id="p-srv-node" aria-labelledby="t-srv-node"><h3 class="panel-h">Node</h3>
+<div class="code"><div class="code-head">server.mjs · @modelcontextprotocol/sdk 1.32.2, ark-oauth-client-node<button class="copy" type="button">Copy</button></div><pre>import express from 'express';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
+import { InvalidTokenError, InsufficientScopeError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
+import { ArkOAuthClient, agentActors } from 'ark-oauth-client-node';
+import { z } from 'zod';
+
+const AUTHORITY = 'https://idp.example.com/acme';
+const URL = 'https://mcp.example.com/mcp';   <span class="c">// this server's address, and its client_id in ARK</span>
+const METADATA = '/.well-known/oauth-protected-resource/mcp';
+const ark = new ArkOAuthClient({ authority: AUTHORITY, clientId: URL });
+
+const bearer = requireBearerAuth({
+  resourceMetadataUrl: 'https://mcp.example.com' + METADATA,
+  verifier: {
+    async verifyAccessToken(token) {         <span class="c">// signature, issuer, typ, expiry, and aud === URL</span>
+      const p = await ark.verifyAgentToken(token, { arkClaims: ['catalog.read'] })
+        .catch(e =&gt; { throw new (e.error === 'insufficient_scope' ? InsufficientScopeError : InvalidTokenError)(e.message); });
+      return { token, clientId: p.client_id, scopes: (p.scope ?? '').split(' '), expiresAt: p.exp,
+               extra: { sub: p.sub, actors: agentActors(p) } };
+    }
+  }
+});
+
+const app = express();
+app.get(METADATA, (_req, res) =&gt; res.json({
+  resource: URL, authorization_servers: [AUTHORITY],
+  scopes_supported: ['profile']              <span class="c">// a scope your callers hold; permissions are ark_claims</span>
+}));
+app.post('/mcp', express.json(), bearer, async (req, res) =&gt; {
+  const server = new McpServer({ name: 'catalog', version: '1.0.0' });
+  server.registerTool('search', { inputSchema: { q: z.string() } }, ({ q }, { authInfo }) =&gt; ({
+    content: [{ type: 'text', text: JSON.stringify({ for: authInfo.extra.sub, acting: authInfo.extra.actors, hits: [q] }) }]
+  }));
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  await server.connect(transport);
+  await transport.handleRequest(req, res, req.body);
+});
+app.listen(3000);</pre></div>
+    </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>Register the server under its own address</h3>
+        <p>MCP clients name the server by URL, and ARK looks the name up as a <code>client_id</code>. Type the exact address, for example <code>https://mcp.example.com/mcp</code>, as the <code>client_id</code> in the console or through the management API. A short id such as <code>orders-mcp</code> works too when your own code asks for the ticket; an unmodified MCP client gets <code>invalid_target</code>.</p>
+      </div>
+      <div class="card">
+        <h3>Publish a scope your callers hold</h3>
+        <p>MCP clients request whatever the server lists in <code>scopes_supported</code>, and ARK refuses a scope the calling client is not registered for. If the server lists none, the Python SDK asks for everything ARK knows, which is refused too. List one they hold, such as <code>profile</code>, and keep permissions in <code>ark_claims</code>.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:34px">Against the MCP specification, line by line</h3>
+    <div class="card" style="margin-top:14px"><div class="tablewrap"><table class="ref">
+      <thead><tr><th>MCP authorization, 2026-07-28</th><th>Who does it</th><th>Here</th></tr></thead>
+      <tbody>
+        <tr><td>Server publishes protected resource metadata</td><td>your MCP server; the SDK does it</td><td><span class="st ok">tested</span></td></tr>
+        <tr><td>Authorization server publishes metadata</td><td>ARK, at <code>{issuer}/.well-known/openid-configuration</code>, the third address clients must try</td><td><span class="st ok">tested</span></td></tr>
+        <tr><td>PKCE with S256, advertised</td><td>ARK</td><td><span class="st ok">yes</span></td></tr>
+        <tr><td>Server accepts only tokens issued for it</td><td>your MCP server, with <code>verify_agent_token</code> or its .NET and Node forms</td><td><span class="st ok">tested</span></td></tr>
+        <tr><td>No token passthrough</td><td>token exchange; a forwarded ticket is refused</td><td><span class="st ok">tested</span></td></tr>
+        <tr><td>Pre-registered clients</td><td>admin console or management API</td><td><span class="st ok">yes</span></td></tr>
+        <tr><td>Client credentials extension</td><td>the Python SDK’s provider, unmodified, with a client secret</td><td><span class="st ok">tested</span></td></tr>
+        <tr><td><code>resource</code> binds the token (RFC 8707)</td><td>ARK, for client credentials and token exchange. <strong>Ignored on a browser sign-in</strong>, see <a href="#limits">limits</a></td><td><span class="st warn">in part</span></td></tr>
+        <tr><td>Dynamic client registration (deprecated)</td><td>ARK, off by default, needs an access token when on</td><td><span class="st muted">optional</span></td></tr>
+        <tr><td>Client ID metadata documents</td><td>nobody</td><td><span class="st bad">no</span></td></tr>
+        <tr><td>Enterprise-managed authorization extension</td><td>nobody</td><td><span class="st bad">no</span></td></tr>
+      </tbody>
+    </table></div></div>
+    <p class="note">Source: <a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization" target="_blank" rel="noopener">MCP authorization, revision 2026-07-28</a>. It covers HTTP servers. A server started over stdio takes its credentials from the environment, and none of this applies.</p>
+  </section>
+
+  <!-- ===== Flow 3 ===== -->
+  <section id="idp">
+    <div class="section-head">
+      <div class="kicker">Flow 3 · agent to the IdP, through MCP</div>
+      <h2>The agent gets tools. The operator credential stays behind them.</h2>
+      <p>
+        ARK’s management API can create clients, map people to applications and switch accounts off, across every tenant.
+        No agent should hold the key to that. Put a small MCP server in front: it is a door like any other, and it alone holds the key.
+      </p>
+    </div>
+    <div class="card player" data-player="idp-mcp">
+      <div class="scroll" tabindex="0" role="group" aria-label="Sequence diagram">
+<svg class="seq" viewBox="0 0 1000 540" role="img" aria-label="Sequence: Planner exchanges Alice&#x27;s ticket for one addressed to the identity gateway and calls deactivate_user; the gateway checks Alice&#x27;s claim, records it, uses its own operator credential with the management API; Planner calling the management API directly is refused" style="min-width:840px">
+  <rect class="zone" x="504" y="2" width="492" height="536" rx="14"/>
+  <line class="life" x1="125" y1="58" x2="125" y2="534"/>
+  <g class="lane door a-planner"><rect x="37" y="10" width="176" height="50" rx="11"/><text class="t" x="125" y="31" text-anchor="middle">Planner</text><text class="s" x="125" y="48" text-anchor="middle">agent</text></g>
+  <line class="life" x1="375" y1="58" x2="375" y2="534"/>
+  <g class="lane idp"><rect x="287" y="10" width="176" height="50" rx="11"/><text class="t" x="375" y="31" text-anchor="middle">ARK Identity</text><text class="s" x="375" y="48" text-anchor="middle">token endpoint</text></g>
+  <line class="life" x1="625" y1="58" x2="625" y2="534"/>
+  <g class="lane door a-idp"><rect x="537" y="10" width="176" height="50" rx="11"/><text class="t" x="625" y="31" text-anchor="middle">Identity gateway</text><text class="s" x="625" y="48" text-anchor="middle">MCP server you run</text></g>
+  <line class="life" x1="875" y1="58" x2="875" y2="534"/>
+  <g class="lane idp"><rect x="787" y="10" width="176" height="50" rx="11"/><text class="t" x="875" y="31" text-anchor="middle">ARK Identity</text><text class="s" x="875" y="48" text-anchor="middle">management API</text></g>
+  <g class="msg" data-step="1">
+    <rect class="band" x="0" y="72" width="1000" height="89" rx="8"/>
+    <text class="lab req" x="250" y="91" text-anchor="middle">exchange Alice’s ticket</text>
+    <line class="ln req" x1="125" y1="99" x2="366" y2="99"/>
+    <polygon class="hd req" points="373,99 364,94.5 364,103.5"/>
+    <text class="sub req" x="250" y="114" text-anchor="middle">audience=idp-mcp</text>
+    <text class="lab res" x="250" y="131" text-anchor="middle">a ticket</text>
+    <line class="ln res" x1="375" y1="148" x2="134" y2="148"/>
+    <polygon class="hd res" points="127,148 136,143.5 136,152.5"/>
+    <g class="tk a-idp"><rect x="198" y="138" width="103" height="20" rx="5"/><rect class="bar" x="198" y="138" width="5" height="20" rx="2"/><text class="mono" x="212" y="152">aud: idp-mcp</text></g>
+    <g class="num"><circle cx="125" cy="99" r="10.5"/><text x="125" y="103" text-anchor="middle">1</text></g>
+  </g>
+  <g class="msg" data-step="2">
+    <rect class="band" x="0" y="160" width="1000" height="49" rx="8"/>
+    <text class="lab req" x="375" y="179" text-anchor="middle">tools/call deactivate_user bob</text>
+    <line class="ln req" x1="125" y1="196" x2="616" y2="196"/>
+    <polygon class="hd req" points="623,196 614,191.5 614,200.5"/>
+    <g class="tk a-idp"><rect x="323" y="186" width="103" height="20" rx="5"/><rect class="bar" x="323" y="186" width="5" height="20" rx="2"/><text class="mono" x="337" y="200">aud: idp-mcp</text></g>
+    <g class="num"><circle cx="125" cy="196" r="10.5"/><text x="125" y="200" text-anchor="middle">2</text></g>
+  </g>
+  <g class="msg" data-step="3">
+    <rect class="band" x="0" y="208" width="1000" height="79" rx="8"/>
+    <rect class="chk " x="500" y="218" width="249" height="63" rx="8"/>
+    <path class="tick " d="M517 250l4 4 8-9"/>
+    <text class="sm" x="537" y="236">addressed to me</text>
+    <text class="sm" x="537" y="253">Alice holds idp.user.deactivate</text>
+    <text class="sm" x="537" y="270">write down who and why</text>
+    <g class="num"><circle cx="500" cy="250" r="10.5"/><text x="500" y="254" text-anchor="middle">3</text></g>
+  </g>
+  <g class="msg" data-step="4">
+    <rect class="band" x="0" y="286" width="1000" height="89" rx="8"/>
+    <text class="lab req" x="500" y="305" text-anchor="middle">its operator credential</text>
+    <line class="ln req" x1="625" y1="313" x2="384" y2="313"/>
+    <polygon class="hd req" points="377,313 386,308.5 386,317.5"/>
+    <text class="sub req" x="500" y="328" text-anchor="middle">client_credentials</text>
+    <text class="lab res" x="500" y="345" text-anchor="middle">operator token</text>
+    <line class="ln res" x1="375" y1="362" x2="616" y2="362"/>
+    <polygon class="hd res" points="623,362 614,357.5 614,366.5"/>
+    <g class="tk a-ops"><rect x="455" y="352" width="90" height="20" rx="5"/><rect class="bar" x="455" y="352" width="5" height="20" rx="2"/><text class="mono" x="469" y="366">stays here</text></g>
+    <g class="num"><circle cx="625" cy="313" r="10.5"/><text x="625" y="317" text-anchor="middle">4</text></g>
+  </g>
+  <g class="msg" data-step="5">
+    <rect class="band" x="0" y="374" width="1000" height="107" rx="8"/>
+    <text class="lab req" x="750" y="393" text-anchor="middle">POST activation/user</text>
+    <line class="ln req" x1="625" y1="410" x2="866" y2="410"/>
+    <polygon class="hd req" points="873,410 864,405.5 864,414.5"/>
+    <g class="tk a-ops"><rect x="692" y="400" width="117" height="20" rx="5"/><rect class="bar" x="692" y="400" width="5" height="20" rx="2"/><text class="mono" x="706" y="414">operator token</text></g>
+    <text class="lab res" x="750" y="434" text-anchor="middle">deactivated</text>
+    <line class="ln res" x1="875" y1="442" x2="634" y2="442"/>
+    <polygon class="hd res" points="627,442 636,437.5 636,446.5"/>
+    <text class="lab res" x="375" y="463" text-anchor="middle">the result</text>
+    <line class="ln res" x1="625" y1="471" x2="134" y2="471"/>
+    <polygon class="hd res" points="127,471 136,466.5 136,475.5"/>
+    <g class="num"><circle cx="625" cy="410" r="10.5"/><text x="625" y="414" text-anchor="middle">5</text></g>
+  </g>
+  <g class="msg" data-step="6">
+    <rect class="band" x="0" y="480" width="1000" height="49" rx="8"/>
+    <text class="lab bad" x="500" y="499" text-anchor="middle">skips the gateway and calls ARK directly</text>
+    <line class="ln bad" x1="125" y1="516" x2="817" y2="516"/>
+    <g class="xmark"><circle cx="829" cy="516" r="10"/><path d="M825 512l8 8m0-8l-8 8"/></g>
+    <g class="tk a-idp"><rect x="448" y="506" width="103" height="20" rx="5"/><rect class="bar" x="448" y="506" width="5" height="20" rx="2"/><text class="mono" x="462" y="520">aud: idp-mcp</text></g>
+    <g class="num"><circle cx="125" cy="516" r="10.5"/><text x="125" y="520" text-anchor="middle">6</text></g>
+  </g>
+</svg>
+      </div>
+      <div class="pfoot">
+      <div class="pbar">
+        <button type="button" class="pbtn" data-move="-1">← Back</button>
+        <div class="dots"><button type="button" class="dot" data-go="1" aria-label="Step 1: The agent asks for a ticket to the gateway.">1</button><button type="button" class="dot" data-go="2" aria-label="Step 2: It calls an identity tool over MCP.">2</button><button type="button" class="dot" data-go="3" aria-label="Step 3: The gateway checks, and writes it down first.">3</button><button type="button" class="dot" data-go="4" aria-label="Step 4: It fetches an operator token with its own credential.">4</button><button type="button" class="dot" data-go="5" aria-label="Step 5: It calls the management API, and the change takes hold.">5</button><button type="button" class="dot" data-go="6" aria-label="Step 6: The short cut is closed.">6</button></div>
+        <button type="button" class="pbtn primary" data-move="1">Next →</button>
+      </div>
+      <ol class="psteps">
+        <li class="pstep" data-step="1">
+          <div class="ptext"><h4><span class="pnum">1</span>The agent asks for a ticket to the gateway.</h4><p>The gateway is a client like any other, so the operator lists the planner as its caller and maps Alice to it with the claims she should have there.</p></div>
+          <div class="code"><div class="code-head">ticket</div><pre>{
+  "aud": "idp-mcp",
+  "sub": "alice@example.com",
+  "client_id": "planner",
+  "act": { "sub": "planner",
+           "act": { "sub": "team-portal" } },
+  "ark_claims": ["idp.clients.read", "idp.user.deactivate"]
+}</pre></div>
+        </li>
+        <li class="pstep" data-step="2">
+          <div class="ptext"><h4><span class="pnum">2</span>It calls an identity tool over MCP.</h4><p>To the agent this is any other tool. It sees the tools the gateway chose to offer, never the management API behind them.</p></div>
+          <div class="code"><div class="code-head">call</div><pre>tools/call  deactivate_user { "user_name": "bob@example.com" }</pre></div>
+        </li>
+        <li class="pstep" data-step="3">
+          <div class="ptext"><h4><span class="pnum">3</span>The gateway checks, and writes it down first.</h4><p>Each tool names the claim it needs. The gateway is the only place that knows the agent, the person and the action together, so its record matters most.</p></div>
+          <div class="code"><div class="code-head">recorded</div><pre>{"tool": "deactivate_user", "user": "bob@example.com", "allowed": true,
+ "for": "alice@example.com", "acting": ["planner", "team-portal"],
+ "token_id": "zQuI6qGWm00i5NVWhcWUtw"}</pre></div>
+        </li>
+        <li class="pstep" data-step="4">
+          <div class="ptext"><h4><span class="pnum">4</span>It fetches an operator token with its own credential.</h4><p>The machine credential lives in the gateway’s environment. Nothing the agent sends or receives contains it.</p></div>
+          <div class="code"><div class="code-head">request</div><pre>POST /ark_idp/oauth2/token
+
+grant_type=client_credentials
+client_id=ark_idp_machine&amp;client_secret=•••
+scope=client.register</pre></div>
+        </li>
+        <li class="pstep" data-step="5">
+          <div class="ptext"><h4><span class="pnum">5</span>It calls the management API, and the change takes hold.</h4><p>Bob’s sessions and refresh tokens end at once, and the next agent that tries to carry him is refused. The gateway sends the ticket’s id as <code>X-Correlation-ID</code>, so ARK’s audit event can be matched to the gateway’s own line.</p></div>
+          <div class="code"><div class="code-head">recorded</div><pre>'bob@example.com' is now deactivated. Their sessions and refresh tokens
+have been revoked; sign-ins are refused …
+
+then, for Bob:
+400 invalid_grant  the account subject_token belongs to has been deactivated.</pre></div>
+        </li>
+        <li class="pstep" data-step="6">
+          <div class="ptext"><h4><span class="pnum">6</span>The short cut is closed.</h4><p>The management API answers the operator’s console session or the machine credential. The agent’s ticket and Alice’s own sign-in token both get the same answer.</p></div>
+          <div class="code"><div class="code-head">recorded</div><pre>GET /api/oauth/v1/client/list
+Authorization: Bearer &lt;the idp-mcp ticket&gt;
+
+401  the bearer token was refused - it must be issued by this server to the
+     machine client, with the 'client.register' scope.</pre></div>
+        </li>
+      </ol>
+      </div>
+    </div>
+    <p class="note">Inside the dashed line is the operator’s side. The agent’s ticket stops at the gateway.</p>
+
+    <h3 style="margin-top:30px">The gateway, complete</h3>
+    <p class="note">Two tools, each with its own claim. This is the code the diagram was recorded from. ARK does not ship it: copy it, and add only the tools you need.</p>
+    <div class="code"><div class="code-head">gateway.py · mcp 2.3.0, ark-oauth-client, httpx<button class="copy" type="button">Copy</button></div><pre>import asyncio, json, os, httpx
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.settings import AuthSettings
+from mcp.server.auth.middleware.auth_context import get_access_token
+from ark_oauth_client import ArkOAuthClient, agent_actors
+
+IDP, TENANT = "https://idp.example.com", "acme"
+URL = "https://identity-mcp.example.com/mcp"
+ark = ArkOAuthClient(authority=f"{IDP}/{TENANT}", client_id="idp-mcp")
+<span class="c"># The operator credential. It is read here, used here, and never sent to an agent.</span>
+machine = ArkOAuthClient(authority=f"{IDP}/ark_idp", client_id="ark_idp_machine",
+                         client_secret=os.environ["ARK_MACHINE_SECRET"],
+                         token_endpoint_auth_method="client_secret_post")
+
+class ArkTokens:
+    async def verify_token(self, token):
+        try:
+            p = await asyncio.to_thread(ark.verify_agent_token, token)
+        except Exception:
+            return None
+        return AccessToken(token=token, client_id=p["client_id"], subject=p["sub"], claims=p,
+                           scopes=p.get("scope", "").split(), expires_at=p["exp"])
+
+mcp = MCPServer("ark-identity", token_verifier=ArkTokens(), auth=AuthSettings(
+    issuer_url=f"{IDP}/{TENANT}", resource_server_url=URL,
+    required_scopes=["profile"], validate_token_resource=False))
+
+def allow(claim: str, tool: str, **what):
+    """Every tool starts here: hold the claim or stop, and leave a record either way."""
+    t = get_access_token()
+    ok = claim in t.claims.get("ark_claims", [])
+    print(json.dumps({"tool": tool, **what, "allowed": ok, "for": t.subject,
+                      "acting": agent_actors(t.claims), "token_id": t.claims["jti"]}), flush=True)
+    if not ok:
+        raise ToolError(f"{tool} needs {claim}")
+    return t
+
+def manage(t, method, path, body=None):
+    token = machine.client_credentials(scopes=["client.register"]).access_token
+    r = httpx.request(method, f"{IDP}/api/oauth/v1/{path}", json=body, timeout=30, headers={
+        "Authorization": f"Bearer {token}",
+        "X-Correlation-ID": t.claims["jti"]})   <span class="c"># ties the IdP's record to the line above</span>
+    r.raise_for_status()
+    return r.json()
+
+@mcp.tool()
+def list_clients() -&gt; list:
+    """Applications registered in this tenant."""
+    t = allow("idp.clients.read", "list_clients")
+    rows = manage(t, "GET", "client/list")["data"]
+    return [c["client_id"] for c in rows if c["tenant_id"] == TENANT]   <span class="c"># never another tenant's</span>
+
+@mcp.tool()
+def deactivate_user(user_name: str) -&gt; str:
+    """Switch an account off. Accounts are server-wide: this applies in every tenant."""
+    t = allow("idp.user.deactivate", "deactivate_user", user=user_name)
+    return manage(t, "POST", "activation/user", {"user_name": user_name, "is_active": False})["msg"]
+
+app = mcp.streamable_http_app()                 <span class="c"># uvicorn gateway:app</span></pre></div>
+
+    <div class="grid2">
+      <div class="card callout warn" style="margin-top:0">
+        <h3>The gateway is as powerful as its credential</h3>
+        <ul>
+          <li>The machine credential administers <strong>every tenant</strong>. The gateway must filter to its own, as <code>list_clients</code> does.</li>
+          <li>Accounts are shared by all tenants. Switching one off switches it off everywhere.</li>
+          <li>Run it on the operator’s side of the network, with the secret from a vault.</li>
+        </ul>
+      </div>
+      <div class="card callout warn" style="margin-top:0">
+        <h3>Tools to leave out</h3>
+        <ul>
+          <li>Anything that edits <code>a2a_callers</code>, access mappings or grants. An agent that can edit the list can let itself in.</li>
+          <li><code>client/secret/reset</code>: the answer contains a secret, and the agent would read it.</li>
+          <li><code>data/reset</code>, <code>data/import</code> and deletes. Keep those for a person in the console.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Break it ===== -->
+  <section id="break">
+    <div class="section-head">
+      <div class="kicker">Try to break it</div>
+      <h2>24 ways in that are refused, and 3 that are not.</h2>
+      <p>Pick one. The checks it passes turn green, the one that stops it turns red, and below is the reply the server gave.</p>
+    </div>
+    <div class="card breaker">
+      <div class="alist"><div class="ag"><div class="ah">A rogue agent</div><button type="button" class="atk" data-a="unlisted" aria-current="true">Ask for a ticket to a client that never listed me</button><button type="button" class="atk" data-a="probe">Guess names to learn which agents exist</button><button type="button" class="atk" data-a="two">Ask for one ticket that opens two doors</button><button type="button" class="atk" data-a="register">Register myself over the wire</button></div><div class="ag"><div class="ah">A stolen token</div><button type="button" class="atk" data-a="steal-signin">Exchange Alice’s stolen sign-in token</button><button type="button" class="atk" data-a="steal-ticket">Exchange the planner’s stolen ticket</button><button type="button" class="atk" data-a="wrong-door">Show a sign-in token to an agent or MCP server</button><button type="button" class="atk" data-a="idtoken">Show an ID token instead</button><button type="button" class="atk" data-a="tamper">Edit the ticket</button><button type="button" class="atk" data-a="api">Use an agent ticket at an ordinary API</button></div><div class="ag"><div class="ah">An agent that overreaches</div><button type="button" class="atk" data-a="other-token">Exchange the portal’s token, not the ticket I was sent</button><button type="button" class="atk" data-a="bob">Take Bob somewhere he has no access</button><button type="button" class="atk" data-a="nogrant">Act for a person when I am only a nightly job</button><button type="button" class="atk" data-a="launder">Pass my own ticket off as a person’s</button><button type="button" class="atk" data-a="nodelegate">Bring a person where I may only go alone</button><button type="button" class="atk" data-a="depth">Be the fifth agent in a chain</button><button type="button" class="atk" data-a="passthrough">Hand the ticket I was sent to the next service</button><button type="button" class="atk" data-a="tool">Use a tool the ticket has no claim for</button><button type="button" class="atk" data-a="skip">Skip the gateway and call the management API</button></div><div class="ag"><div class="ah">After something changes</div><button type="button" class="atk" data-a="removed">Keep calling after the operator removed me from the list</button><button type="button" class="atk" data-a="callee-off">Call a target that has been switched off</button><button type="button" class="atk" data-a="caller-off">Keep going after I was switched off</button><button type="button" class="atk" data-a="bob-off">Act for Bob after his account was deactivated</button><button type="button" class="atk" data-a="signedout">Act for Alice after her session ended</button></div><div class="ag"><div class="ah">What does get through</div><button type="button" class="atk through" data-a="late">Use a ticket printed before the session ended</button><button type="button" class="atk through" data-a="inject">Be talked into misusing a right Alice really has</button><button type="button" class="atk through" data-a="secret">Hold another agent’s stolen secret</button></div></div>
+      <div class="adetail" aria-live="polite">
+        <article class="atkd" id="atk-unlisted" data-kind="self" data-stop="7">
+          <div class="where">At ARK, asking in its own name</div>
+          <h3>Ask for a ticket to a client that never listed me</h3>
+          <p class="verdict"><span class="st bad">stopped at 7</span> Target lists the caller</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_target
+'ledger' is not an agent this client may call. The target client lists its callers (a2a_callers).</pre></div>
+          <p class="why">Every list starts empty. The operator adds callers on the client being called, one by one.</p>
+        </article>
+        <article class="atkd" id="atk-probe" data-kind="self" data-stop="7">
+          <div class="where">At ARK, asking in its own name</div>
+          <h3>Guess names to learn which agents exist</h3>
+          <p class="verdict"><span class="st bad">stopped at 7</span> Target lists the caller</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_target
+'no-such-agent' is not an agent this client may call. The target client lists its callers (a2a_callers).</pre></div>
+          <p class="why">A missing, a deactivated and an unlisted target get the same words, so guessing teaches nothing.</p>
+        </article>
+        <article class="atkd" id="atk-two" data-kind="self" data-stop="7">
+          <div class="where">At ARK, asking in its own name</div>
+          <h3>Ask for one ticket that opens two doors</h3>
+          <p class="verdict"><span class="st bad">stopped at 7</span> Target lists the caller</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_target
+a token is addressed to exactly one agent: send a single audience.</pre></div>
+          <p class="why">One ticket, one door. There is no such thing as a master ticket.</p>
+        </article>
+        <article class="atkd" id="atk-register" data-kind="other" data-stop="">
+          <div class="where">At ARK’s registration endpoint</div>
+          <h3>Register myself over the wire</h3>
+          <p class="verdict"><span class="st bad">refused</span></p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_client
+an initial access token is required to register a client.
+
+with that token, asking for the token-exchange grant:
+400 invalid_client_metadata
+unsupported grant_type 'urn:ietf:params:oauth:grant-type:token-exchange'.</pre></div>
+          <p class="why">Dynamic registration is off by default and needs a token when on. It can never hand out the caller list or the token-exchange grant: only an operator can.</p>
+        </article>
+        <article class="atkd" id="atk-steal-signin" data-kind="user" data-stop="4">
+          <div class="where">At ARK, exchanging a token for a person</div>
+          <h3>Exchange Alice’s stolen sign-in token</h3>
+          <p class="verdict"><span class="st bad">stopped at 4</span> …and this caller’s to use</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_grant
+subject_token was neither issued to this client nor addressed to it.</pre></div>
+          <p class="why">A genuine token in the wrong hands. Only the client it was issued to, or the agent it is addressed to, may exchange it.</p>
+        </article>
+        <article class="atkd" id="atk-steal-ticket" data-kind="user" data-stop="4">
+          <div class="where">At ARK, exchanging a token for a person</div>
+          <h3>Exchange the planner’s stolen ticket</h3>
+          <p class="verdict"><span class="st bad">stopped at 4</span> …and this caller’s to use</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_grant
+subject_token was neither issued to this client nor addressed to it.</pre></div>
+          <p class="why">The thief would also need the planner’s own secret or key.</p>
+        </article>
+        <article class="atkd" id="atk-wrong-door" data-kind="door" data-stop="C">
+          <div class="where">At the agent or MCP server being called</div>
+          <h3>Show a sign-in token to an agent or MCP server</h3>
+          <p class="verdict"><span class="st bad">stopped at C</span> Addressed to me</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>the token is addressed to 'https://idp.example.com/acme/api', not to 'ledger'.
+
+over MCP: 401, with resource_metadata</pre></div>
+          <p class="why">The tenant’s ordinary tokens are for its ordinary APIs. Agents and MCP servers accept only their own name.</p>
+        </article>
+        <article class="atkd" id="atk-idtoken" data-kind="door" data-stop="B">
+          <div class="where">At the agent or MCP server being called</div>
+          <h3>Show an ID token instead</h3>
+          <p class="verdict"><span class="st bad">stopped at B</span> Access token, not expired</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>expected a token of type 'at+jwt' but the header declares 'JWT'.</pre></div>
+          <p class="why">An ID token says who signed in. It is not permission to call anything.</p>
+        </article>
+        <article class="atkd" id="atk-tamper" data-kind="door" data-stop="A">
+          <div class="where">At the agent or MCP server being called</div>
+          <h3>Edit the ticket</h3>
+          <p class="verdict"><span class="st bad">stopped at A</span> Signed by this issuer</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>the token signature does not verify against the published key.</pre></div>
+          <p class="why">One changed byte breaks the signature.</p>
+        </article>
+        <article class="atkd" id="atk-api" data-kind="door" data-stop="C">
+          <div class="where">At the agent or MCP server being called</div>
+          <h3>Use an agent ticket at an ordinary API</h3>
+          <p class="verdict"><span class="st bad">stopped at C</span> Addressed to me</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>401 at /oauth2/userinfo</pre></div>
+          <p class="why">It works the other way round too: an agent ticket is never also a tenant token.</p>
+        </article>
+        <article class="atkd" id="atk-other-token" data-kind="user" data-stop="4">
+          <div class="where">At ARK, exchanging a token for a person</div>
+          <h3>Exchange the portal’s token, not the ticket I was sent</h3>
+          <p class="verdict"><span class="st bad">stopped at 4</span> …and this caller’s to use</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_grant
+subject_token was neither issued to this client nor addressed to it.</pre></div>
+          <p class="why">Being in the chain does not let an agent reach back up it.</p>
+        </article>
+        <article class="atkd" id="atk-bob" data-kind="user" data-stop="8">
+          <div class="where">At ARK, exchanging a token for a person</div>
+          <h3>Take Bob somewhere he has no access</h3>
+          <p class="verdict"><span class="st bad">stopped at 8</span> Person has access there</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_target
+the user subject_token belongs to has no access to 'ledger'.</pre></div>
+          <p class="why">An agent never widens what a person can do. Bob’s access is whatever the operator mapped.</p>
+        </article>
+        <article class="atkd" id="atk-nogrant" data-kind="user" data-stop="2">
+          <div class="where">At ARK, exchanging a token for a person</div>
+          <h3>Act for a person when I am only a nightly job</h3>
+          <p class="verdict"><span class="st bad">stopped at 2</span> Registered for this grant</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 unauthorized_client
+this client is not registered for the 'urn:ietf:params:oauth:grant-type:token-exchange' grant.</pre></div>
+          <p class="why">Acting for people is a grant of its own. The job can still call in its own name.</p>
+        </article>
+        <article class="atkd" id="atk-launder" data-kind="user" data-stop="5">
+          <div class="where">At ARK, exchanging a token for a person</div>
+          <h3>Pass my own ticket off as a person’s</h3>
+          <p class="verdict"><span class="st bad">stopped at 5</span> Live person and session</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_grant
+subject_token carries no user: it is a client's own token. To call an agent as yourself, use client_credentials with audience.</pre></div>
+          <p class="why">Delegation carries a person. With nobody to carry, the agent calls as itself.</p>
+        </article>
+        <article class="atkd" id="atk-nodelegate" data-kind="user" data-stop="7">
+          <div class="where">At ARK, exchanging a token for a person</div>
+          <h3>Bring a person where I may only go alone</h3>
+          <p class="verdict"><span class="st bad">stopped at 7</span> Target lists the caller</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_target
+this client may call 'ledger' as itself, but not on behalf of a user (delegate_users is off for it there).</pre></div>
+          <p class="why">The target decides twice: may this agent call, and may it bring people.</p>
+        </article>
+        <article class="atkd" id="atk-depth" data-kind="user" data-stop="6">
+          <div class="where">At ARK, exchanging a token for a person</div>
+          <h3>Be the fifth agent in a chain</h3>
+          <p class="verdict"><span class="st bad">stopped at 6</span> At most 4 agents deep</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_grant
+the delegation chain is too long: 5 agents, and at most 4 are allowed.</pre></div>
+          <p class="why">A loop between agents ends instead of running all night. The limit is a setting.</p>
+        </article>
+        <article class="atkd" id="atk-passthrough" data-kind="door" data-stop="C">
+          <div class="where">At the agent or MCP server being called</div>
+          <h3>Hand the ticket I was sent to the next service</h3>
+          <p class="verdict"><span class="st bad">stopped at C</span> Addressed to me</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>the token is addressed to 'orders-mcp', not to 'ledger'.</pre></div>
+          <p class="why">Token passthrough is forbidden by MCP, and here it cannot work.</p>
+        </article>
+        <article class="atkd" id="atk-tool" data-kind="door" data-stop="D">
+          <div class="where">At the agent or MCP server being called</div>
+          <h3>Use a tool the ticket has no claim for</h3>
+          <p class="verdict"><span class="st bad">stopped at D</span> Claim for this action</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>Error executing tool deactivate_user: deactivate_user needs idp.user.deactivate</pre></div>
+          <p class="why">Being let in is not being allowed to do everything. Each tool checks its own claim.</p>
+        </article>
+        <article class="atkd" id="atk-skip" data-kind="door" data-stop="C">
+          <div class="where">At the agent or MCP server being called</div>
+          <h3>Skip the gateway and call the management API</h3>
+          <p class="verdict"><span class="st bad">stopped at C</span> Addressed to me</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>401
+the bearer token was refused - it must be issued by this server to the machine client, with the 'client.register' scope.</pre></div>
+          <p class="why">Only the operator’s session or the machine credential is accepted, and the agent has neither.</p>
+        </article>
+        <article class="atkd" id="atk-removed" data-kind="self" data-stop="7">
+          <div class="where">At ARK, asking in its own name</div>
+          <h3>Keep calling after the operator removed me from the list</h3>
+          <p class="verdict"><span class="st bad">stopped at 7</span> Target lists the caller</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_target
+'ledger' is not an agent this client may call. The target client lists its callers (a2a_callers).</pre></div>
+          <p class="why">The next request is refused. Nothing to redeploy.</p>
+        </article>
+        <article class="atkd" id="atk-callee-off" data-kind="self" data-stop="7">
+          <div class="where">At ARK, asking in its own name</div>
+          <h3>Call a target that has been switched off</h3>
+          <p class="verdict"><span class="st bad">stopped at 7</span> Target lists the caller</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_target
+'ledger' is not an agent this client may call. The target client lists its callers (a2a_callers).</pre></div>
+          <p class="why">The same words as if it had never existed.</p>
+        </article>
+        <article class="atkd" id="atk-caller-off" data-kind="self" data-stop="1">
+          <div class="where">At ARK, asking in its own name</div>
+          <h3>Keep going after I was switched off</h3>
+          <p class="verdict"><span class="st bad">stopped at 1</span> Caller proves who it is</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_client
+client is disabled.</pre></div>
+          <p class="why">One switch on the client record stops every new ticket it could ask for.</p>
+        </article>
+        <article class="atkd" id="atk-bob-off" data-kind="user" data-stop="5">
+          <div class="where">At ARK, exchanging a token for a person</div>
+          <h3>Act for Bob after his account was deactivated</h3>
+          <p class="verdict"><span class="st bad">stopped at 5</span> Live person and session</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_grant
+the account subject_token belongs to has been deactivated.</pre></div>
+          <p class="why">The token is still genuine. Bob’s standing is checked each time anyway.</p>
+        </article>
+        <article class="atkd" id="atk-signedout" data-kind="user" data-stop="5">
+          <div class="where">At ARK, exchanging a token for a person</div>
+          <h3>Act for Alice after her session ended</h3>
+          <p class="verdict"><span class="st bad">stopped at 5</span> Live person and session</p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>400 invalid_grant
+the session behind subject_token has ended.</pre></div>
+          <p class="why">Ending her session ends what agents may do in her name.</p>
+        </article>
+        <article class="atkd" id="atk-late" data-kind="pass" data-stop="">
+          <div class="where">Not stopped</div>
+          <h3>Use a ticket printed before the session ended</h3>
+          <p class="verdict"><span class="st warn">gets through</span></p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">Recorded reply</div><pre>accepted by the Orders MCP server, with 299 seconds left on the ticket
+
+asked instead, ARK answers: { "active": false }</pre></div>
+          <p class="why">A door that checks locally cannot know. The window is the ticket’s own lifetime, at most five minutes by default. For tools that matter, introspect first or shorten the lifetime.</p>
+        </article>
+        <article class="atkd" id="atk-inject" data-kind="pass" data-stop="">
+          <div class="where">Not stopped</div>
+          <h3>Be talked into misusing a right Alice really has</h3>
+          <p class="verdict"><span class="st warn">gets through</span></p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">By design, not a recorded run</div><pre>the call is valid, and the record names Alice, the planner and the portal</pre></div>
+          <p class="why">No identity provider can judge intent. ARK bounds the damage to her rights, at the doors the operator opened. Ask a human before a destructive tool runs.</p>
+        </article>
+        <article class="atkd" id="atk-secret" data-kind="pass" data-stop="">
+          <div class="where">Not stopped</div>
+          <h3>Hold another agent’s stolen secret</h3>
+          <p class="verdict"><span class="st warn">gets through</span></p>
+          <div class="track"></div>
+          <div class="code"><div class="code-head">By design, not a recorded run</div><pre>tickets in that agent’s own name, at the doors that list it</pre></div>
+          <p class="why">It cannot carry a person without one of that person’s tokens. Rotate the secret or switch the client off, and the next request fails. An agent registered with private_key_jwt sends no secret that could be copied.</p>
+        </article>
+      </div>
+    </div>
+    <template id="tpl-idp"><ol class="gates g8"><li data-g="1"><span class="gk">1</span><span class="gt">Caller proves who it is</span></li><li data-g="2"><span class="gk">2</span><span class="gt">Registered for this grant</span></li><li data-g="3"><span class="gk">3</span><span class="gt">Token is genuine and live</span></li><li data-g="4"><span class="gk">4</span><span class="gt">…and this caller’s to use</span></li><li data-g="5"><span class="gk">5</span><span class="gt">Live person and session</span></li><li data-g="6"><span class="gk">6</span><span class="gt">At most 4 agents deep</span></li><li data-g="7"><span class="gk">7</span><span class="gt">Target lists the caller</span></li><li data-g="8"><span class="gk">8</span><span class="gt">Person has access there</span></li></ol></template>
+    <template id="tpl-door"><ol class="gates g4"><li data-g="A"><span class="gk">A</span><span class="gt">Signed by this issuer</span></li><li data-g="B"><span class="gk">B</span><span class="gt">Access token, not expired</span></li><li data-g="C"><span class="gk">C</span><span class="gt">Addressed to me</span></li><li data-g="D"><span class="gk">D</span><span class="gt">Claim for this action</span></li></ol></template>
+  </section>
+
+  <!-- ===== Sign-out ===== -->
+  <section id="signout">
+    <div class="section-head">
+      <div class="kicker">When Alice signs out</div>
+      <h2>New tickets stop at once. One already printed can last five minutes.</h2>
+      <p>Tokens that are verified locally have this edge. It is short by default, and you can close it where it matters.</p>
+    </div>
+    <figure class="card figure">
+      <div class="scroll" tabindex="0" role="group" aria-label="Timeline diagram">
+<svg class="seq tl" viewBox="0 0 1000 290" role="img" style="min-width:760px" aria-label="Timeline around a sign-out. Her session, new tickets and introspection end at once. A ticket already issued still passes a local check until it expires, at most five minutes later.">
+<line class="axis" x1="490" y1="34" x2="490" y2="262"/><text class="t" x="490" y="24" text-anchor="middle">Alice signs out</text>
+<text class="lab" x="268" y="67" text-anchor="end">Her sign-in session</text>
+<g class="bar ok"><rect x="286" y="46" width="204" height="32" rx="6"/><text x="388" y="67" text-anchor="middle">open</text></g>
+<g class="bar off"><rect x="490" y="46" width="460" height="32" rx="6"/><text x="720" y="67" text-anchor="middle">ended</text></g>
+<text class="lab" x="268" y="121" text-anchor="end">New tickets in her name</text>
+<g class="bar ok"><rect x="286" y="100" width="204" height="32" rx="6"/><text x="388" y="121" text-anchor="middle">printed</text></g>
+<g class="bar bad"><rect x="490" y="100" width="460" height="32" rx="6"/><text x="720" y="121" text-anchor="middle">refused: invalid_grant</text></g>
+<text class="lab" x="268" y="175" text-anchor="end">A ticket already out, door asks ARK</text>
+<g class="bar ok"><rect x="286" y="154" width="204" height="32" rx="6"/><text x="388" y="175" text-anchor="middle">active</text></g>
+<g class="bar bad"><rect x="490" y="154" width="460" height="32" rx="6"/><text x="720" y="175" text-anchor="middle">active: false</text></g>
+<text class="lab" x="268" y="229" text-anchor="end">A ticket already out, door checks locally</text>
+<g class="bar ok"><rect x="286" y="208" width="204" height="32" rx="6"/><text x="388" y="229" text-anchor="middle">accepted</text></g>
+<g class="bar warn"><rect x="490" y="208" width="460" height="32" rx="6"/><text x="720" y="229" text-anchor="middle">still accepted</text></g>
+<line class="axis t" x1="490" y1="256" x2="490" y2="262"/><text class="sub" x="490" y="279" text-anchor="middle">0:00</text>
+<line class="axis t" x1="582" y1="256" x2="582" y2="262"/><text class="sub" x="582" y="279" text-anchor="middle">+1:00</text>
+<line class="axis t" x1="674" y1="256" x2="674" y2="262"/><text class="sub" x="674" y="279" text-anchor="middle">+2:00</text>
+<line class="axis t" x1="766" y1="256" x2="766" y2="262"/><text class="sub" x="766" y="279" text-anchor="middle">+3:00</text>
+<line class="axis t" x1="858" y1="256" x2="858" y2="262"/><text class="sub" x="858" y="279" text-anchor="middle">+4:00</text>
+<line class="axis t" x1="950" y1="256" x2="950" y2="262"/><text class="sub" x="950" y="279" text-anchor="middle">+5:00</text>
+<line class="axis t" x1="286" y1="259" x2="950" y2="259"/></svg>
+      </div>
+      <p class="swipe">Swipe the diagram sideways to see all of it.</p>
+      <figcaption>Recorded by ending the session behind a chain of tickets and using each one again. The last row is the widest case: a ticket printed a moment before the sign-out, at the default lifetime.</figcaption>
+    </figure>
+    <div class="grid2">
+      <div class="card"><h3>Close the gap for the tools that matter</h3><p>Have the door ask ARK before a refund or a deletion. Introspection answers <code>active: false</code> the moment the session ends. The agent a ticket is addressed to is always allowed to ask about it.</p></div>
+      <div class="card"><h3>Or shorten it for everything</h3><p>Set <code>Oidc:A2ATokenLifetimeSeconds</code>, 300 by default, to the delay you can accept. Tickets are asked for again, never refreshed, so a shorter life costs one extra request.</p></div>
+    </div>
+  </section>
+
+  <!-- ===== Records ===== -->
+  <section id="audit">
+    <div class="section-head">
+      <div class="kicker">The record</div>
+      <h2>Both ends can write it down, and the ticket’s id joins them.</h2>
+      <p>ARK records every agent ticket it prints and every one it refuses, with the agent, the person, the target and the chain. The call itself does not pass through ARK, so the receiver records that. The token’s <code>jti</code> is in both.</p>
+    </div>
+    <div class="twin">
+      <div><h3>ARK’s trace</h3><div class="code"><pre><span class="c"># issued</span>
+a2a token issued on behalf of a user
+client: planner, sub: alice@example.com, audience: idp-mcp,
+act: planner &lt; team-portal, jti: <mark>zQuI6qGWm00i5NVWhcWUtw</mark>
+
+<span class="c"># refused</span>
+a2a token refused: invalid_grant
+client: rogue, sub: alice@example.com, audience: ledger,
+reason: subject_token was neither issued to this client
+nor addressed to it.
+
+<span class="c"># the list changed</span>
+a2a caller list changed
+added: planner [idp.clients.read] +users   by: ark_idp_machine</pre></div></div>
+      <div><h3>The gateway’s own line</h3><div class="code"><pre>{"tool": "deactivate_user", "user": "bob@example.com",
+ "allowed": true, "for": "alice@example.com",
+ "acting": ["planner", "team-portal"],
+ "token_id": "<mark>zQuI6qGWm00i5NVWhcWUtw</mark>"}
+
+<span class="c"># the same tool, tried by the planner alone</span>
+{"tool": "deactivate_user", "user": "bob@example.com",
+ "allowed": false, "for": "planner", "acting": [],
+ "token_id": "y2CoJZKi6jBsNBijrXD3MA"}</pre></div></div>
+    </div>
+    <p class="note">Ticket lines need <code>EnableLogTrace</code>; changes to a caller list are always written. ARK can also send structured, tamper-evident events to an ARK-RAPID Watch server, where each exchange names the token it came from, so a chain can be followed end to end. Details in <a href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md#the-audit-trail" target="_blank" rel="noopener">A2A.md, the audit trail</a>.</p>
+  </section>
+
+  <!-- ===== Limits ===== -->
+  <section id="limits">
+    <div class="section-head">
+      <div class="kicker">Limits</div>
+      <h2>What ARK does not do.</h2>
+      <p>Read this before you commit. If one of these is a requirement for you, it is better to know now.</p>
+    </div>
+    <ul class="limits">
+      <li class="card"><h3>Browser sign-in from a third-party MCP client</h3><p>A desktop or editor MCP client that signs the user in itself gets a token for the whole tenant: ARK ignores <code>resource</code> on that path. A server that checks the audience, as it must, refuses it (tested). Sign users in to your own app, and let its back end exchange the token.</p></li>
+      <li class="card"><h3>No MCP server in the box</h3><p>ARK issues and checks tickets. The gateway in flow 3 is code you run, and its tool list is yours to keep short.</p></li>
+      <li class="card"><h3>It cannot judge intent</h3><p>An agent that is talked into misusing a right Alice really has will hold a valid ticket. ARK limits where it can go and what it can reach. Ask a person before anything destructive.</p></li>
+      <li class="card"><h3>Bearer tickets</h3><p>Short-lived and tied to one door, but not to a key. There is no DPoP or mTLS binding, so whoever holds a ticket can use it at that door until it expires.</p></li>
+      <li class="card"><h3>One tenant</h3><p>Agents call agents of the same tenant. There is no cross-tenant or cross-company ticket.</p></li>
+      <li class="card"><h3>The operator consents, not Alice</h3><p>There is no screen asking her to let an agent act for her. Access is what the operator mapped and the list on each target.</p></li>
+      <li class="card"><h3>Only people are carried down a chain</h3><p>When agents call each other in their own names, each call stands alone: the third agent sees the second, not the first.</p></li>
+      <li class="card"><h3>ARK cannot see the call</h3><p>It knows that a ticket was printed, refused or asked about. What the agent then did is only in the receiver’s own record.</p></li>
+    </ul>
+  </section>
+
+  <!-- ===== Questions ===== -->
+  <section id="questions">
+    <div class="section-head"><div class="kicker">Questions reviewers ask</div><h2>Before you say yes.</h2></div>
+    <div class="qa">
+      <details class="card"><summary>Why not simply pass Alice’s token to the agent?</summary><p>Her token is good at every ordinary API of the tenant, so every agent in the chain, and everything those agents call, could use it anywhere as Alice. Exchanged tickets are good at one place, for minutes, and say which agent is acting.</p></details>
+      <details class="card"><summary>Why not an API key per agent?</summary><p>A key says which agent, and nothing about the person. It does not expire by itself, and whoever receives it can use it elsewhere. A key also leaves the receiver to work out what Alice may do, with no proof she was ever involved.</p></details>
+      <details class="card"><summary>Does an agent ever see a password, a refresh token or a signing key?</summary><p>No. Tickets come without a refresh token or an ID token. Alice’s refresh token stays in the portal’s session, and the signing key stays in ARK. An agent holds its own client secret or private key, and the tickets it is using.</p></details>
+      <details class="card"><summary>What if an agent’s secret leaks?</summary><p>The thief can ask for tickets in that agent’s name, at the doors that list it. They cannot carry a person without also holding a token of that person’s that was issued or addressed to that agent. Switch the client off and the next request is refused; tickets already out end within minutes. Registering the agent with <code>private_key_jwt</code> means there is no shared secret to leak.</p></details>
+      <details class="card"><summary>Do I have to use the ARK client libraries?</summary><p>No. It is standard OAuth: client credentials, token exchange (RFC 8693), resource indicators (RFC 8707) and JWT access tokens (RFC 9068). Flow 2 was recorded with the MCP SDK’s own client and no ARK code in it. The libraries save you the caching and the checks.</p></details>
+      <details class="card"><summary>What happens while ARK is down?</summary><p>Receivers verify against keys they have cached, so tickets already out keep working until they expire. No new ones can be printed. Keep more than one instance if that matters.</p></details>
+      <details class="card"><summary>I do not use agents. Does this change anything for me?</summary><p>With no caller listed, ARK issues no agent tickets. One request changes meaning: <code>client_credentials</code> with an <code>audience</code> other than the tenant’s used to have it ignored, and is now refused. Set <code>Oidc:EnableA2A</code> to <code>false</code> to remove the feature.</p></details>
+    </div>
+  </section>
+
+  <!-- ===== Method ===== -->
+  <section id="method">
+    <div class="section-head"><div class="kicker">How this was recorded</div><h2>What was run, and what was not.</h2></div>
+    <div class="grid2">
+      <div class="card"><h3>Run, on 24 November 2026</h3><ul>
+        <li>ARK 2.4.2’s source (commit <code>b760d97</code>), one throwaway instance, SQLite, a fresh tenant with nine clients and two people.</li>
+        <li>36 checks on tickets and refusals, all three flows; 18 on MCP servers in Python, .NET and Node. 54 of 54 as expected, plus the single runs quoted in <a href="#break">Try to break it</a>.</li>
+        <li>Official MCP SDKs on both ends: <code>mcp</code> 2.3.0 (Python), <code>ModelContextProtocol.AspNetCore</code> 2.4.0, <code>@modelcontextprotocol/sdk</code> 1.32.2. The client was the Python SDK.</li>
+        <li>Host names were changed to <code>example.com</code> afterwards, and long ids shortened.</li>
+      </ul></div>
+      <div class="card"><h3>Not run</h3><ul>
+        <li>A2A’s own JSON-RPC messages. In flow 1 the tickets, the checks and the refusals are recorded; the agents’ conversation is not.</li>
+        <li>Particular third-party MCP clients. The browser case was tested with the Python SDK’s sign-in client.</li>
+        <li><code>private_key_jwt</code> with an MCP SDK. ARK supports it at the token endpoint; these runs used client secrets.</li>
+        <li>Load. For that, see the <a href="performance/2026-11-21-scale-test.html">scale test</a>, which predates agent tickets.</li>
+      </ul></div>
+    </div>
+    <div class="next">
+      <a class="btn btn-solid" href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md" target="_blank" rel="noopener">Read the A2A reference</a>
+      <a class="btn btn-line" href="index.html#setup">Set up an IdP</a>
+      <a class="btn btn-line" href="index.html#reviews">Security reviews</a>
+    </div>
+  </section>
+
+  <footer>
+    <p>Alice, Bob, acme and the agents are made up. No real tenant, person or secret appears on this page.</p>
+    <p><a href="index.html">← ARK Identity home</a> · <a href="https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md" target="_blank" rel="noopener">A2A.md</a> · <a href="webhooks.html">Webhooks guide</a> · <a href="https://github.com/ir-dev/ark-oauth-oidc" target="_blank" rel="noopener">GitHub</a></p>
+  </footer>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var root = document.documentElement;
+  var all = function (s, n) { return Array.prototype.slice.call((n || document).querySelectorAll(s)); };
+
+  // ----- theme toggle (kept per browser; the page works without storage) -----
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    var dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('ark-theme', root.dataset.theme); } catch (e) {}
+  });
+
+  // ----- copy buttons -----
+  all('.copy').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var text = b.closest('.code').querySelector('pre').innerText;
+      var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1600); };
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () { b.textContent = 'Press Ctrl+C'; });
+    });
+  });
+
+  // ----- tabs -----
+  all('.tabset').forEach(function (set) {
+    var tabs = all('.tab', set).filter(function (t) { return t.closest('.tabset') === set; });
+    var show = function (t, focus) {
+      tabs.forEach(function (x) {
+        var on = x === t;
+        x.setAttribute('aria-selected', on ? 'true' : 'false'); x.tabIndex = on ? 0 : -1;
+        document.getElementById(x.getAttribute('aria-controls')).hidden = !on;
+      });
+      if (focus) t.focus();
+    };
+    tabs.forEach(function (t, i) {
+      t.addEventListener('click', function () { show(t); });
+      t.addEventListener('keydown', function (e) {
+        var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (d) { e.preventDefault(); show(tabs[(i + d + tabs.length) % tabs.length], true); }
+      });
+    });
+    show(tabs[0]);
+  });
+
+  // ----- step-through -----
+  all('.player').forEach(function (p) {
+    var steps = all('.pstep', p), msgs = all('.msg', p), dots = all('.dot', p), moves = all('[data-move]', p), n = steps.length, at = 1;
+    var go = function (k) {
+      at = Math.min(n, Math.max(1, k));
+      steps.forEach(function (s) { s.classList.toggle('on', +s.dataset.step === at); });
+      msgs.forEach(function (m) { m.classList.toggle('on', +m.dataset.step === at); });
+      dots.forEach(function (d) { if (+d.dataset.go === at) d.setAttribute('aria-current', 'step'); else d.removeAttribute('aria-current'); });
+      var sc = p.querySelector('.scroll'), on = p.querySelector('.msg.on'), ink = on && on.querySelector('.ln, .chk');
+      if (ink && sc.scrollWidth > sc.clientWidth + 4) {   // a narrow screen: bring the step into view sideways
+        var r = ink.getBoundingClientRect(), s = sc.getBoundingClientRect();
+        sc.scrollLeft += (r.left + r.right) / 2 - (s.left + s.right) / 2;
+      }
+      moves.forEach(function (b) { b.disabled = (+b.dataset.move < 0 && at === 1) || (+b.dataset.move > 0 && at === n); });
+    };
+    // keep the step that was just chosen in sight, above the explanation that sticks to the bottom
+    var show = function () {
+      var on = p.querySelector('.msg.on'), foot = p.querySelector('.pfoot');
+      if (!on || getComputedStyle(foot).position !== 'sticky') return;
+      var r = on.getBoundingClientRect(), top = 70, bottom = foot.getBoundingClientRect().top - 10, by = 0;
+      if (r.bottom > bottom) by = r.bottom - bottom;
+      if (r.top - by < top) by = r.top - top;
+      if (by) window.scrollBy({ top: by, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    };
+    dots.forEach(function (d) { d.addEventListener('click', function () { go(+d.dataset.go); show(); }); });
+    moves.forEach(function (b) { b.addEventListener('click', function () { go(at + +b.dataset.move); show(); }); });
+    msgs.forEach(function (m) { m.addEventListener('click', function () { go(+m.dataset.step); }); });
+    go(1);
+  });
+
+  // ----- try to break it -----
+  var skipSelf = { '3': 1, '4': 1, '5': 1, '6': 1, '8': 1 };
+  all('.atkd').forEach(function (a) {
+    var kind = a.dataset.kind, stop = a.dataset.stop, box = a.querySelector('.track');
+    if (kind === 'other' || kind === 'pass') return;
+    var tpl = document.getElementById(kind === 'door' ? 'tpl-door' : 'tpl-idp');
+    box.appendChild(tpl.content.cloneNode(true));
+    var past = false;
+    all('li', box).forEach(function (li) {
+      var g = li.dataset.g;
+      if (kind === 'self' && skipSelf[g]) { li.classList.add('off'); return; }
+      if (g === stop) { li.classList.add('no'); past = true; li.querySelector('.gk').textContent = '✕'; }
+      else if (past) li.classList.add('off');
+      else { li.classList.add('ok'); li.querySelector('.gk').textContent = '✓'; }
+    });
+  });
+  var picks = all('.atk');
+  var pick = function (b) {
+    picks.forEach(function (x) { if (x === b) x.setAttribute('aria-current', 'true'); else x.removeAttribute('aria-current'); });
+    all('.atkd').forEach(function (a) { a.classList.toggle('on', a.id === 'atk-' + b.dataset.a); });
+  };
+  picks.forEach(function (b) { b.addEventListener('click', function () {
+    pick(b);
+    if (matchMedia('(max-width: 899px)').matches) document.querySelector('.adetail').scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }); });
+  pick(picks[0]);
+})();
+</script>
+</body>
+</html>

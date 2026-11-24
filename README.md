@@ -1151,7 +1151,9 @@ the Ark console; do not hand-roll token requests or JWT validation.
 ```
 
 **Agent: read first** — `Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md` (setup, token contents, every
-refusal), then the *Agent-to-agent (A2A)* section of the client README for the language.
+refusal), then the *Agent-to-agent (A2A)* section of the client README for the language. The [agents
+guide](https://ir-dev.github.io/ark-oauth-oidc/agents.html) draws the flows, including an MCP server as
+the target and an MCP gateway in front of the IdP, with working server code for all three languages.
 
 **Wire shape**
 

@@ -33,6 +33,14 @@ Caller: the operator's console session, or a `client_credentials` token issued t
 - `data/summary`, `data/export` (optional AES-256-GCM passphrase), `data/import/analyze` then `data/import/apply` (`mode` replace|merge_skip|merge_overwrite + `plan_hash`; replace needs `confirm` = operator tenant id), `data/reset` (`confirm` = operator tenant id)
 - Schema upgrades apply themselves at start-up on every provider. Never edit database rows. Ask the human before a reset or a replace import.
 
+## Agents: A2A and MCP (since 2.4.2)
+
+- An agent or MCP server is an ordinary confidential client. The client being called lists its callers (`a2a_callers`: client_id, claims, delegate_users); an empty list, the default, means nobody.
+- As itself: `client_credentials` + `audience` (or `resource`) = the target's client_id. For a user: token exchange (RFC 8693) with a token issued or addressed to the caller. The token's `aud` is the target's client_id, `act` is the chain, `ark_claims` are the user's own at the target. Lives 300 s at most, no refresh token.
+- Libraries: .NET `ArkAgentTokens.GetTokenAsync` / `AddArkAgentApi` / `ArkActors`; Python `agent_token` / `verify_agent_token` / `agent_actors`; Node `agentToken` / `verifyAgentToken` / `agentActors`. Never forward a received token; exchange it.
+- MCP server: register it with its URL as the `client_id`, so an unmodified MCP client's `resource=<url>` resolves. Publish in `scopes_supported` only a scope the calling clients hold (`profile`), and check `ark_claims` in the tools.
+- ARK ships no MCP server. An agent that must manage the IdP goes through a gateway MCP server that alone holds the machine credential. A browser sign-in by a third-party MCP client is not bound to the server: `resource` is ignored on the authorization code flow.
+
 ## Rules that cost the most time
 
 - Map the user to the client, or sign-in fails exactly like a wrong password.
@@ -51,6 +59,7 @@ Caller: the operator's console session, or a `client_credentials` token issued t
 - [System-prompt context block](https://github.com/ir-dev/ark-oauth-oidc/blob/main/README.md#4-context-block-for-a-system-prompt)
 - [Server package README](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md)
 - [Server AI-PROMPT](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/AI-PROMPT.md), [AI-RECIPES](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/AI-RECIPES.md), [API-GUIDE](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/API-GUIDE.md)
+- [Agents, A2A and MCP: the flows drawn, with recorded tokens and limits](https://ir-dev.github.io/ark-oauth-oidc/agents.html), and the reference, [A2A.md](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md)
 - [.NET client AI-PROMPT](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Client/AI-PROMPT.md)
 - [Python client AI-PROMPT](https://github.com/ir-dev/ark-oauth-oidc/blob/main/ark_oauth_client_py/AI-PROMPT.md)
 - [Node client README](https://github.com/ir-dev/ark-oauth-oidc/blob/main/ark_oauth_client_nodejs/README.md)
