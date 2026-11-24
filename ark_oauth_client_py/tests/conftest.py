@@ -18,6 +18,8 @@ def _reset(idp):
     idp.revoked.clear()
     idp.ark_claims = ["billing.admin", "reports.read"]
     idp.access_token_lifetime = 3600
+    idp.agents = {}
+    idp.user_claims_at = {}
     idp.user = {
         "sub": "alice@example.com",
         "name": "Alice Example",

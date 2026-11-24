@@ -1,5 +1,5 @@
 import { ArkOAuthClient } from './client.js';
-import { TokenSet } from './tokens.js';
+import { TokenSet, agentActors } from './tokens.js';
 import { ArkCallbackError, ArkConfigError, ArkOAuthError } from './errors.js';
 import {
   ArkAccessDeniedReasons,
@@ -616,6 +616,16 @@ export function arkExpress(options = {}) {
         return current?.accessToken ?? null;
       },
 
+      /**
+       * An access token for calling the agent `audience` (its client_id) on behalf of the
+       * signed-in user — see `ArkOAuthClient.agentToken`. Null when nobody is signed in.
+       */
+      async agentToken(audience, { scopes = [] } = {}) {
+        const subjectToken = await this.accessToken();
+        if (!subjectToken) return null;
+        return (await client.agentToken({ audience, subjectToken, scopes })).accessToken;
+      },
+
       /** Attaches the access token to a downstream request's headers. */
       async authorize(headers = {}) {
         const token = await this.accessToken();
@@ -747,8 +757,10 @@ const headerText = (value) =>
  * 401 when the token is missing or bad, 403 when it is valid but not allowed to do this.
  */
 export function arkBearer(options = {}) {
-  const { client: providedClient, scopes = [], claims = [], audience, optional = false, requireTypeHeader = true, ...clientOptions } = options;
+  const { client: providedClient, scopes = [], claims = [], audience: wantedAudience, optional = false, requireTypeHeader = true, agent = false, ...clientOptions } = options;
   const client = providedClient ?? new ArkOAuthClient(clientOptions);
+  // An agent (A2A) accepts only tokens addressed to it: the audience is its own client_id.
+  const audience = wantedAudience ?? (agent ? client.config.clientId : undefined);
 
   const challenge = (res, status, error, description) => {
     const text = headerText(description);
@@ -765,7 +777,7 @@ export function arkBearer(options = {}) {
 
       if (!token) {
         if (optional) {
-          req.ark = { isAuthenticated: false, token: null, claims: [], scopes: [], hasClaim: () => false, hasScope: () => false, client };
+          req.ark = { isAuthenticated: false, token: null, claims: [], scopes: [], actors: [], hasClaim: () => false, hasScope: () => false, client };
           return next();
         }
         return challenge(res, 401, 'invalid_token', 'an access token is required.');
@@ -792,6 +804,8 @@ export function arkBearer(options = {}) {
         sessionId: payload.sid ?? null,
         scopes: granted,
         claims: arkClaims,
+        /** Agents acting for `sub` (A2A), newest first; empty when the caller acts as itself. */
+        actors: agentActors(payload),
         hasClaim: (...wanted) => wanted.flat().every((c) => arkClaims.includes(c)),
         hasScope: (...wanted) => wanted.flat().every((s) => granted.includes(s)),
         client

@@ -97,7 +97,7 @@ OAuth 2.1 / OIDC protocol core  (endpoints under the issuer {BaseUrl}/{TenantId}
  ├── Discovery      /.well-known/openid-configuration  (+ /oauth-authorization-server, RFC 8414)
  ├── JWKS           /.well-known/jwks.json             (two-phase key rotation, RS256)
  ├── Authorize      /oauth2/authorize                  (code + PKCE S256; response_type=code only)
- ├── Token          /oauth2/token                      (authorization_code, refresh_token, client_credentials, device_code)
+ ├── Token          /oauth2/token                      (authorization_code, refresh_token, client_credentials, device_code, token-exchange for A2A)
  ├── UserInfo       /oauth2/userinfo
  ├── Introspect     /oauth2/introspect (RFC 7662)      Revoke /oauth2/revoke (RFC 7009)
  ├── End session    /oauth2/logout     (RP-initiated; browser-wide by default)
@@ -202,6 +202,7 @@ DO NOT:
 
 - Target framework `net10.0`; EF Core `10.0.x` (`net9.0` and EF Core `9.0.x` up to 2.2.1).
 - Current version **2.4.1**; ships with `Ark.oAuth.Client 2.4.1`. 2.4.1 adds webhooks, an opt-in module (`AddArkWebhooks()`, see `WEBHOOKS.md`) that changes nothing for a host that does not call it; 2.4.0 was the scale release (indexed lookups, the reference and client-secret caches, the key ring in the database, bounded password hashing) and changes nothing on the wire; 2.3.0 was 2.2.1 moved to .NET 10 / EF Core 10, with no behaviour change.
+- **Next release adds agent-to-agent (A2A) tokens** (`A2A.md`): `client_credentials` + `audience` and RFC 8693 token exchange issue a token whose `aud` is the target agent's client_id, only to callers the target lists in `ArkClient.a2a_callers`. On by default, inert until a caller is listed; `Oidc:EnableA2A=false` removes it. Logic in `Protocol/ArkAgentTokens.cs`.
 - **Unsupported by design:** implicit grant, hybrid flow, ROPC, plain PKCE, SQL Server.
 - Schema history is tracked in `ark_schema_history`; scripts `00003` (2.0.0), `00004` (2.0.2),
   `00005` (2.0.3). Full detail: [`MIGRATION.md`](MIGRATION.md).
@@ -240,6 +241,7 @@ DefaultPw, UserPasswordMode (admin_managed|email_based|auto), AdminUser{Username
 ShowPoweredBy=true ("Powered by Ark Identity Server" on sign-in pages and console footer),
 Admin{SignOutUrl,LandingUrl}, Oidc{EnableDynamicRegistration=false, RequireRegistrationAccessToken=true,
 EnableDeviceFlow=true, EnablePushedAuthorizationRequests=true, RequirePushedAuthorizationRequests=false,
+EnableA2A=true (agent-to-agent tokens, see A2A.md), A2ATokenLifetimeSeconds=300, A2AMaxDelegationDepth=4,
 AlwaysRequireConsent=false, SessionLifetimeMinutes=480, MaxFailedSignIns=10, LockoutMinutes=15,
 EnableBackChannelLogout=true, BackChannelLogoutTimeoutSeconds=5, LogoutTokenLifetimeSeconds=120,
 SignOutAllBrowserSessions=true, SignOutAcrossTenants=true, CorsOrigins=[], CleanupIntervalMinutes=60,

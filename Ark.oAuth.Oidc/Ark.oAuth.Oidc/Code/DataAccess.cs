@@ -131,6 +131,9 @@ namespace Ark.oAuth.Oidc
                 // arrives without them — which means "unchanged", not "remove the secret".
                 if (string.IsNullOrEmpty(client.client_secret_hash)) client.client_secret_hash = tt.client_secret_hash;
                 if (string.IsNullOrEmpty(client.registration_access_token_hash)) client.registration_access_token_hash = tt.registration_access_token_hash;
+                // The A2A caller list likewise: a save that does not carry it (provisioning,
+                // onboarding, an older console script) leaves it as it was. "[]" clears it.
+                if (client.a2a_callers_ == null) client.a2a_callers_ = tt.a2a_callers_;
                 _ctx.ChangeTracker.Clear();
                 client.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.clients.Update(client);
@@ -199,6 +202,23 @@ namespace Ark.oAuth.Oidc
             }
 
             if (client.expire_mins <= 0) client.expire_mins = 480;
+
+            // A2A callers: one tidy entry per calling client, so the token endpoint compares
+            // against exactly what the console shows.
+            if (client.a2a_callers_ != null)
+            {
+                client.a2a_callers = client.a2a_callers
+                    .Where(c => !string.IsNullOrWhiteSpace(c.client_id))
+                    .GroupBy(c => c.client_id.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .Select(g => new ArkAgentCaller
+                    {
+                        client_id = g.Key,
+                        claims = g.SelectMany(c => c.claims ?? new List<string>())
+                            .Select(v => (v ?? "").Trim()).Where(v => v.Length > 0)
+                            .Distinct(StringComparer.Ordinal).ToList(),
+                        delegate_users = g.Any(c => c.delegate_users)
+                    }).ToList();
+            }
         }
         public async Task<ArkClient?> FindClientByName(string tenant_id, string client_name, string? excludeClientRowId = null)
         {

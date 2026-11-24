@@ -29,6 +29,7 @@ npm install ark-oauth-client-node
 - [Account switching on a shared browser](#account-switching-on-a-shared-browser)
 - [Loading appsettings.json](#loading-appsettingsjson)
 - [Protecting an API](#protecting-an-api)
+- [Agent-to-agent (A2A)](#agent-to-agent-a2a)
 - [Sessions](#sessions)
 - [Using the client directly](#using-the-client-directly)
 - [Checking the setup](#checking-the-setup)
@@ -310,6 +311,37 @@ app.get('/api/reports', bearer.require({ claims: ['reports.read'] }), handler);
 
 Verification is local, against the cached JWKS, so a request costs no round trip to the identity
 server. `optional: true` lets anonymous requests through with `req.ark.isAuthenticated === false`.
+
+---
+
+## Agent-to-agent (A2A)
+
+When this application is an agent that calls other agents, or is called by them. An agent is an
+ordinary confidential client; the agent being called lists its callers on its client record in the
+provider's console, and a token is addressed to that one agent (`aud` is its client_id).
+
+```js
+import { ArkOAuthClient, arkBearer, agentActors } from 'ark-oauth-client-node';
+
+const client = new ArkOAuthClient({ authority: 'https://idp.example.com/my_idp', clientId: 'agent-a', clientSecret });
+
+// calling another agent
+const asItself = await client.agentToken({ audience: 'agent-b' });                          // sub = agent-a
+const forUser = await client.agentToken({ audience: 'agent-b', subjectToken: userToken });   // sub = the user, act = agent-a
+const onBehalf = await req.ark.agentToken('agent-b');   // in an arkExpress app: for the signed-in user
+await fetch(url, { headers: { authorization: `Bearer ${asItself.accessToken}` } });
+
+// being called — accepts only tokens addressed to this agent's clientId
+const agent = arkBearer({ authority: 'https://idp.example.com/my_idp', clientId: 'agent-b', clientSecret, agent: true });
+app.post('/a2a/tasks', agent, agent.require({ claims: ['orders.read'] }), (req, res) =>
+  res.json({ sub: req.ark.sub, actors: req.ark.actors }));   // newest first; [] when the caller acts as itself
+```
+
+Tokens are cached until shortly before they expire, per target and per user. The provider answers
+`invalid_target` (an `ArkOAuthError`) until the target lists this client. Without the middleware,
+`client.verifyAgentToken(token)` does the same check and `agentActors(payload)` reads the chain;
+`client.agentCardSecurity()` returns the security section for an A2A Agent Card. The full guide —
+setup, token contents, every refusal — is [A2A.md](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md).
 
 ---
 

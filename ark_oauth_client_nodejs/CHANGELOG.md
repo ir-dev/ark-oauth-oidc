@@ -1,5 +1,24 @@
 # Changelog
 
+## Next release
+
+Agent-to-agent (A2A). Additive: nothing existing changes, and nothing here is used until you call
+it. It needs a provider that has A2A (`Ark.oAuth.Oidc`, same release).
+
+- `client.agentToken({ audience, subjectToken, scopes })` returns a token addressed to another
+  agent. Without `subjectToken` the client calls as itself (`client_credentials` with `audience`).
+  With it, the client calls on behalf of that user (token exchange, RFC 8693). Tokens are cached per
+  target and per user until shortly before they expire.
+- `client.verifyAgentToken(token)` is `verifyAccessToken` with the audience fixed to this client's
+  own `clientId`.
+- `agentActors(payload)` reads the `act` chain, newest first.
+- `arkBearer({ agent: true })` accepts only tokens addressed to this agent, and `req.ark.actors` is
+  set on every bearer request. In an `arkExpress` app, `req.ark.agentToken(audience)` gets a token
+  on behalf of the signed-in user.
+- `client.agentCardSecurity({ spec })` returns the security section for an A2A Agent Card.
+- New exports: `agentActors`, `TOKEN_EXCHANGE_GRANT`, `ACCESS_TOKEN_TYPE`. The type declarations
+  cover all of the above.
+
 ## 2.4.1
 
 No change to this package. It has the same code, API and options as 2.4.0 and is published at the

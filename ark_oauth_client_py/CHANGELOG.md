@@ -1,5 +1,24 @@
 # Changelog
 
+## Next release
+
+Agent-to-agent (A2A). Additive: nothing existing changes, and nothing here is used until you call
+it. It needs a provider that has A2A (`Ark.oAuth.Oidc`, same release).
+
+- `ArkOAuthClient.agent_token(audience, subject_token=None, scopes=())` returns a token addressed
+  to another agent. Without `subject_token` the client calls as itself (`client_credentials` with
+  `audience`). With it, the client calls on behalf of that user (token exchange, RFC 8693). Tokens
+  are cached per target and per user until shortly before they expire.
+- `ArkOAuthClient.verify_agent_token(token)` is `verify_access_token` with the audience fixed to
+  this client's own `client_id`.
+- `agent_actors(payload)` reads the `act` chain, newest first.
+- Flask: `add_ark_agent_api(app, prefix, ...)` and `ArkBearer(agent=True)` accept only tokens
+  addressed to this agent. `current_ark.actors` is available on a bearer request, and
+  `current_ark.agent_token(audience)` gets a token on behalf of the signed-in user.
+- `ArkOAuthClient.agent_card_security(spec=None)` returns the security section for an A2A Agent
+  Card.
+- New exports: `agent_actors`, `TOKEN_EXCHANGE_GRANT`, `ACCESS_TOKEN_TYPE`.
+
 ## 2.4.1
 
 No change to this package. It has the same code, API and dependencies as 2.4.0 and is published at

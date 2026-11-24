@@ -37,6 +37,8 @@ namespace Ark.oAuth.Oidc.Endpoints
 
                 var grantTypes = new List<string> { "authorization_code", "refresh_token", "client_credentials" };
                 if (opt.EnableDeviceFlow) grantTypes.Add("urn:ietf:params:oauth:grant-type:device_code");
+                // Agent-to-agent calls on behalf of a user (RFC 8693). See A2A.md.
+                if (opt.EnableA2A) grantTypes.Add(ArkAgentTokens.TokenExchangeGrant);
 
                 var doc = new Dictionary<string, object?>
                 {

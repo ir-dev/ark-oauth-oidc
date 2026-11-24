@@ -228,6 +228,8 @@ namespace Ark.oAuth
             services.AddSingleton<ArkSetupProbe>();
             services.AddSingleton<ArkClientCredentials>();
             services.AddSingleton<ArkRegistration>();
+            // Agent-to-agent (A2A) tokens: inert until this application asks for one.
+            services.AddSingleton<ArkAgentTokens>();
 
             if (!ccc.UseLegacyFlow)
             {

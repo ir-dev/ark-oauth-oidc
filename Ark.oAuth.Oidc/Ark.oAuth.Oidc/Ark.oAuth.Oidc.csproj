@@ -54,6 +54,30 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
+Next release — agent-to-agent (A2A) tokens. Inert until an operator lists a caller.
+
+Every existing endpoint, token and page is as in 2.4.1, and a client that never asks for an agent
+token sees no difference.
+* **A token addressed to one agent.** `client_credentials` with `audience` (or `resource`) naming a
+  client issues an access token whose `aud` is that client_id, with the `ark_claims` the target
+  granted the caller. Short-lived (Oidc:A2ATokenLifetimeSeconds, 300), never refreshed.
+* **On behalf of a user: token exchange (RFC 8693).** An agent presents a user's access token it was
+  issued, or an agent token addressed to it, and names the next agent. `sub` stays the user,
+  `ark_claims` are the user's own at the target, `act` records every agent on the way, and the new
+  token never outlives the one exchanged. Refused when the user has no access to the target, the
+  account is deactivated, the session has ended, or the chain exceeds Oidc:A2AMaxDelegationDepth (4).
+* **The target decides who may call it.** ArkClient.a2a_callers lists the calling clients, the
+  claims each holds there and whether it may act for users; the client drawer of the console edits
+  it. Empty on every existing client, so nothing is issued until someone lists a caller.
+* **Agent Card.** GET {issuer}/a2a/agent-card-security serves the security section of an A2A Agent
+  Card (A2A 1.0; ?spec=0.3 for the older shape).
+* **Introspection** answers for an agent token to the agent it is addressed to and the client that
+  obtained it, with `act` and `ark_claims`.
+* **Schema:** one nullable column, clients.a2a_callers_, added on first start by the schema sync.
+* **Behaviour change:** `audience` / `resource` on a client_credentials request used to be ignored;
+  a value other than the tenant's own audience is now answered invalid_target unless it names an
+  agent the caller may call. Oidc:EnableA2A = false restores the previous behaviour. See A2A.md.
+
 2.4.1 — webhooks, opt-in. Nothing changes for a host that does not ask for them.
 
 Endpoints, discovery, tokens, pages and existing configuration are as in 2.4.0, so every client that
@@ -537,6 +561,7 @@ projects, and now carries a readme, an SPDX license expression and a symbol pack
 		<None Include="TROUBLESHOOTING.md" Pack="true" PackagePath="" />
 		<None Include="MIGRATION.md" Pack="true" PackagePath="" />
 		<None Include="WEBHOOKS.md" Pack="true" PackagePath="" />
+		<None Include="A2A.md" Pack="true" PackagePath="" />
 	</ItemGroup>
 
 	<!-- ==============================================================================

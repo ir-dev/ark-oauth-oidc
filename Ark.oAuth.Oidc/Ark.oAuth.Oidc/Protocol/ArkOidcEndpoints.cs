@@ -23,6 +23,25 @@ namespace Ark.oAuth.Oidc.Protocol
         public List<string> IntrospectionClients { get; set; } = new();
         public bool EnableDeviceFlow { get; set; } = true;
         public bool EnablePushedAuthorizationRequests { get; set; } = true;
+
+        /// <summary>
+        /// Agent-to-agent (A2A) tokens: an access token addressed to one named client, obtained
+        /// with <c>client_credentials</c> + <c>audience</c> (the agent as itself) or by token
+        /// exchange (RFC 8693, the agent on behalf of a user). On by default and inert until a
+        /// client lists its callers (<see cref="ArkClient.a2a_callers"/>): with no list, every
+        /// such request is refused. Off, the token endpoint behaves exactly as it did before the
+        /// feature existed. See A2A.md.
+        /// </summary>
+        public bool EnableA2A { get; set; } = true;
+        /// <summary>
+        /// The longest an A2A token lives, in seconds. Short on purpose: it is requested per
+        /// conversation between two agents and cannot be refreshed, only asked for again. The
+        /// calling client's own access token lifetime applies when that is shorter, and a token
+        /// issued on behalf of a user never outlives the token it was exchanged for.
+        /// </summary>
+        public int A2ATokenLifetimeSeconds { get; set; } = 300;
+        /// <summary>How many agents may hand a user on, one to the next, before the chain is refused.</summary>
+        public int A2AMaxDelegationDepth { get; set; } = 4;
         /// <summary>Refuse plain /authorize requests that did not arrive via PAR.</summary>
         public bool RequirePushedAuthorizationRequests { get; set; } = false;
 

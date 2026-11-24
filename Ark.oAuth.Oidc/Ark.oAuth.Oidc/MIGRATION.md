@@ -133,6 +133,27 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
 
 ## Behavioural changes by version (from the .csproj notes)
 
+- **Next release — agent-to-agent (A2A) tokens; inert until an operator lists a caller.**
+  A token can now be addressed to one client (`aud` = its client_id): the `client_credentials`
+  grant with `audience` (the agent as itself), or `urn:ietf:params:oauth:grant-type:token-exchange`
+  (RFC 8693, the agent on behalf of a user, with an `act` chain). Both are refused with
+  `invalid_target` unless the target client lists the caller in `a2a_callers`, which is empty on
+  every existing client. `GET {issuer}/a2a/agent-card-security` serves the security section of an
+  A2A Agent Card. Options `Oidc:EnableA2A` (true), `A2ATokenLifetimeSeconds` (300),
+  `A2AMaxDelegationDepth` (4). See `A2A.md`.
+  - **Schema:** one nullable column, `clients.a2a_callers_`, added by the start-up schema sync on
+    every provider. Nothing else. An older build runs against the upgraded database unchanged.
+  - **Discovery** lists the token-exchange grant in `grant_types_supported`.
+  - **Introspection** additionally answers for an A2A token when the caller is the agent it is
+    addressed to or the client that obtained it. Every other answer is as before.
+  - **One behaviour change:** a `client_credentials` request carrying `audience` or `resource` used
+    to have it ignored. It is still ignored when it names the tenant's own audience or the issuer;
+    any other value is now an A2A request and is answered `invalid_target` unless it names an
+    agent the caller may call. `Oidc:EnableA2A = false` restores the old behaviour entirely.
+  - **Not affected:** authorization code, refresh, device, PAR, registration, userinfo, logout,
+    the management API (an A2A token is refused there: wrong audience) and every existing token.
+  - **Upgrade action:** none.
+
 - **2.4.1 — webhooks, opt-in; nothing changes for a host that does not ask for them.**
   `builder.Services.AddArkWebhooks()` adds an operator-only Webhooks page to the console
   (`/{tenant}/admin/webhooks`), an API under `/api/oauth/v1/webhooks`, and a database-backed

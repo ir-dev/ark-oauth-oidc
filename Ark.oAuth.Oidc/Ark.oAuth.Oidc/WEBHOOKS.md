@@ -53,7 +53,7 @@ returns.
 | `user.locked_out` | the failed-attempt lockout blocked a sign-in | the client's |
 | `user.signin_refused` | a verified user was refused: user or application deactivated, no access mapping | the client's |
 | `user.signed_out` | a session ended through RP-initiated logout (one event per session) | the session's |
-| `token.issued` | tokens issued for an authorization code or client credentials | the client's |
+| `token.issued` | tokens issued for an authorization code, client credentials or a token exchange (agent-to-agent; the data then carries `audience`, and `actors` for an exchange) | the client's |
 | `token.revoked` | a client revoked a token | the client's |
 | `device.approved` | a user approved a device authorization | the client's |
 | `client.updated` / `client.deleted` | an application changed in the console or management API | the client's |

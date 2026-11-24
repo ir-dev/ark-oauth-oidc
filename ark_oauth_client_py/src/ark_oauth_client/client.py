@@ -28,7 +28,7 @@ from .errors import ArkCallbackError, ArkConfigError, ArkOAuthError, ArkTokenErr
 from .jwks import JwksCache
 from .jwt import sign_jwt, verify_jwt
 from .pkce import create_nonce, create_pkce_pair, create_state
-from .tokens import TokenSet
+from .tokens import ACCESS_TOKEN_TYPE, TOKEN_EXCHANGE_GRANT, TokenSet
 from .http import basic_auth_header, get_json, post_form, request as http_request
 
 __all__ = ["ArkOAuthClient", "AuthorizationRequest", "create_ark_client"]
@@ -416,6 +416,108 @@ class ArkOAuthClient:
         tokens = TokenSet(response)
         self._service_tokens[key] = tokens
         return tokens
+
+    # =================================================================
+    # Agent-to-agent (A2A)
+    # =================================================================
+
+    def agent_token(
+        self,
+        audience: str,
+        *,
+        subject_token: Optional[str] = None,
+        scopes: Sequence[str] = (),
+        force: bool = False,
+        renew_before_seconds: int = 30,
+    ) -> TokenSet:
+        """
+        A token for calling another agent: addressed to ``audience`` (that agent's client_id) and
+        good nowhere else. Send it as ``Authorization: Bearer``.
+
+        Without ``subject_token`` this agent calls **as itself** (``client_credentials`` plus
+        ``audience``); the token's ``sub`` is this client and its ``ark_claims`` are what the
+        target granted it. With ``subject_token`` — a user's access token this client was issued,
+        or an agent token it was sent — it calls **on behalf of that user** (token exchange, RFC
+        8693): ``sub`` stays the user, ``ark_claims`` are the user's own at the target, and ``act``
+        names every agent on the way.
+
+        The target decides who may call it: an operator lists this client on the target's client
+        record. Until then the server answers ``invalid_target``. Tokens are short-lived and
+        cached here until shortly before they expire.
+        """
+        if not audience:
+            raise ArkConfigError("agent_token() needs the client_id of the agent to call.")
+        # "none" is the token_endpoint_auth_method name, not a password.
+        if self._config.token_endpoint_auth_method == "none":  # nosec B105
+            raise ArkConfigError(
+                "an agent must be a confidential client: a public client cannot ask for an "
+                "agent-to-agent token."
+            )
+
+        scope_value = " ".join(scopes)
+        # Hashed, so the cache never holds the user's token; and part of the key, so one user's
+        # token is never answered with another's.
+        on_behalf_of = hashlib.sha256((subject_token or "").encode("utf-8")).hexdigest()
+        key = f"a2a|{self._config.authority}|{self._config.client_id}|{audience}|{on_behalf_of}|{scope_value}"
+
+        cached = self._service_tokens.get(key)
+        if not force and cached and not cached.expired(renew_before_seconds):
+            return cached
+
+        body: Dict[str, Any]
+        if subject_token:
+            body = {
+                "grant_type": TOKEN_EXCHANGE_GRANT,
+                "subject_token": subject_token,
+                "subject_token_type": ACCESS_TOKEN_TYPE,
+                "audience": audience,
+            }
+        else:
+            body = {"grant_type": "client_credentials", "audience": audience}
+        if scope_value:
+            body["scope"] = scope_value
+
+        tokens = TokenSet(self._token_request(self.metadata()["token_endpoint"], body))
+
+        # One entry per user per target would otherwise grow for as long as the process lives.
+        if len(self._service_tokens) > 512:
+            for stale in [k for k, v in list(self._service_tokens.items()) if v.expired()]:
+                self._service_tokens.pop(stale, None)
+        self._service_tokens[key] = tokens
+        return tokens
+
+    def verify_agent_token(
+        self,
+        token: str,
+        *,
+        scopes: Sequence[str] = (),
+        ark_claims: Sequence[str] = (),
+        require_type_header: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Verifies a token another agent sent to this one: :meth:`verify_access_token` with the
+        audience fixed to this client's own client_id, which is what makes a token minted for one
+        agent useless at the next. Read who is calling with :func:`agent_actors`.
+        """
+        return self.verify_access_token(
+            token,
+            audience=self._config.client_id,
+            scopes=scopes,
+            ark_claims=ark_claims,
+            require_type_header=require_type_header,
+        )
+
+    def agent_card_security(self, *, spec: Optional[str] = None) -> Dict[str, Any]:
+        """
+        The security section of this agent's A2A Agent Card, as the provider writes it:
+        ``securitySchemes`` and ``securityRequirements`` (A2A 1.0), or with ``spec="0.3"`` the
+        ``securitySchemes`` and ``security`` of A2A 0.3. Merge it into the card you publish at
+        ``/.well-known/agent-card.json``.
+        """
+        url = f"{self.metadata()['issuer'].rstrip('/')}/a2a/agent-card-security"
+        if spec:
+            url = f"{url}?{urlencode({'spec': spec})}"
+        return get_json(url, **self._http)
 
     # =================================================================
     # Device authorization grant (RFC 8628)

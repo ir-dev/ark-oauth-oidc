@@ -6,7 +6,8 @@ namespace Ark.oAuth.Oidc.Endpoints
 {
     /// <summary>
     /// The token endpoint (RFC 6749 §3.2). Handles the authorization_code, refresh_token,
-    /// client_credentials and device_code grants.
+    /// client_credentials and device_code grants, and token exchange (RFC 8693) for
+    /// agent-to-agent calls made on behalf of a user.
     ///
     /// Every response — success or failure — follows the spec: a JSON body with `token_type`
     /// and `expires_in` on success, and an HTTP 400/401 with `error`/`error_description` on
@@ -21,6 +22,7 @@ namespace Ark.oAuth.Oidc.Endpoints
         private readonly ArkGrantStore _grants;
         private readonly ArkTokenService _tokens;
         private readonly ArkClaimsService _claims;
+        private readonly ArkAgentTokens _agents;
         private readonly DataAccess _da;
 
         /// <summary>The grants this server implements — mirrors grant_types_supported in discovery.</summary>
@@ -31,12 +33,13 @@ namespace Ark.oAuth.Oidc.Endpoints
         };
 
         public OidcTokenController(ArkDataContext ctx, IConfiguration config, ArkClientAuthenticator clientAuth,
-            ArkGrantStore grants, ArkTokenService tokens, ArkClaimsService claims, DataAccess da) : base(ctx, config)
+            ArkGrantStore grants, ArkTokenService tokens, ArkClaimsService claims, ArkAgentTokens agents, DataAccess da) : base(ctx, config)
         {
             _clientAuth = clientAuth;
             _grants = grants;
             _tokens = tokens;
             _claims = claims;
+            _agents = agents;
             _da = da;
         }
 
@@ -63,13 +66,20 @@ namespace Ark.oAuth.Oidc.Endpoints
                 // grant the client may not use; answering it for `password` — which this server
                 // does not implement at any client — tells a caller to fix its registration when
                 // the grant is simply gone in OAuth 2.1.
-                if (!SupportedGrantTypes.Contains(grantType, StringComparer.OrdinalIgnoreCase))
+                // Token exchange exists for agent-to-agent calls only; with A2A off it is a
+                // grant this server does not have, as it was before.
+                var tokenExchange = Options.EnableA2A
+                    && string.Equals(grantType, ArkAgentTokens.TokenExchangeGrant, StringComparison.OrdinalIgnoreCase);
+                if (!tokenExchange && !SupportedGrantTypes.Contains(grantType, StringComparer.OrdinalIgnoreCase))
                     throw OAuthException.UnsupportedGrantType(grantType);
 
                 if (!client.EffectiveGrantTypes.Contains(grantType, StringComparer.OrdinalIgnoreCase))
                     client = await FreshClientAsync(client); // a grant added through another instance
                 if (!client.EffectiveGrantTypes.Contains(grantType, StringComparer.OrdinalIgnoreCase))
                     throw OAuthException.UnauthorizedClient($"this client is not registered for the '{grantType}' grant.");
+
+                if (tokenExchange)
+                    return await TokenExchangeGrantAsync(tenant, ep, client, form, auth);
 
                 return grantType switch
                 {
@@ -232,6 +242,19 @@ namespace Ark.oAuth.Oidc.Endpoints
             scopes = scopes.Where(s => !string.Equals(s, "openid", StringComparison.OrdinalIgnoreCase)
                                     && !string.Equals(s, "offline_access", StringComparison.OrdinalIgnoreCase)).ToList();
 
+            // Agent-to-agent: the request names the agent it is going to call, and the token is
+            // good there and nowhere else. Naming the tenant's own audience is not that request.
+            var audience = Options.EnableA2A ? ArkAgentTokens.RequestedAudience(form) : null;
+            if (audience != null && !ArkAgentTokens.IsTenantAudience(audience, tenant, ep.Issuer))
+            {
+                var issued = await _agents.AsItselfAsync(tenant, ep.Issuer, client, audience, scopes);
+                _da.Log("token", $"{tenant.tenant_id}/oauth2/token", "a2a token issued",
+                    $"client: {client.client_id}, audience: {issued.Audience}");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.TokenIssued,
+                    new { grant_type = "client_credentials", client_id = client.client_id, subject = issued.Subject, scopes, audience = issued.Audience }, client.client_id);
+                return Ok(BuildResponse(issued.AccessToken, issued.ExpiresAt, scopes, null, null));
+            }
+
             var ctx = new TokenRequestContext
             {
                 Tenant = tenant,
@@ -249,6 +272,28 @@ namespace Ark.oAuth.Oidc.Endpoints
 
             // §4.4.3: a refresh token SHOULD NOT be issued — the client can just ask again.
             return Ok(BuildResponse(accessToken, expiresAt, scopes, null, null));
+        }
+
+        /// <summary>
+        /// Token exchange (RFC 8693), in the one form this server offers: an agent that holds a
+        /// user's access token asks for one addressed to the next agent. See <see cref="ArkAgentTokens"/>.
+        /// </summary>
+        private async Task<IActionResult> TokenExchangeGrantAsync(
+            ArkTenant tenant, ArkOidcEndpoints ep, ArkClient client, IFormCollection form, ClientAuthResult auth)
+        {
+            // The actor is the authenticated client, so it has to be one that can authenticate.
+            if (auth.Method == "none")
+                throw OAuthException.InvalidClient("token exchange requires client authentication.");
+
+            var issued = await _agents.OnBehalfOfAsync(tenant, ep.Issuer, client, form);
+            _da.Log("token", $"{tenant.tenant_id}/oauth2/token", "a2a token issued on behalf of a user",
+                $"client: {client.client_id}, sub: {issued.Subject}, audience: {issued.Audience}, act: {string.Join(" < ", issued.Actors)}");
+            Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.TokenIssued,
+                new { grant_type = ArkAgentTokens.TokenExchangeGrant, client_id = client.client_id, subject = issued.Subject, scopes = issued.Scopes, audience = issued.Audience, actors = issued.Actors }, issued.Subject);
+
+            var body = BuildResponse(issued.AccessToken, issued.ExpiresAt, issued.Scopes, null, null);
+            body["issued_token_type"] = ArkAgentTokens.AccessTokenType; // RFC 8693 §2.2.1
+            return Ok(body);
         }
 
         private async Task<IActionResult> DeviceCodeGrantAsync(

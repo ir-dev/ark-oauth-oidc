@@ -122,6 +122,12 @@ export interface TokenResponse {
   [key: string]: unknown;
 }
 
+/** RFC 8693 token exchange grant and token type, as used for agent-to-agent calls. */
+export const TOKEN_EXCHANGE_GRANT: string;
+export const ACCESS_TOKEN_TYPE: string;
+/** The agents acting for a token's subject (its `act` chain), newest first. */
+export function agentActors(payload: Record<string, any> | null | undefined): string[];
+
 export class TokenSet {
   constructor(response?: TokenResponse, options?: { issuedAt?: number; claims?: Record<string, any> | null });
   accessToken: string | null;
@@ -391,6 +397,25 @@ export class ArkOAuthClient {
     options?: { audience?: string; scopes?: string[]; arkClaims?: string[]; requireTypeHeader?: boolean }
   ): Promise<Record<string, any>>;
 
+  /**
+   * A token for calling another agent (A2A), addressed to `audience` — that agent's client_id.
+   * As itself without `subjectToken`; on behalf of a user (token exchange, RFC 8693) with it.
+   */
+  agentToken(options: {
+    audience: string;
+    subjectToken?: string | null;
+    scopes?: string[];
+    force?: boolean;
+    renewBeforeSeconds?: number;
+  }): Promise<TokenSet>;
+  /** `verifyAccessToken` with the audience fixed to this client's own client_id. */
+  verifyAgentToken(
+    token: string,
+    options?: { scopes?: string[]; arkClaims?: string[]; requireTypeHeader?: boolean }
+  ): Promise<Record<string, any>>;
+  /** The security section of this agent's A2A Agent Card, written by the provider. */
+  agentCardSecurity(options?: { spec?: '0.3' | '1.0' | string }): Promise<Record<string, any>>;
+
   registerClient(clientMetadata: Record<string, any>, initialAccessToken?: string): Promise<Record<string, any>>;
   readRegistration(clientId: string, registrationAccessToken: string): Promise<Record<string, any>>;
   deleteRegistration(clientId: string, registrationAccessToken: string): Promise<true>;
@@ -558,6 +583,8 @@ export interface ArkRequestContext {
   idToken: string | null;
   /** The current access token, refreshed first if it is about to expire. */
   accessToken(): Promise<string | null>;
+  /** A token for calling the agent `audience` on behalf of the signed-in user (A2A). */
+  agentToken(audience: string, options?: { scopes?: string[] }): Promise<string | null>;
   /** Adds `Authorization: Bearer …` to a headers object for a downstream call. */
   authorize(headers?: Record<string, string>): Promise<Record<string, string>>;
   hasClaim(...wanted: Array<string | string[]>): boolean;
@@ -585,6 +612,8 @@ export interface ArkBearerContext {
   sessionId?: string | null;
   scopes: string[];
   claims: string[];
+  /** Agents acting for `sub` (A2A), newest first; empty when the caller acts as itself. */
+  actors: string[];
   hasClaim?(...wanted: Array<string | string[]>): boolean;
   hasScope?(...wanted: Array<string | string[]>): boolean;
   client?: ArkOAuthClient;
@@ -650,6 +679,8 @@ export interface ArkBearerOptions extends Partial<ArkClientOptions> {
   /** Required Ark authorization claims. */
   claims?: string[];
   audience?: string;
+  /** This API is an agent (A2A): accept only tokens whose audience is its own client_id. */
+  agent?: boolean;
   /** Let unauthenticated requests through with `req.ark.isAuthenticated === false`. */
   optional?: boolean;
   /** Require the RFC 9068 `at+jwt` type header. On by default. */

@@ -1,7 +1,7 @@
 import { normalizeConfig } from './config.js';
 import { MetadataResolver } from './discovery.js';
 import { JwksCache } from './jwks.js';
-import { TokenSet } from './tokens.js';
+import { ACCESS_TOKEN_TYPE, TOKEN_EXCHANGE_GRANT, TokenSet } from './tokens.js';
 import { basicAuthHeader, getJson, postForm, request } from './http.js';
 import { createNonce, createPkcePair, createState } from './pkce.js';
 import { fixedTimeEqual, randomToken, sha256 } from './crypto.js';
@@ -293,6 +293,83 @@ export class ArkOAuthClient {
     const tokens = new TokenSet(response);
     this.#serviceTokens.set(key, tokens);
     return tokens;
+  }
+
+  // =================================================================
+  // Agent-to-agent (A2A)
+  // =================================================================
+
+  /**
+   * A token for calling another agent: addressed to `audience` (that agent's client_id) and good
+   * nowhere else. Send it as `Authorization: Bearer`.
+   *
+   * Without `subjectToken` this agent calls **as itself** (`client_credentials` plus `audience`);
+   * the token's `sub` is this client and its `ark_claims` are what the target granted it. With
+   * `subjectToken` — a user's access token this client was issued, or an agent token it was sent —
+   * it calls **on behalf of that user** (token exchange, RFC 8693): `sub` stays the user,
+   * `ark_claims` are the user's own at the target, and `act` names every agent on the way.
+   *
+   * The target decides who may call it: an operator lists this client on the target's client
+   * record. Until then the server answers `invalid_target`. Tokens are short-lived and cached here
+   * until shortly before they expire.
+   */
+  async agentToken({ audience, subjectToken, scopes = [], force = false, renewBeforeSeconds = 30 } = {}) {
+    if (!audience) throw new ArkConfigError('agentToken() needs the client_id of the agent to call.');
+    if (this.#config.tokenEndpointAuthMethod === 'none') {
+      throw new ArkConfigError(
+        'an agent must be a confidential client: a public client cannot ask for an agent-to-agent token.'
+      );
+    }
+
+    const scopeValue = [...scopes].join(' ');
+    // Hashed, so the cache never holds the user's token; and part of the key, so one user's token
+    // is never answered with another's.
+    const onBehalfOf = sha256(String(subjectToken ?? '')).toString('base64url');
+    const key = `a2a|${this.#config.authority}|${this.#config.clientId}|${audience}|${onBehalfOf}|${scopeValue}`;
+
+    const cached = this.#serviceTokens.get(key);
+    if (!force && cached && !cached.expired(renewBeforeSeconds)) return cached;
+
+    const body = subjectToken
+      ? {
+          grant_type: TOKEN_EXCHANGE_GRANT,
+          subject_token: subjectToken,
+          subject_token_type: ACCESS_TOKEN_TYPE,
+          audience
+        }
+      : { grant_type: 'client_credentials', audience };
+    if (scopeValue) body.scope = scopeValue;
+
+    const metadata = await this.metadata();
+    const tokens = new TokenSet(await this.#tokenRequest(metadata.token_endpoint, body));
+
+    // One entry per user per target would otherwise grow for as long as the process lives.
+    if (this.#serviceTokens.size > 512) {
+      for (const [k, v] of this.#serviceTokens) if (v.expired()) this.#serviceTokens.delete(k);
+    }
+    this.#serviceTokens.set(key, tokens);
+    return tokens;
+  }
+
+  /**
+   * Verifies a token another agent sent to this one: `verifyAccessToken` with the audience fixed
+   * to this client's own client_id, which is what makes a token minted for one agent useless at
+   * the next. Read who is calling with `agentActors(payload)`.
+   */
+  async verifyAgentToken(token, { scopes = [], arkClaims = [], requireTypeHeader = true } = {}) {
+    return this.verifyAccessToken(token, { audience: this.#config.clientId, scopes, arkClaims, requireTypeHeader });
+  }
+
+  /**
+   * The security section of this agent's A2A Agent Card, as the provider writes it:
+   * `securitySchemes` and `securityRequirements` (A2A 1.0), or with `spec: '0.3'` the
+   * `securitySchemes` and `security` of A2A 0.3. Merge it into the card you publish at
+   * `/.well-known/agent-card.json`.
+   */
+  async agentCardSecurity({ spec } = {}) {
+    const metadata = await this.metadata();
+    const url = `${String(metadata.issuer).replace(/\/+$/, '')}/a2a/agent-card-security${spec ? `?spec=${encodeURIComponent(spec)}` : ''}`;
+    return getJson(url, { timeoutMs: this.#config.timeoutMs, fetch: this.#config.fetch });
   }
 
   // =================================================================

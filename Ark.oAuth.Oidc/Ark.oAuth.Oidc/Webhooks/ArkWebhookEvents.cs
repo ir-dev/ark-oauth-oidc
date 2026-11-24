@@ -43,7 +43,7 @@ namespace Ark.oAuth.Oidc.Webhooks
             new(UserLockedOut, "Sign-in", "A sign-in was blocked by the failed-attempt lockout."),
             new(UserSignInRefused, "Sign-in", "A verified user was refused: account or application deactivated, or no access mapping."),
             new(UserSignedOut, "Sign-in", "A session ended through RP-initiated logout."),
-            new(TokenIssued, "Tokens", "Tokens were issued for an authorization code or client credentials."),
+            new(TokenIssued, "Tokens", "Tokens were issued for an authorization code, client credentials or a token exchange (agent-to-agent)."),
             new(TokenRevoked, "Tokens", "A client revoked a token."),
             new(DeviceApproved, "Tokens", "A user approved a device authorization request."),
             new(UserUpdated, "Users", "A user was created or changed in the console or the management API."),

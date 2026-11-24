@@ -818,7 +818,7 @@ api "$ARK/api/oauth/v1/webhooks/delete" -d "{\"id\": \"$WH\", \"purge\": true}"<
           <tr><td><code>user.locked_out</code></td><td>the failed-attempt lockout blocked a sign-in</td><td>the application's</td></tr>
           <tr><td><code>user.signin_refused</code></td><td>a verified user was refused: user or application deactivated, no access mapping</td><td>the application's</td></tr>
           <tr><td><code>user.signed_out</code></td><td>a session ended through RP-initiated logout (one event per session)</td><td>the session's</td></tr>
-          <tr><td><code>token.issued</code> · <code>token.revoked</code></td><td>tokens issued for an authorization code or client credentials; a client revoked a token</td><td>the application's</td></tr>
+          <tr><td><code>token.issued</code> · <code>token.revoked</code></td><td>tokens issued for an authorization code, client credentials or a token exchange (agent-to-agent); a client revoked a token</td><td>the application's</td></tr>
           <tr><td><code>device.approved</code></td><td>a user approved a device authorization</td><td>the application's</td></tr>
           <tr><td><code>client.updated</code> · <code>client.deleted</code> · <code>client.registered</code></td><td>an application changed in the console or API; dynamic client registration</td><td>the application's</td></tr>
           <tr><td><code>client.secret_reset</code></td><td>a client secret was regenerated (the secret is never sent)</td><td>the application's</td></tr>

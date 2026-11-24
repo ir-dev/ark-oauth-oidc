@@ -95,6 +95,9 @@ not seeded (tenant id must match; no key/client/account created).
 | `EnableDynamicRegistration` | `false` | RFC 7591 `/register`. Off — it creates clients. |
 | `RequireRegistrationAccessToken` | `true` | Require an initial access token on `/register`. |
 | `EnableDeviceFlow` | `true` | RFC 8628. |
+| `EnableA2A` | `true` | Agent-to-agent tokens: `client_credentials` + `audience`, and token exchange (RFC 8693). Inert until a client lists a caller in `a2a_callers`. `false` = the token endpoint as before the feature. See [A2A.md](A2A.md). |
+| `A2ATokenLifetimeSeconds` | `300` | Cap on an A2A token's life; the caller's `access_token_lifetime_seconds` applies when shorter, and a delegated token never outlives its subject token. |
+| `A2AMaxDelegationDepth` | `4` | Most agents in one `act` chain. |
 | `EnablePushedAuthorizationRequests` | `true` | RFC 9126 `/par`. |
 | `RequirePushedAuthorizationRequests` | `false` | Refuse plain `/authorize` not via PAR. |
 | `DeviceCodeLifetimeSeconds` | `600` | |
@@ -154,11 +157,13 @@ Built by `Protocol.ArkOidcEndpoints`. All advertised in discovery.
 | Device authorization | `/oauth2/device_authorization` (RFC 8628) · verification `/oauth2/device` |
 | Pushed authorization request | `/oauth2/par` (RFC 9126) |
 | Dynamic registration | `/oauth2/register` (RFC 7591/7592; only if enabled) |
+| Agent Card security (A2A) | `/a2a/agent-card-security` — `securitySchemes` + `securityRequirements` (A2A 1.0), `?spec=0.3` for `securitySchemes` + `security`; public, 404 when `EnableA2A` is off |
 | Client setup page | `/oauth2/integrate/{client_id}` |
 
 **Discovery advertises** (verified in `OidcDiscoveryController`):
 `response_types_supported: [code]`; `grant_types_supported: authorization_code, refresh_token,
-client_credentials` (+ `urn:ietf:params:oauth:grant-type:device_code` if device flow on);
+client_credentials` (+ `urn:ietf:params:oauth:grant-type:device_code` if device flow on,
++ `urn:ietf:params:oauth:grant-type:token-exchange` if A2A on);
 `code_challenge_methods_supported: [S256]`; `id_token_signing_alg_values_supported: [RS256]`;
 `subject_types_supported: [public]`;
 `token_endpoint_auth_methods_supported: client_secret_basic, client_secret_post, private_key_jwt, none`;

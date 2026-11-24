@@ -183,7 +183,8 @@ namespace Ark.oAuth.Oidc.Protocol
             && a.redirect_uris_ == b.redirect_uris_ && a.redirect_url == b.redirect_url
             && a.post_logout_redirect_uris_ == b.post_logout_redirect_uris_ && a.logout_url == b.logout_url
             && a.scopes_ == b.scopes_ && a.grant_types_ == b.grant_types_
-            && a.require_pkce == b.require_pkce && a.require_par == b.require_par && a.jwks_uri == b.jwks_uri;
+            && a.require_pkce == b.require_pkce && a.require_par == b.require_par && a.jwks_uri == b.jwks_uri
+            && a.a2a_callers_ == b.a2a_callers_;
 
         /// <summary>The scope catalogue. Shared: do not add to or reorder the list.</summary>
         public static async Task<IReadOnlyList<ArkScope>> ScopesAsync(ArkDataContext ctx) =>

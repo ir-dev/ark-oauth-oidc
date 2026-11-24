@@ -31,6 +31,7 @@ pip install ark-oauth-client
 - [Configuration](#configuration)
 - [The Flask integration](#the-flask-integration)
 - [Protecting an API](#protecting-an-api)
+- [Agent-to-agent (A2A)](#agent-to-agent-a2a)
 - [Account switching on a shared browser](#account-switching-on-a-shared-browser)
 - [Sessions](#sessions)
 - [Using the client directly](#using-the-client-directly)
@@ -241,6 +242,42 @@ def reports():
 
 Verification is local, against the cached JWKS, so a request costs no round trip to the identity
 server. `optional=True` lets anonymous requests through with `g.ark.is_authenticated == False`.
+
+---
+
+## Agent-to-agent (A2A)
+
+When this application is an agent that calls other agents, or is called by them. An agent is an
+ordinary confidential client; the agent being called lists its callers on its client record in the
+provider's console, and a token is addressed to that one agent (`aud` is its client_id).
+
+```python
+from ark_oauth_client import ArkOAuthClient, agent_actors
+from ark_oauth_client.flask import add_ark_agent_api, current_ark
+
+client = ArkOAuthClient(authority="https://idp.example.com/my_idp",
+                        client_id="agent-a", client_secret=SECRET)
+
+# calling another agent
+as_itself = client.agent_token("agent-b").access_token                    # sub = agent-a
+for_user = client.agent_token("agent-b", subject_token=user_token).access_token  # sub = the user, act = agent-a
+on_behalf = current_ark.agent_token("agent-b")       # in a signed-in Flask app: for the signed-in user
+
+# being called — accepts only tokens addressed to this agent's client_id
+agent = add_ark_agent_api(app, "/a2a", authority="https://idp.example.com/my_idp",
+                          client_id="agent-b", client_secret=SECRET)
+
+@app.post("/a2a/tasks")
+@agent.require(claims=["orders.read"])
+def tasks():
+    return {"sub": current_ark.sub, "actors": current_ark.actors}   # newest first; [] when the caller acts as itself
+```
+
+Tokens are cached until shortly before they expire, per target and per user. The provider answers
+`invalid_target` (an `ArkOAuthError`) until the target lists this client. Without Flask,
+`client.verify_agent_token(token)` does the same check and `agent_actors(payload)` reads the chain;
+`client.agent_card_security()` returns the security section for an A2A Agent Card. The full guide —
+setup, token contents, every refusal — is [A2A.md](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md).
 
 ---
 

@@ -794,6 +794,7 @@ namespace Ark.oAuth.Oidc
             services.AddScoped<Protocol.ArkClaimsService>();
             services.AddScoped<Protocol.ArkTokenService>();
             services.AddScoped<Protocol.ArkGrantStore>();
+            services.AddScoped<Protocol.ArkAgentTokens>();
             services.AddScoped<Protocol.ArkClientAuthenticator>();
             services.AddScoped<Protocol.ArkBackChannelLogout>();
 

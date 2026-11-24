@@ -1,5 +1,24 @@
 import { decodeJwt } from './jwt.js';
 
+/** RFC 8693 token exchange: how an agent obtains a token on behalf of a user (A2A). */
+export const TOKEN_EXCHANGE_GRANT = 'urn:ietf:params:oauth:grant-type:token-exchange';
+export const ACCESS_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:access_token';
+
+/**
+ * The agents acting for a token's subject, newest first, read from its `act` claim (RFC 8693
+ * §4.1). The first is the agent that called you; each later one handed the user on to it. Empty
+ * when the caller acts as itself — its client_id is then the token's `sub`.
+ */
+export function agentActors(payload) {
+  const chain = [];
+  let current = payload?.act;
+  while (current && typeof current === 'object' && chain.length < 32) {
+    if (typeof current.sub === 'string' && current.sub) chain.push(current.sub);
+    current = current.act;
+  }
+  return chain;
+}
+
 /**
  * One token endpoint response, with the parts an application actually asks for.
  *

@@ -82,7 +82,7 @@ from .session import (
     sign_session_id,
     unsign_session_id,
 )
-from .tokens import TokenSet
+from .tokens import ACCESS_TOKEN_TYPE, TOKEN_EXCHANGE_GRANT, TokenSet, agent_actors
 
 __version__ = "2.4.1"
 
@@ -104,6 +104,10 @@ __all__ = [
     "AuthorizationRequest",
     "create_ark_client",
     "TokenSet",
+    # agent-to-agent (A2A)
+    "agent_actors",
+    "TOKEN_EXCHANGE_GRANT",
+    "ACCESS_TOKEN_TYPE",
     # configuration
     "ArkConfig",
     "ArkAuthConfig",

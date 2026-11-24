@@ -14,7 +14,27 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 from .jwt import decode_jwt
 
-__all__ = ["TokenSet"]
+__all__ = ["TokenSet", "agent_actors", "TOKEN_EXCHANGE_GRANT", "ACCESS_TOKEN_TYPE"]
+
+#: RFC 8693 token exchange: how an agent obtains a token on behalf of a user (A2A).
+TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"
+ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
+
+
+def agent_actors(payload: Optional[Mapping[str, Any]]) -> List[str]:
+    """
+    The agents acting for a token's subject, newest first, read from its ``act`` claim (RFC 8693
+    §4.1). The first is the agent that called you; each later one handed the user on to it. Empty
+    when the caller acts as itself — its client_id is then the token's ``sub``.
+    """
+    chain: List[str] = []
+    current = (payload or {}).get("act")
+    while isinstance(current, Mapping) and len(chain) < 32:
+        sub = current.get("sub")
+        if isinstance(sub, str) and sub:
+            chain.append(sub)
+        current = current.get("act")
+    return chain
 
 
 def _as_list(value: Any) -> List[str]:

@@ -25,7 +25,7 @@ from urllib.parse import parse_qs, urlparse
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from ark_oauth_client.crypto import base64url_encode, left_half_hash, sha256
-from ark_oauth_client.jwt import sign_jwt
+from ark_oauth_client.jwt import decode_jwt, sign_jwt
 
 
 def _jwk_for(private_key: rsa.RSAPrivateKey, kid: str) -> Dict[str, Any]:
@@ -67,6 +67,11 @@ class StubIdp:
         self.ark_claims: List[str] = ["billing.admin", "reports.read"]
         #: Shortened by tests that need to drive the silent-refresh path.
         self.access_token_lifetime = 3600
+        #: A2A: target client_id -> {caller client_id: {"claims": [...], "delegate_users": bool}}.
+        #: Empty, as on a real server until an operator lists a caller, so every request is refused.
+        self.agents: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        #: What a user holds at each agent, for tokens issued on their behalf.
+        self.user_claims_at: Dict[str, List[str]] = {}
         self.clients: Dict[str, Any] = clients or {
             "web-app": {
                 "secret": None,
@@ -199,6 +204,8 @@ class StubIdp:
                 )
             if path.startswith(f"{prefix}/oauth2/register"):
                 return self._register(handler, method, path, body)
+            if path == f"{prefix}/a2a/agent-card-security":
+                return self._json(handler, 200, self._agent_card_security(query.get("spec")))
         except _OAuthFailure as failure:
             return self._json(
                 handler,
@@ -228,6 +235,7 @@ class StubIdp:
                 "refresh_token",
                 "client_credentials",
                 "urn:ietf:params:oauth:grant-type:device_code",
+                "urn:ietf:params:oauth:grant-type:token-exchange",
             ],
             "response_types_supported": ["code"],
             "response_modes_supported": ["query", "form_post"],
@@ -315,9 +323,22 @@ class StubIdp:
             )
 
         if grant == "client_credentials":
+            audience = form.get("audience") or form.get("resource")
+            if audience:
+                entry = self._agent_entry(audience, client_id, for_user=False)
+                return self._json(
+                    handler,
+                    200,
+                    self._issue_agent_token(
+                        client_id, client_id, audience, form.get("scope", ""), entry["claims"], None
+                    ),
+                )
             return self._json(
                 handler, 200, self._issue(client_id, form.get("scope", ""), with_id_token=False)
             )
+
+        if grant == "urn:ietf:params:oauth:grant-type:token-exchange":
+            return self._json(handler, 200, self._token_exchange(client_id, form))
 
         if grant == "urn:ietf:params:oauth:grant-type:device_code":
             record = self.device_codes.get(form.get("device_code", ""))
@@ -328,6 +349,121 @@ class StubIdp:
             return self._json(handler, 200, self._issue(client_id, record["scope"]))
 
         raise _OAuthFailure("unsupported_grant_type", str(grant), 400)
+
+    # -- agent-to-agent (A2A) --------------------------------------------
+
+    def _agent_entry(self, audience: str, caller: str, *, for_user: bool) -> Dict[str, Any]:
+        entry = self.agents.get(audience, {}).get(caller)
+        if entry is None:
+            raise _OAuthFailure(
+                "invalid_target", f"'{audience}' is not an agent this client may call.", 400
+            )
+        if for_user and not entry.get("delegate_users"):
+            raise _OAuthFailure(
+                "invalid_target",
+                f"this client may call '{audience}' as itself, but not on behalf of a user.",
+                400,
+            )
+        return {"claims": list(entry.get("claims") or [])}
+
+    def _token_exchange(self, actor: str, form: Dict[str, Any]) -> Dict[str, Any]:
+        access_token_type = "urn:ietf:params:oauth:token-type:access_token"
+        if form.get("subject_token_type") != access_token_type:
+            raise _OAuthFailure("invalid_request", "subject_token_type must be access_token", 400)
+        audience = form.get("audience") or form.get("resource")
+        if not audience:
+            raise _OAuthFailure("invalid_request", "audience is required", 400)
+        try:
+            subject = decode_jwt(form.get("subject_token", "")).payload
+        except Exception:
+            raise _OAuthFailure("invalid_grant", "subject_token is not a live access token", 400)
+
+        # Addressed to the actor, or issued to it in the first place. (This stub puts the
+        # client_id in aud on every token, so both read the same claim pair.)
+        addressed = subject.get("aud") == actor
+        issued = subject.get("client_id") == actor and "act" not in subject
+        if not addressed and not issued:
+            raise _OAuthFailure(
+                "invalid_grant", "subject_token was neither issued to this client nor addressed to it.", 400
+            )
+        if "act" not in subject and subject.get("sub") == subject.get("client_id"):
+            raise _OAuthFailure("invalid_grant", "subject_token carries no user", 400)
+
+        self._agent_entry(audience, actor, for_user=True)
+        if audience not in self.user_claims_at:
+            raise _OAuthFailure("invalid_target", f"the user has no access to '{audience}'.", 400)
+
+        actor_claim: Dict[str, Any] = {"sub": actor}
+        if isinstance(subject.get("act"), dict):
+            actor_claim["act"] = subject["act"]
+        scope = form.get("scope") or " ".join(
+            s for s in str(subject.get("scope") or "").split(" ") if s and s not in ("openid", "offline_access")
+        )
+        response = self._issue_agent_token(
+            actor, subject["sub"], audience, scope, self.user_claims_at[audience], actor_claim,
+            not_after=subject.get("exp"),
+        )
+        response["issued_token_type"] = access_token_type
+        return response
+
+    def _issue_agent_token(
+        self,
+        client_id: str,
+        sub: str,
+        audience: str,
+        scope: str,
+        ark_claims: List[str],
+        act: Optional[Dict[str, Any]],
+        *,
+        not_after: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        now = int(time.time())
+        key = self.active_key
+        lifetime = min(300, self.access_token_lifetime)
+        if not_after is not None:
+            lifetime = max(1, min(lifetime, int(not_after) - now))
+        payload: Dict[str, Any] = {
+            "iss": self.issuer,
+            "sub": sub,
+            "aud": audience,
+            "client_id": client_id,
+            "iat": now,
+            "nbf": now,
+            "exp": now + lifetime,
+            "jti": uuid.uuid4().hex,
+        }
+        if scope:
+            payload["scope"] = scope
+        if ark_claims:
+            payload["ark_claims"] = list(ark_claims)
+        if act:
+            payload["act"] = act
+        response: Dict[str, Any] = {
+            "access_token": sign_jwt(payload, key=key["private_key"], kid=key["kid"], typ="at+jwt"),
+            "token_type": "Bearer",
+            "expires_in": lifetime,
+        }
+        if scope:
+            response["scope"] = scope
+        return response
+
+    def _agent_card_security(self, spec: Optional[str]) -> Dict[str, Any]:
+        base = f"{self.base_url}/{self.tenant}"
+        flows = {"clientCredentials": {"tokenUrl": f"{base}/oauth2/token", "scopes": {}}}
+        metadata_url = f"{base}/.well-known/oauth-authorization-server"
+        if spec == "0.3":
+            return {
+                "securitySchemes": {
+                    "ark": {"type": "oauth2", "flows": flows, "oauth2MetadataUrl": metadata_url}
+                },
+                "security": [{"ark": []}],
+            }
+        return {
+            "securitySchemes": {
+                "ark": {"oauth2SecurityScheme": {"flows": flows, "oauth2MetadataUrl": metadata_url}}
+            },
+            "securityRequirements": [{"schemes": {"ark": {"list": []}}}],
+        }
 
     def _userinfo(self, handler: BaseHTTPRequestHandler) -> None:
         header = handler.headers.get("Authorization") or ""

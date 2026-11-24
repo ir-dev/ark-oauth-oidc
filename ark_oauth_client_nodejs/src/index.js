@@ -31,7 +31,7 @@ export {
   localOrDefault
 } from './access.js';
 export { renderAccessDeniedPage } from './denied-page.js';
-export { TokenSet } from './tokens.js';
+export { TokenSet, agentActors, TOKEN_EXCHANGE_GRANT, ACCESS_TOKEN_TYPE } from './tokens.js';
 export { MetadataResolver, discoveryUrls } from './discovery.js';
 export { JwksCache } from './jwks.js';
 export { MemorySessionStore, createSessionId, parseCookies, serializeCookie, signSessionId, unsignSessionId } from './session.js';

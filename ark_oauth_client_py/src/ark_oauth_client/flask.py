@@ -74,7 +74,7 @@ from .session import (
     sign_session_id,
     unsign_session_id,
 )
-from .tokens import TokenSet
+from .tokens import TokenSet, agent_actors
 
 # Silent unless the application configures logging; the best-effort calls below report here
 # instead of disappearing.
@@ -87,6 +87,7 @@ __all__ = [
     "add_ark_oidc_api",
     "ark_flask",
     "ark_bearer",
+    "add_ark_agent_api",
     "use_ark_account_endpoints",
     "current_ark",
     "get_ark_access_token",
@@ -156,6 +157,18 @@ class ArkRequest:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         return headers
+
+    def agent_token(self, audience: str, *, scopes: Sequence[str] = ()) -> Optional[str]:
+        """
+        An access token for calling the agent ``audience`` (its client_id) on behalf of the
+        signed-in user — see :meth:`ArkOAuthClient.agent_token`. ``None`` when nobody is signed in.
+        """
+        subject_token = self.access_token()
+        if not subject_token:
+            return None
+        return self.client.agent_token(
+            audience, subject_token=subject_token, scopes=scopes
+        ).access_token
 
     def has_claim(self, *wanted: str) -> bool:
         held = set(self.claims)
@@ -938,12 +951,14 @@ class ArkBearer:
         audience: Optional[str] = None,
         optional: bool = False,
         require_type_header: bool = True,
+        agent: bool = False,
         **client_options: Any,
     ) -> None:
         self.client = client or ArkOAuthClient(**client_options)
         self.scopes = list(scopes)
         self.claims = list(claims)
-        self.audience = audience
+        # An agent (A2A) accepts only tokens addressed to it: the audience is its own client_id.
+        self.audience = audience or (self.client.config.client_id if agent else None)
         self.optional = optional
         self.require_type_header = require_type_header
 
@@ -1035,6 +1050,8 @@ class _BearerIdentity:
         self.scopes = [s for s in str(payload.get("scope") or "").split(" ") if s]
         self.claims = list(raw) if isinstance(raw, (list, tuple)) else ([raw] if raw else [])
         self.user = dict(payload)
+        #: Agents acting for ``sub`` (A2A), newest first; empty when the caller acts as itself.
+        self.actors = agent_actors(payload)
 
     def has_claim(self, *wanted: str) -> bool:
         held = set(self.claims)
@@ -1055,6 +1072,7 @@ class _AnonymousBearer:
         self.claims: List[str] = []
         self.scopes: List[str] = []
         self.user = None
+        self.actors: List[str] = []
 
     def has_claim(self, *wanted: str) -> bool:
         return False
@@ -1113,6 +1131,15 @@ def add_ark_oidc_api(app: Any = None, prefix: str = "", **options: Any) -> ArkBe
     if app is not None:
         bearer.protect(app, prefix)
     return bearer
+
+
+def add_ark_agent_api(app: Any = None, prefix: str = "", **options: Any) -> ArkBearer:
+    """
+    Protects an agent's endpoints (A2A): :func:`add_ark_oidc_api` that accepts only tokens
+    addressed to this agent — ``aud`` is its own client_id — so a token another agent was given for
+    somebody else is refused here. ``current_ark.actors`` names the agents acting for the caller.
+    """
+    return add_ark_oidc_api(app, prefix, agent=True, **options)
 
 
 def ark_bearer(**options: Any) -> ArkBearer:

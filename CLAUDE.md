@@ -119,7 +119,7 @@ These apply in every language and are the source of most "it just says the passw
   `__version__` and the browser client's `src/version.js`, which hold the version as literals (the
   Python one has drifted from `pyproject.toml` more than once). Bump locally with
   `scripts/version.sh set X.Y.Z`, never by hand. Plain `X.Y.Z` only: npm rejects a fourth number.
-* **Tests:** `pytest` in `ark_oauth_client_py` (129 tests), `npm test` in
+* **Tests:** `pytest` in `ark_oauth_client_py` (142 tests), `npm test` in
   `ark_oauth_client_nodejs`, and `npm ci && npm test && npm run typecheck` in `ark_oauth_client_js`.
   All run against a stub IdP (`tests/stub_idp.py`, `test/stub-idp.js`)
   that mirrors the real server's wire behaviour — prefer it to a live server when changing a client.
@@ -130,6 +130,15 @@ These apply in every language and are the source of most "it just says the passw
   `ArkDataContext`, and the IdP raises events only through `ArkWebhookEvents.Raise(HttpContext, …)` —
   one call beside an existing audit line, which must never throw, block or touch the database.
   A host without the call must see no tables, no link and 404s.
+* **Agent-to-agent (A2A) is built in and inert until a client lists a caller** (spec in
+  `Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md`, logic in `Protocol/ArkAgentTokens.cs`). An agent is an
+  ordinary confidential client, and the *target* names who may call it in `ArkClient.a2a_callers`.
+  Keep these true: a token is addressed to one client (`aud` = its client_id, never the tenant
+  audience as well); a delegated token carries the *user's* claims at the target and never outlives
+  its subject token; a subject token is exchangeable only by the client it was issued to or
+  addressed to; and a save that does not carry `a2a_callers_` leaves the list alone. The three
+  server-side clients each ship `agent_token` / `verify_agent_token` / `agent_actors` under their
+  own spelling; the browser client has none, because a public client cannot be an agent.
 * **Load test:** `scripts/loadtest` (seed + generator) against a scratch host and database, never a
   real one. Results are published as a dated page under `site/performance/`. On a laptop, wrap a
   long run in `caffeinate -dimsu`: on battery the machine sleeps after a minute idle and the run

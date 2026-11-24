@@ -3,6 +3,9 @@ import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { base64UrlEncode, leftHalfHash, sha256 } from '../src/crypto.js';
 import { signJwt } from '../src/jwt.js';
 
+const TOKEN_EXCHANGE = 'urn:ietf:params:oauth:grant-type:token-exchange';
+const ACCESS_TOKEN_TYPE = 'urn:ietf:params:oauth:token-type:access_token';
+
 /**
  * A stand-in for the Ark identity server, close enough on the wire to test a client against.
  *
@@ -33,15 +36,22 @@ export class StubIdp {
     /** Every authorization request's parameters, in order — where a test reads `prompt`. */
     this.authorizeRequests = [];
     this.requirePar = false;
+    /**
+     * A2A: target client_id -> { caller client_id: { claims, delegateUsers } }. Empty, as on a real
+     * server until an operator lists a caller, so every agent-to-agent request is refused.
+     */
+    this.agents = {};
+    /** What a user holds at each agent, for tokens issued on their behalf. */
+    this.userClaimsAt = {};
     this.clients = clients ?? {
       'web-app': { secret: null, method: 'none', redirectUris: ['http://127.0.0.1:0/signin-oidc'], grants: ['authorization_code', 'refresh_token'] },
       'confidential-app': {
         secret: 'top-secret',
         method: 'client_secret_basic',
         redirectUris: [],
-        grants: ['authorization_code', 'refresh_token', 'client_credentials', 'urn:ietf:params:oauth:grant-type:device_code']
+        grants: ['authorization_code', 'refresh_token', 'client_credentials', 'urn:ietf:params:oauth:grant-type:device_code', TOKEN_EXCHANGE]
       },
-      'post-app': { secret: 'post-secret', method: 'client_secret_post', redirectUris: [], grants: ['client_credentials'] }
+      'post-app': { secret: 'post-secret', method: 'client_secret_post', redirectUris: [], grants: ['client_credentials', TOKEN_EXCHANGE] }
     };
   }
 
@@ -153,6 +163,87 @@ export class StubIdp {
     );
   }
 
+  // --- agent-to-agent (A2A), mirroring the server's ArkAgentTokens ---
+
+  /** The caller's entry in the target's list, or an invalid_target failure to send. */
+  #agentEntry(audience, caller, forUser) {
+    const entry = this.agents[audience]?.[caller];
+    if (!entry) return { failure: `'${audience}' is not an agent this client may call.` };
+    if (forUser && !entry.delegateUsers) {
+      return { failure: `this client may call '${audience}' as itself, but not on behalf of a user.` };
+    }
+    return { claims: entry.claims ?? [] };
+  }
+
+  #agentToken(res, { clientId, subject, audience, scopes, arkClaims, act, sessionId, notAfter, exchanged }) {
+    const now = Math.floor(Date.now() / 1000);
+    const lifetime = Math.max(1, Math.min(300, notAfter ? notAfter - now : 300));
+    const accessToken = signJwt(
+      {
+        iss: this.issuer,
+        aud: audience,
+        sub: subject,
+        client_id: clientId,
+        jti: randomUUID(),
+        iat: now,
+        nbf: now,
+        exp: now + lifetime,
+        ...(scopes.length ? { scope: scopes.join(' ') } : {}),
+        ...(sessionId ? { sid: sessionId } : {}),
+        ...(arkClaims.length ? { ark_claims: arkClaims } : {}),
+        ...(act ? { act } : {})
+      },
+      { key: this.activeKey.privateKey, kid: this.activeKey.kid, typ: 'at+jwt' }
+    );
+    const body = { access_token: accessToken, token_type: 'Bearer', expires_in: lifetime };
+    if (exchanged) body.issued_token_type = ACCESS_TOKEN_TYPE;
+    if (scopes.length) body.scope = scopes.join(' ');
+    this.#json(res, 200, body);
+  }
+
+  #tokenExchange(res, auth, form) {
+    if (auth.method === 'none') return this.#fail(res, 400, 'invalid_client', 'token exchange requires client authentication.');
+    if (!form.subject_token) return this.#fail(res, 400, 'invalid_request', 'subject_token is required.');
+    if (form.subject_token_type !== ACCESS_TOKEN_TYPE) return this.#fail(res, 400, 'invalid_request', `subject_token_type must be ${ACCESS_TOKEN_TYPE}.`);
+    const audience = form.audience ?? form.resource;
+    if (!audience) return this.#fail(res, 400, 'invalid_request', 'audience is required.');
+
+    let subject;
+    try {
+      subject = JSON.parse(Buffer.from(form.subject_token.split('.')[1], 'base64url').toString('utf8'));
+    } catch {
+      return this.#fail(res, 400, 'invalid_grant', 'subject_token is not a live access token from this issuer.');
+    }
+    const actor = auth.clientId;
+    const addressed = subject.aud === actor;
+    const issued = subject.client_id === actor && subject.aud === `${this.tenant}_api`;
+    if (!addressed && !issued) return this.#fail(res, 400, 'invalid_grant', 'subject_token was neither issued to this client nor addressed to it.');
+    if (!subject.act && subject.sub === subject.client_id) return this.#fail(res, 400, 'invalid_grant', 'subject_token carries no user: it is a client\'s own token.');
+    if (subject.sid && !this.sessions.has(subject.sid)) return this.#fail(res, 400, 'invalid_grant', 'the session behind subject_token has ended.');
+
+    const entry = this.#agentEntry(audience, actor, true);
+    if (entry.failure) return this.#fail(res, 400, 'invalid_target', entry.failure);
+    if (!this.userClaimsAt[audience]) return this.#fail(res, 400, 'invalid_target', `the user subject_token belongs to has no access to '${audience}'.`);
+
+    let scopes = String(subject.scope ?? '').split(' ').filter((s) => s && s !== 'openid' && s !== 'offline_access');
+    const wanted = (form.scope ?? '').split(' ').filter(Boolean);
+    if (wanted.length) {
+      if (wanted.some((s) => !scopes.includes(s))) return this.#fail(res, 400, 'invalid_scope', 'scope cannot be widened on exchange.');
+      scopes = wanted;
+    }
+    return this.#agentToken(res, {
+      clientId: actor,
+      subject: subject.sub,
+      audience,
+      scopes,
+      arkClaims: this.userClaimsAt[audience],
+      act: { sub: actor, ...(subject.act ? { act: subject.act } : {}) },
+      sessionId: subject.sid,
+      notAfter: subject.exp,
+      exchanged: true
+    });
+  }
+
   #idToken({ clientId, subject, nonce, sessionId, accessToken, code, authTime }) {
     const now = Math.floor(Date.now() / 1000);
     return signJwt(
@@ -222,7 +313,7 @@ export class StubIdp {
         scopes_supported: ['openid', 'profile', 'email', 'address', 'phone', 'offline_access', 'client.register'],
         response_types_supported: ['code'],
         response_modes_supported: ['query', 'fragment', 'form_post'],
-        grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials', 'urn:ietf:params:oauth:grant-type:device_code'],
+        grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials', 'urn:ietf:params:oauth:grant-type:device_code', TOKEN_EXCHANGE],
         subject_types_supported: ['public'],
         id_token_signing_alg_values_supported: ['RS256'],
         token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'private_key_jwt', 'none'],
@@ -343,8 +434,17 @@ export class StubIdp {
       if (grant === 'client_credentials') {
         if (auth.method === 'none') return this.#fail(res, 400, 'invalid_client', 'the client_credentials grant requires client authentication.');
         const scopes = (form.scope ?? '').split(' ').filter((s) => s && s !== 'openid' && s !== 'offline_access');
+        // A2A: an audience other than the tenant's own asks for a token addressed to one agent.
+        const audience = form.audience ?? form.resource;
+        if (audience && audience !== `${this.tenant}_api`) {
+          const entry = this.#agentEntry(audience, auth.clientId, false);
+          if (entry.failure) return this.#fail(res, 400, 'invalid_target', entry.failure);
+          return this.#agentToken(res, { clientId: auth.clientId, subject: auth.clientId, audience, scopes, arkClaims: entry.claims });
+        }
         return this.#issue(res, { clientId: auth.clientId, subject: auth.clientId, scopes });
       }
+
+      if (grant === TOKEN_EXCHANGE) return this.#tokenExchange(res, auth, form);
 
       if (grant === 'urn:ietf:params:oauth:grant-type:device_code') {
         const entry = this.deviceCodes.get(form.device_code);
@@ -442,6 +542,21 @@ export class StubIdp {
       }
       res.writeHead(200, { 'Content-Type': 'text/html' });
       return res.end('<p>You have been signed out.</p>');
+    }
+
+    if (path === '/a2a/agent-card-security') {
+      const flows = { clientCredentials: { tokenUrl: `${this.issuer}/oauth2/token`, scopes: {} } };
+      const oauth2MetadataUrl = `${this.issuer}/.well-known/oauth-authorization-server`;
+      if (url.searchParams.get('spec') === '0.3') {
+        return this.#json(res, 200, {
+          securitySchemes: { ark: { type: 'oauth2', flows, oauth2MetadataUrl } },
+          security: [{ ark: [] }]
+        });
+      }
+      return this.#json(res, 200, {
+        securitySchemes: { ark: { oauth2SecurityScheme: { flows, oauth2MetadataUrl } } },
+        securityRequirements: [{ schemes: { ark: { list: [] } } }]
+      });
     }
 
     if (path === '/oauth2/register' && req.method === 'POST') {

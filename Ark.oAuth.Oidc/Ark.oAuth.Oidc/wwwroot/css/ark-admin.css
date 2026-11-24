@@ -225,6 +225,19 @@ label { display: block; }
 .ark-check input { width: auto; margin: 0; }
 .ark-check label { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--ark-fg); margin: 0; }
 
+/* Agent-to-agent callers in the client drawer: one row per calling client. */
+.ark-a2a-note { font-size: calc(12px * var(--ark-text-scale, 1)); color: var(--ark-fg-muted); margin: 0 0 10px; }
+#cl-a2a-add + .ark-a2a-note { margin: 10px 0 0; }
+.ark-a2a-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ark-a2a-row select { flex: 1 1 150px; width: auto; min-width: 0; }
+.ark-a2a-row .ark-a2a-claims { flex: 2 1 190px; width: auto; min-width: 0; }
+.ark-a2a-delegate {
+    display: inline-flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap;
+    font-size: calc(13px * var(--ark-text-scale, 1)); font-weight: 500;
+    text-transform: none; letter-spacing: 0; color: var(--ark-fg);
+}
+.ark-a2a-delegate input { width: auto; margin: 0; }
+
 fieldset {
     border: 1px solid var(--ark-border);
     border-radius: var(--ark-radius-sm);

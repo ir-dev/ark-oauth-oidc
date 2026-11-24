@@ -163,6 +163,20 @@ namespace Ark.oAuth
         /// </summary>
         public bool backchannel_logout_session_required { get; set; } = true;
 
+        /// <summary>
+        /// Agent-to-agent (A2A): the clients allowed to obtain a token addressed to this one, as a
+        /// JSON list of <see cref="ArkAgentCaller"/>. Empty, which is what every client starts
+        /// with, means nobody may: a token whose audience is this client is issued only to a
+        /// caller named here. See A2A.md.
+        /// </summary>
+        public string? a2a_callers_ { get; set; }
+        [NotMapped]
+        public List<ArkAgentCaller> a2a_callers
+        {
+            get => ArkAgentCaller.Read(a2a_callers_);
+            set => a2a_callers_ = ArkAgentCaller.Write(value);
+        }
+
         /// <summary>True when this client has somewhere to receive a logout token.</summary>
         [NotMapped]
         public bool SupportsBackChannelLogout => !string.IsNullOrWhiteSpace(backchannel_logout_uri);
@@ -210,6 +224,45 @@ namespace Ark.oAuth
             string.Equals(token_endpoint_auth_method, "none", StringComparison.OrdinalIgnoreCase) ||
             (string.IsNullOrEmpty(client_secret_hash)
              && !string.Equals(token_endpoint_auth_method, "private_key_jwt", StringComparison.OrdinalIgnoreCase));
+    }
+    /// <summary>
+    /// One entry of <see cref="ArkClient.a2a_callers"/>: a client that may call the agent the list
+    /// belongs to, what it holds there, and whether it may bring a user along.
+    /// </summary>
+    public class ArkAgentCaller
+    {
+        /// <summary>The calling agent's client_id, in the same tenant.</summary>
+        public string client_id { get; set; } = "";
+        /// <summary>
+        /// The authorization claims the caller holds at this agent when it calls as itself; they
+        /// ride in the token as <c>ark_claims</c>, exactly as a user's do.
+        /// </summary>
+        public List<string> claims { get; set; } = new();
+        /// <summary>
+        /// Whether the caller may exchange a user's token for one addressed to this agent
+        /// (RFC 8693). The token then carries the user's own claims here, never the caller's.
+        /// </summary>
+        public bool delegate_users { get; set; }
+
+        static readonly System.Text.Json.JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
+
+        internal static List<ArkAgentCaller> Read(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return new List<ArkAgentCaller>();
+            try
+            {
+                return (System.Text.Json.JsonSerializer.Deserialize<List<ArkAgentCaller>>(raw, Json) ?? new())
+                    .Where(c => c != null && !string.IsNullOrWhiteSpace(c.client_id)).ToList();
+            }
+            catch
+            {
+                // An unreadable list grants nothing.
+                return new List<ArkAgentCaller>();
+            }
+        }
+
+        internal static string Write(List<ArkAgentCaller>? values) =>
+            System.Text.Json.JsonSerializer.Serialize(values ?? new List<ArkAgentCaller>());
     }
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     [Index(nameof(email), IsUnique = true)]

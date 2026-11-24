@@ -116,6 +116,9 @@ endpoint the authorization middleware cannot see the `[Authorize]` metadata it i
       "LandingUrl": ""                  // AddArkIdp's sign-in only: where it lands when started at /; empty = the console
     },
     "Oidc": {
+      "EnableA2A": true,                // agent-to-agent tokens; inert until a client lists a caller (A2A.md)
+      "A2ATokenLifetimeSeconds": 300,
+      "A2AMaxDelegationDepth": 4,
       "EnableDeviceFlow": true,
       "EnablePushedAuthorizationRequests": true,
       "RequirePushedAuthorizationRequests": false,
@@ -190,6 +193,8 @@ Your issuer is `{BaseUrl}/{TenantId}`, and discovery lives at
 | Back-Channel Logout 1.0 | Signed `logout_token` POSTed to each client that took part |
 | Issuer Identification (RFC 9207) | `iss` in the authorization response |
 | Native Apps (RFC 8252) | Loopback redirect URIs with variable ports |
+| Token Exchange (RFC 8693) | For agent-to-agent calls on behalf of a user: `act` chain, audience-bound, never outlives the token exchanged |
+| Agent-to-agent (A2A) | Tokens addressed to one agent (`aud` = its client_id), a caller list per agent, the Agent Card security section — see [A2A.md](A2A.md) |
 
 Deliberately **not** supported: the implicit grant, the hybrid flow, and the resource owner password
 credentials grant — all three are removed in OAuth 2.1.
@@ -454,6 +459,30 @@ instances share the work safely.
 Without the line nothing of it runs: no tables, no background work, no link, and its routes answer
 404. Everything — events, payload, signature verification, configuration, the API — is in
 [WEBHOOKS.md](WEBHOOKS.md).
+
+## Agent-to-agent (A2A)
+
+Agents are ordinary confidential clients, and a token for calling one is addressed to it alone: its
+`aud` is that agent's client_id, so it is refused everywhere else. The agent being called decides
+who may call it — open its client in the console, **Agent-to-agent (A2A)** → **Add calling
+client** — and with nothing listed, which is how every client starts, nobody can.
+
+```bash
+# the agent as itself
+curl -s {issuer}/oauth2/token -u agent-a:$SECRET -d grant_type=client_credentials -d audience=agent-b
+
+# on behalf of a signed-in user (RFC 8693): sub stays the user, act records each agent on the way
+curl -s {issuer}/oauth2/token -u agent-a:$SECRET \
+  -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
+  -d subject_token=$USER_TOKEN -d subject_token_type=urn:ietf:params:oauth:token-type:access_token \
+  -d audience=agent-b
+```
+
+A token issued for a user carries that user's own claims at the target, requires that the user has
+access there, ends when their session does, and never outlives the token it was exchanged for.
+`{issuer}/a2a/agent-card-security` serves the security section of an A2A Agent Card. It is on by
+default and inert until a caller is listed; `Oidc:EnableA2A = false` removes it. Setup, the token
+contents, every refusal and the client-library calls are in [A2A.md](A2A.md).
 
 ## Export, import and factory reset
 

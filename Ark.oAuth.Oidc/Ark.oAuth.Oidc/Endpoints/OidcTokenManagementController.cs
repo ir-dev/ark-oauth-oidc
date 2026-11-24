@@ -92,6 +92,15 @@ namespace Ark.oAuth.Oidc.Endpoints
                         body["username"] = id?.FindFirst("sub")?.Value ?? "";
                         return Ok(body);
                     }
+
+                    // An agent-to-agent token is addressed to one client, not to the tenant, so
+                    // the check above never passes it. The agent it is addressed to may ask about
+                    // it, as may the client it was issued to and a configured resource server.
+                    if (!result.IsValid && Options.EnableA2A)
+                    {
+                        var a2a = await IntrospectAgentTokenAsync(token, tenant, ep.Issuer, caller, mayInspectOthers);
+                        if (a2a != null) return Ok(a2a);
+                    }
                 }
 
                 if (hint != "access_token")
@@ -121,6 +130,48 @@ namespace Ark.oAuth.Oidc.Endpoints
 
                 return Ok(inactive);
             }, _da, "introspect");
+        }
+
+        /// <summary>
+        /// The introspection response for an agent-to-agent token, or null when it is not one this
+        /// caller may ask about. Carries <c>act</c> (RFC 8693 §4.1), which is the reason an agent
+        /// would introspect rather than read the claims itself: the answer also says the session
+        /// behind a delegated token is still alive.
+        /// </summary>
+        private async Task<Dictionary<string, object>?> IntrospectAgentTokenAsync(
+            string token, ArkTenant tenant, string issuer, string caller, bool mayInspectOthers)
+        {
+            var result = await _tokens.ValidateAccessTokenAnyAudienceAsync(token, tenant, issuer);
+            if (!result.IsValid || result.SecurityToken is not JsonWebToken jwt) return null;
+
+            using var doc = System.Text.Json.JsonDocument.Parse(
+                Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Decode(jwt.EncodedPayload));
+            var claims = doc.RootElement;
+            string? Text(string name) =>
+                claims.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+
+            var audiences = jwt.Audiences.ToList();
+            var addressedToCaller = audiences.Any(a => string.Equals(a, caller, StringComparison.OrdinalIgnoreCase));
+            var issuedToCaller = string.Equals(Text("client_id"), caller, StringComparison.OrdinalIgnoreCase);
+            if (!addressedToCaller && !issuedToCaller && !mayInspectOthers) return null;
+
+            // Issued on behalf of a user in a session: it is live only while that session is.
+            var sid = Text("sid");
+            if (!string.IsNullOrEmpty(sid) && await _grants.GetSessionAsync(sid) == null) return null;
+
+            var body = new Dictionary<string, object> { ["active"] = true, ["token_type"] = "Bearer" };
+            foreach (var name in new[] { "sub", "scope", "client_id", "iss", "jti", "sid" })
+            {
+                var v = Text(name);
+                if (!string.IsNullOrEmpty(v)) body[name] = v!;
+            }
+            foreach (var name in new[] { "exp", "iat", "nbf" })
+                if (claims.TryGetProperty(name, out var n) && n.TryGetInt64(out var seconds)) body[name] = seconds;
+            if (audiences.Count > 0) body["aud"] = audiences.Count == 1 ? audiences[0] : audiences;
+            body["username"] = Text("sub") ?? "";
+            if (claims.TryGetProperty("ark_claims", out var granted)) body["ark_claims"] = granted.Clone();
+            if (claims.TryGetProperty("act", out var act)) body["act"] = act.Clone();
+            return body;
         }
 
         /// <summary>

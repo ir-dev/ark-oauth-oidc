@@ -291,6 +291,7 @@ as facts to cite, not prose to read.
   - [S13 Migrate from v1](#s13--migrate-from-the-v1-client-or-endpoints)
   - [S14 Go to production](#s14--go-to-production)
   - [S15 Change this repository](#s15--change-this-repository)
+  - [S16 Agent-to-agent (A2A)](#s16--agent-to-agent-a2a)
 - [3. Reference](#3-reference)
 - [4. Context block for a system prompt](#4-context-block-for-a-system-prompt)
 
@@ -389,6 +390,7 @@ machine-to-machine helpers. Their names differ only by language convention (`Req
 | "This app pastes an `rsaPublic` key", "uses `/oauth/{t}/v1/…`" | [S13](#s13--migrate-from-the-v1-client-or-endpoints) | migration |
 | "Make it production ready", "harden", "rotate keys" | [S14](#s14--go-to-production) | IdP + clients |
 | "Fix a bug in / add a feature to one of the libraries in this repo" | [S15](#s15--change-this-repository) | this repo |
+| "My AI agents call each other", "secure A2A", "an agent acts on behalf of a user" | [S16](#s16--agent-to-agent-a2a) | A2A tokens, any server-side client package |
 
 ---
 
@@ -1128,6 +1130,53 @@ the reply lists which ports were and were not changed.
 
 ---
 
+### S16 — Agent-to-agent (A2A)
+
+**Use when:** agents call each other, as themselves or on behalf of a signed-in user, and each
+needs to know who is calling, for whom, and that the token was meant for it.
+
+**Prompt**
+
+```text
+Secure the calls between my agents with Ark's agent-to-agent (A2A) tokens, using the Ark client
+package for <language>. Each agent is a confidential client. <agent-a> calls <agent-b>: get the
+token with the package (.NET ArkAgentTokens.GetTokenAsync(audience[, subjectToken]) / Python
+client.agent_token(audience, subject_token=…) / Node client.agentToken({ audience, subjectToken })),
+passing the user's access token as the subject token when acting for a user. Protect <agent-b>'s
+endpoints so they accept only tokens addressed to it (.NET AddArkAgentApi / Python
+add_ark_agent_api / Node arkBearer({ agent: true })), authorize on ark_claims, and read the acting
+agents from the act chain (ArkActors / agent_actors / agentActors). Add the provider's
+agent-card-security section to the agent card. Tell me which callers I must list on which client in
+the Ark console; do not hand-roll token requests or JWT validation.
+```
+
+**Agent: read first** — `Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md` (setup, token contents, every
+refusal), then the *Agent-to-agent (A2A)* section of the client README for the language.
+
+**Wire shape**
+
+```bash
+# the agent as itself
+curl -X POST https://idp.example.com/my_idp/oauth2/token -u "agent-a:$SECRET" \
+  -d grant_type=client_credentials -d audience=agent-b
+
+# on behalf of a user (RFC 8693)
+curl -X POST https://idp.example.com/my_idp/oauth2/token -u "agent-a:$SECRET" \
+  -d grant_type=urn:ietf:params:oauth:grant-type:token-exchange \
+  -d subject_token="$USER_TOKEN" -d subject_token_type=urn:ietf:params:oauth:token-type:access_token \
+  -d audience=agent-b
+```
+
+**Done when:** `agent-b` accepts a token whose `aud` is `agent-b` and refuses one addressed to
+anyone else; a call made for a user shows the user as `sub` and the agents in `act`; and the
+operator has listed `agent-a` on `agent-b`'s client (**Agent-to-agent (A2A)** in the client drawer).
+
+**Do not:** send an agent the tenant-wide token from S6 in place of one addressed to it; skip the
+audience check on the receiving side; expect a token before the target lists the caller (the answer
+is `invalid_target`); use a public client as an agent.
+
+---
+
 ## 3. Reference
 
 Facts to cite. All protocol paths are relative to the issuer, `{BaseUrl}/{TenantId}`.
@@ -1152,6 +1201,8 @@ Facts to cite. All protocol paths are relative to the issuer, `{BaseUrl}/{Tenant
 | Back-Channel Logout 1.0 | Signed `logout_token` POSTed to each client that took part |
 | Authorization Server Issuer Identification (RFC 9207) | `iss` in the authorization response |
 | Native Apps (RFC 8252) | Loopback redirect URIs with variable ports |
+| Token Exchange (RFC 8693) | For agent-to-agent calls on behalf of a user: `act` chain, audience-bound, never outlives the token exchanged |
+| Agent-to-agent (A2A) | Tokens addressed to one agent, a caller list per agent, the Agent Card security section |
 
 **Deliberately not supported:** the implicit grant, the hybrid flow, and the resource owner password
 credentials grant (all removed in OAuth 2.1); `plain` PKCE; front-channel logout (discovery reports

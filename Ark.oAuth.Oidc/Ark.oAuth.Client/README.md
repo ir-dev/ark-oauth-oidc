@@ -116,6 +116,29 @@ var token  = await credentials.GetTokenAsync(clientId, secret, new[] { "reports.
 var client = await registration.RegisterAsync(metadata, token.AccessToken);
 ```
 
+## Agent-to-agent (A2A)
+
+When this application is an agent that calls other agents, or is called by them. An agent is an
+ordinary confidential client; the agent being called lists its callers on its client record in the
+provider's console, and a token is addressed to that one agent (`aud` is its client_id).
+
+```csharp
+// calling another agent — ArkAgentTokens is registered by AddArkOidcClient
+var asItself  = await agentTokens.GetTokenAsync("agent-b");                 // sub = this client
+var forUser   = await agentTokens.GetTokenAsync("agent-b", userAccessToken); // sub = the user, act = this client
+var onward    = await HttpContext.GetArkAgentTokenAsync("agent-b");          // on behalf of this request's caller
+if (asItself.Succeeded) request.Headers.Authorization = new("Bearer", asItself.AccessToken);
+
+// being called — accepts only tokens addressed to this application's ClientId
+builder.Services.AddAuthentication().AddArkAgentApi(arkConfig);
+app.MapPost("/a2a/tasks", [Authorize] (ClaimsPrincipal user) =>
+    new { sub = user.FindFirst("sub")?.Value, actors = user.ArkActors() });  // actors: newest first, empty when the caller acts as itself
+```
+
+A refusal is reported, not thrown: `result.Error` is `invalid_target` until the target lists this
+client. `GetAgentCardSecurityAsync()` returns the security section for your A2A Agent Card. The full
+guide — setup, token contents, every refusal — is [A2A.md](https://github.com/ir-dev/ark-oauth-oidc/blob/main/Ark.oAuth.Oidc/Ark.oAuth.Oidc/A2A.md).
+
 ## Registering the application
 
 Three things have to line up on the provider, not one:

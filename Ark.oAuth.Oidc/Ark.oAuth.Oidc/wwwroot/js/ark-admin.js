@@ -281,7 +281,8 @@
         "authorization_code",
         "refresh_token",
         "client_credentials",
-        "urn:ietf:params:oauth:grant-type:device_code"
+        "urn:ietf:params:oauth:grant-type:device_code",
+        "urn:ietf:params:oauth:grant-type:token-exchange"
     ];
     var RESPONSE_TYPES = ["code"];
 
@@ -679,6 +680,12 @@
         checkboxes(box, state.scopes.map(function (s) { return s.name; }),
             scopes.length ? scopes : ["openid", "profile", "email", "offline_access"]);
 
+        var callers = field("a2a_callers");
+        if (callers) {
+            callers.innerHTML = "";
+            listOf(editing, "a2a_callers").forEach(function (entry) { callers.appendChild(a2aRow(entry)); });
+        }
+
         document.getElementById("cl-secret-state").textContent = editing.has_client_secret
             ? "A secret is set. Regenerating replaces it immediately."
             : "No secret set.";
@@ -718,12 +725,60 @@
         setList(out, "grant_types", checkedValues(field("grant_types")));
         setList(out, "response_types", checkedValues(field("response_types")));
         setList(out, "scopes", checkedValues(field("scopes")));
+        if (field("a2a_callers")) setList(out, "a2a_callers", readA2aCallers());
 
         // Navigation properties are not part of the payload; sending a populated `tenant`
         // makes the change tracker try to insert the tenant again.
         delete out.tenant;
         return out;
     }
+
+    // ------------------------------------------------- agent-to-agent callers
+
+    /** One row of the A2A caller list: which client, what it holds here, whether it may bring a user. */
+    function a2aRow(entry) {
+        entry = entry || {};
+        var row = el('<div class="ark-a2a-row">' +
+            '<select class="ark-a2a-client" aria-label="Calling client"></select>' +
+            '<input type="text" class="ark-a2a-claims" aria-label="Claims the caller holds here" ' +
+            'placeholder="claims, comma separated" autocomplete="off" spellcheck="false" />' +
+            '<label class="ark-a2a-delegate"><input type="checkbox" /> may act for users</label>' +
+            '<button type="button" class="ark-btn-ghost ark-btn-sm">Remove</button>' +
+            "</div>");
+
+        // Agents talk within a tenant, so only this tenant's other clients are offered. An id
+        // that is listed but no longer exists stays visible, so removing it is a decision.
+        var tenant = field("tenant_id").value;
+        var own = field("client_id").value.trim();
+        var ids = state.clients.filter(function (c) {
+            return c.tenant_id === tenant && c.client_id !== own;
+        }).map(function (c) { return c.client_id; });
+        if (entry.client_id && ids.indexOf(entry.client_id) < 0) ids.unshift(entry.client_id);
+
+        var select = row.querySelector("select");
+        select.add(new Option("choose a client…", ""));
+        ids.forEach(function (id) { select.add(new Option(id, id)); });
+        select.value = entry.client_id || "";
+        row.querySelector(".ark-a2a-claims").value = (entry.claims || []).join(", ");
+        row.querySelector("input[type=checkbox]").checked = !!entry.delegate_users;
+        row.querySelector("button").addEventListener("click", function () { row.remove(); });
+        return row;
+    }
+
+    function readA2aCallers() {
+        return Array.prototype.slice.call(field("a2a_callers").querySelectorAll(".ark-a2a-row"))
+            .map(function (row) {
+                return {
+                    client_id: row.querySelector("select").value,
+                    claims: row.querySelector(".ark-a2a-claims").value.split(/[,\n]/)
+                        .map(function (s) { return s.trim(); }).filter(Boolean),
+                    delegate_users: row.querySelector("input[type=checkbox]").checked
+                };
+            })
+            .filter(function (entry) { return !!entry.client_id; });
+    }
+
+    on("cl-a2a-add", "click", function () { field("a2a_callers").appendChild(a2aRow(null)); });
 
     on("client-add", "click", function () { openClient(null); });
     on("client-drawer-close", "click", closeClient);

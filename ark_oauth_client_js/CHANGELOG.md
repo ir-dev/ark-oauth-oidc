@@ -1,5 +1,12 @@
 # Changelog
 
+## Next release
+
+No change to this package. The provider and the three server-side clients gain agent-to-agent (A2A)
+tokens in this release. A browser application is a public client and cannot be an agent, because
+nothing authenticates it. Its back end is the agent, and it uses `ark-oauth-client-node`,
+`ark-oauth-client` (Python) or `Ark.oAuth.Client` for that.
+
 ## 2.4.1
 
 No change to this package. It has the same code, API and adapters as 2.4.0 and is published at the

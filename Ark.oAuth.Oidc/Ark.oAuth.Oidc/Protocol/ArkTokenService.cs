@@ -23,6 +23,21 @@ namespace Ark.oAuth.Oidc.Protocol
         public DateTime AuthTime { get; set; } = DateTime.UtcNow;
         /// <summary>Set for the authorization_code grant so the ID token can carry c_hash.</summary>
         public string? AuthorizationCode { get; set; }
+
+        // --- agent-to-agent (A2A) tokens only; null on every other grant ---
+
+        /// <summary>
+        /// The <c>act</c> claim (RFC 8693 §4.1): who is acting for the subject, newest first, each
+        /// earlier actor nested inside the one that took over from it.
+        /// </summary>
+        public Dictionary<string, object>? Actor { get; set; }
+        /// <summary>Overrides the client's access token lifetime when set.</summary>
+        public int? LifetimeSeconds { get; set; }
+        /// <summary>
+        /// The <c>ark_claims</c> to issue, already decided by the caller. Null means the usual
+        /// lookup: the subject's access mapping to <see cref="Client"/>.
+        /// </summary>
+        public List<string>? AuthorizationClaims { get; set; }
     }
 
     /// <summary>
@@ -49,7 +64,7 @@ namespace Ark.oAuth.Oidc.Protocol
         {
             var key = await _keys.GetActiveKeyAsync(ctx.Tenant.tenant_id);
             var now = DateTime.UtcNow;
-            var expires = now.AddSeconds(ctx.Client.access_token_lifetime_seconds);
+            var expires = now.AddSeconds(ctx.LifetimeSeconds ?? ctx.Client.access_token_lifetime_seconds);
             var jti = ArkCrypto.RandomToken(16);
 
             var payload = new Dictionary<string, object>
@@ -67,8 +82,10 @@ namespace Ark.oAuth.Oidc.Protocol
             if (!string.IsNullOrEmpty(ctx.SessionId)) payload["sid"] = ctx.SessionId!;
 
             // authorization claims the tenant has mapped to this user/client pair
-            var granted = await _claims.GetAuthorizationClaimsAsync(ctx.Subject, ctx.Tenant.tenant_id, ctx.Client);
+            var granted = ctx.AuthorizationClaims
+                ?? await _claims.GetAuthorizationClaimsAsync(ctx.Subject, ctx.Tenant.tenant_id, ctx.Client);
             if (granted.Count > 0) payload["ark_claims"] = granted;
+            if (ctx.Actor != null) payload["act"] = ctx.Actor;
 
             var token = Sign(payload, key, "at+jwt");
             return (token, expires, jti);
@@ -199,6 +216,32 @@ namespace Ark.oAuth.Oidc.Protocol
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
                 IssuerSigningKeys = _keys.GetValidationKeys(keys),
+                ClockSkew = TimeSpan.FromMinutes(1)
+            });
+        }
+
+        /// <summary>
+        /// Validates an access token this server issued without fixing its audience, for the two
+        /// places that meet tokens addressed to an agent (A2A): the token exchange grant and
+        /// introspection. <b>The caller decides whether the audience is acceptable</b> — nothing
+        /// here does. Only an RFC 9068 access token passes (<c>typ: at+jwt</c>), so an ID token,
+        /// whose audience is a client_id just as an A2A token's is, cannot stand in for one; and
+        /// only the standard issuer, so a v1 token cannot either.
+        /// </summary>
+        public async Task<TokenValidationResult> ValidateAccessTokenAnyAudienceAsync(
+            string token, ArkTenant tenant, string standardIssuer)
+        {
+            var keys = await _keys.GetValidationKeySetAsync(tenant.tenant_id, KidOf(token));
+            return await Handler.ValidateTokenAsync(token, new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = standardIssuer,
+                ValidateAudience = false,
+                ValidateLifetime = true,
+                RequireExpirationTime = true,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKeys = _keys.GetValidationKeys(keys),
+                ValidTypes = new[] { "at+jwt" },
                 ClockSkew = TimeSpan.FromMinutes(1)
             });
         }

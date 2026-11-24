@@ -244,6 +244,24 @@
         </fieldset>
 
         <fieldset>
+            <legend>Agent-to-agent (A2A)</legend>
+            <div class="ark-note ark-a2a-note">
+                Who may call this client as an agent. A client listed here can obtain a token
+                addressed to this one (<code>aud</code> is this client_id) and to nobody else;
+                with nothing listed, nobody can. The claims are what the caller holds here when
+                it calls as itself. <em>May act for users</em> lets it exchange a user's token
+                for one addressed to this client: that token carries the user's own claims
+                here, and the user must have access to this client.
+            </div>
+            <div id="cl-a2a_callers"></div>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="cl-a2a-add">Add calling client</button>
+            <div class="ark-note ark-a2a-note">
+                The caller needs the <code>client_credentials</code> grant to call as itself and
+                the <code>token-exchange</code> grant to act for a user.
+            </div>
+        </fieldset>
+
+        <fieldset>
             <legend>Policy</legend>
             <div class="ark-grid-2">
                 <div>
