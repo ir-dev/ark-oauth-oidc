@@ -811,3 +811,192 @@ describe('hardening', () => {
     }
   });
 });
+
+describe('what a session must not outlive', () => {
+  const SECRET = 'a-test-secret-of-sufficient-length';
+  const CLAIMS = ['billing.admin', 'reports.read'];
+
+  /** Signs in, runs the test, and puts the provider back as it was. */
+  async function signedIn(options, fn) {
+    const web = await startApp(options);
+    const browser = new Browser();
+    try {
+      await browser.go(`${web.origin}/login`);
+      idp.revoked.length = 0;
+      const id = unsignSessionId(browser.cookies.get('ark_session'), SECRET);
+      /** Ages the stored access token, so the next request has to refresh. */
+      const expire = async () => {
+        const session = await web.store.get(id);
+        session.tokens.expires_at = Math.floor(Date.now() / 1000) - 10;
+        await web.store.set(id, session, 3600);
+      };
+      await fn({ web, browser, id, expire });
+    } finally {
+      idp.arkClaims = [...CLAIMS];
+      idp.rotateRefreshTokens = true;
+      idp.onRefresh = null;
+      idp.refreshSubject = null;
+      await web.close();
+    }
+  }
+
+  test('a refresh with rotation off leaves a session that can be refreshed again', () =>
+    signedIn({}, async ({ web, browser, id, expire }) => {
+      idp.rotateRefreshTokens = false;
+      await expire();
+      assert.equal((await browser.go(`${web.origin}/billing`)).body, 'billing');
+      assert.ok((await web.store.get(id)).tokens.refresh_token, 'the refresh token used to be lost here');
+
+      idp.arkClaims = ['reports.read'];
+      await expire();
+      assert.equal((await browser.go(`${web.origin}/billing`)).response.status, 403, 'the withdrawn claim is gone');
+
+      idp.refreshTokens.clear(); // the account is deactivated
+      await expire();
+      assert.equal((await browser.go(`${web.origin}/`)).body, 'anonymous');
+    }));
+
+  test('an account that loses its access is signed out at the next refresh', () =>
+    signedIn({ authOptions: { accountSwitch: { requireArkClaims: true } } }, async ({ web, browser, id, expire }) => {
+      idp.arkClaims = [];
+      await expire();
+      assert.equal((await browser.go(`${web.origin}/`)).body, 'anonymous');
+      assert.equal(await web.store.get(id), null);
+      assert.equal(idp.revoked.length, 1, 'the refresh token that came with the refused answer is revoked');
+    }));
+
+  test('a host rule that cannot answer on refresh is not a yes', async () => {
+    let asked = 0;
+    const events = {
+      onEvaluateAccess: () => {
+        asked += 1;
+        if (asked > 1) throw new Error('the licence database is down');
+        return true;
+      }
+    };
+    await signedIn({ authOptions: { events } }, async ({ web, browser, expire }) => {
+      await expire();
+      assert.equal((await browser.go(`${web.origin}/`)).body, 'anonymous');
+      assert.equal(asked, 2);
+    });
+  });
+
+  test('a refreshed ID token about somebody else ends the session', () =>
+    signedIn({}, async ({ web, browser, id, expire }) => {
+      idp.refreshSubject = 'mallory@example.com';
+      await expire();
+      assert.equal((await browser.go(`${web.origin}/`)).body, 'anonymous');
+      assert.equal(await web.store.get(id), null);
+    }));
+
+  test('a sign-out during a refresh is not undone by it', () =>
+    signedIn({}, async ({ web, browser, id, expire }) => {
+      await expire();
+      const headers = { cookie: browser.cookieHeader() };
+      let redeemed;
+      const atTheProvider = new Promise((resolve) => (redeemed = resolve));
+      let proceed;
+      const answerNow = new Promise((resolve) => (proceed = resolve));
+      idp.onRefresh = async () => {
+        redeemed();
+        await answerNow;
+      };
+
+      const request = fetch(`${web.origin}/`, { headers });
+      await atTheProvider;
+      await web.holder.auth.signOutLocally({ headers, socket: {} }, { setHeader() {}, getHeader() {}, end() {} });
+      proceed();
+
+      assert.equal(await (await request).text(), 'anonymous');
+      assert.equal(await web.store.get(id), null);
+      assert.equal(await (await fetch(`${web.origin}/`, { headers })).text(), 'anonymous');
+    }));
+
+  test('userinfo about somebody else is not used', async () => {
+    const client = { name: null };
+    await signedIn({ authOptions: { fetchUserInfo: true } }, async ({ web, id }) => {
+      client.name = (await web.store.get(id)).user.name;
+    });
+    assert.equal(client.name, 'Alice Example');
+
+    const web = await startApp({ authOptions: { fetchUserInfo: true } });
+    web.client.userInfo = async () => ({ sub: 'mallory', name: 'Mallory' });
+    const browser = new Browser();
+    try {
+      await browser.go(`${web.origin}/login`);
+      assert.equal((await web.store.get(unsignSessionId(browser.cookies.get('ark_session'), SECRET))).user.name, 'Alice Example');
+    } finally {
+      await web.close();
+    }
+  });
+
+  test('a visit to the login page is not kept for a working day', async () => {
+    const kept = [];
+    const store = new MemorySessionStore({ sweepIntervalMs: 0 });
+    const write = store.set.bind(store);
+    store.set = (id, data, ttl) => {
+      kept.push(ttl);
+      return write(id, data, ttl);
+    };
+    const web = await startApp({ store });
+    const browser = new Browser();
+    try {
+      const { response } = await browser.go(`${web.origin}/login`, { follow: false });
+      assert.deepEqual(kept, [600]);
+      assert.match(response.headers.get('set-cookie'), /Max-Age=600;/);
+      await browser.go(`${web.origin}/login`);
+      assert.equal(kept.at(-1), 8 * 60 * 60);
+    } finally {
+      await web.close();
+    }
+  });
+});
+
+describe("signing out from somebody else's page", () => {
+  test('a sign-out another site asked for is a question', async () => {
+    const web = await startApp();
+    const browser = new Browser();
+    try {
+      await browser.go(`${web.origin}/login`);
+      idp.revoked.length = 0;
+
+      const asked = await browser.go(`${web.origin}/logout`, { headers: { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate' } });
+      assert.equal(asked.response.status, 200);
+      assert.match(asked.body, /Sign out of web-app\?/);
+      assert.match(asked.body, /<form method="post" action="\/logout">/);
+      assert.equal(asked.response.headers.get('x-frame-options'), 'DENY');
+      assert.equal((await browser.go(`${web.origin}/`)).body, 'signed in as alice@example.com');
+
+      const forged = { method: 'POST', headers: { 'sec-fetch-site': 'cross-site', origin: 'https://evil.example' } };
+      assert.equal((await browser.go(`${web.origin}/logout`, forged)).response.status, 400);
+      // An older browser sends no Sec-Fetch-Site, but a cross-site form carries its Origin.
+      assert.equal((await browser.go(`${web.origin}/logout`, { method: 'POST', headers: { origin: 'https://evil.example' } })).response.status, 400);
+      assert.equal((await browser.go(`${web.origin}/`)).body, 'signed in as alice@example.com');
+      assert.equal(idp.revoked.length, 0);
+
+      // The page's own button.
+      const done = await browser.go(`${web.origin}/logout`, { method: 'POST', headers: { 'sec-fetch-site': 'same-origin' }, follow: false });
+      assert.equal(done.response.status, 302);
+      assert.match(done.location, /id_token_hint=/);
+      assert.equal((await browser.go(`${web.origin}/`)).body, 'anonymous');
+      assert.equal(idp.revoked.length, 1);
+    } finally {
+      await web.close();
+    }
+  });
+
+  for (const site of [null, 'none', 'same-origin', 'same-site']) {
+    test(`a link on this site or a typed address signs out as before: ${site ?? 'no header'}`, async () => {
+      const web = await startApp();
+      const browser = new Browser();
+      try {
+        await browser.go(`${web.origin}/login`);
+        const out = await browser.go(`${web.origin}/logout`, { headers: site ? { 'sec-fetch-site': site } : {}, follow: false });
+        assert.equal(out.response.status, 302);
+        assert.equal((await browser.go(`${web.origin}/`)).body, 'anonymous');
+      } finally {
+        await web.close();
+      }
+    });
+  }
+});

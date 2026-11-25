@@ -58,7 +58,9 @@ namespace Ark.oAuth.Oidc
         /// status is read from the claims captured at sign-in. Deactivating an operator, deleting
         /// their mapping to the console client or taking the admin claim off it therefore changed
         /// nothing for a session already open: it kept full management rights for as long as it
-        /// stayed in use. One indexed lookup per console request is what the switch costs.
+        /// stayed in use. Nor did changing the account's password, or resetting the whole server:
+        /// see <see cref="ArkConsoleSession"/>. A few indexed lookups per console request are what
+        /// the switch costs.
         /// </summary>
         internal static async Task RevalidateAsync(CookieValidatePrincipalContext ctx)
         {
@@ -80,7 +82,8 @@ namespace Ark.oAuth.Oidc
                 var mapping = user == null || client == null ? null
                     : await Protocol.ArkLookup.MappingAsync(db, user.email, client.tenant_id, client.id);
 
-                still = user != null && user.is_active && mapping != null;
+                still = user != null && user.is_active && mapping != null
+                    && !await ArkConsoleSession.EndedAsync(principal!, user, db, ser!);
 
                 // Operator by role rather than by the configured username: the role has to still
                 // be on the mapping, or removing it would take effect only at the next sign-in.
@@ -97,6 +100,31 @@ namespace Ark.oAuth.Oidc
                 await ctx.HttpContext.SignOutAsync(CookieScheme);
             }
         }
+
+        /// <summary>
+        /// Marks a new console cookie with the account as it is now (<see cref="ArkConsoleSession.Stamp"/>),
+        /// so a later change of password ends it.
+        /// </summary>
+        internal static async Task StampAsync(CookieSigningInContext ctx)
+        {
+            if (ctx.Principal?.Identity is not ClaimsIdentity identity) return;
+            foreach (var claim in identity.FindAll(ArkConsoleSession.StampClaim).ToList()) identity.TryRemoveClaim(claim);
+
+            var db = ctx.HttpContext.RequestServices.GetRequiredService<ArkDataContext>();
+            var account = await Protocol.ArkLookup.UserAsync(db, identity.FindFirst("sub")?.Value);
+            if (account != null) identity.AddClaim(new Claim(ArkConsoleSession.StampClaim, ArkConsoleSession.Stamp(account)));
+        }
+
+        /// <summary>
+        /// Whether this server's cookies are for https only: the request came over it, or the
+        /// configured <c>BaseUrl</c> says the server is reached over it. Behind something that ends
+        /// TLS, and without forwarded headers, the request alone says http.
+        /// </summary>
+        internal static bool SecureCookies(HttpRequest request, ArkAuthServerConfig? config) =>
+            request.IsHttps || IsHttps(config?.BaseUrl);
+
+        internal static bool IsHttps(string? baseUrl) =>
+            Uri.TryCreate((baseUrl ?? "").Trim(), UriKind.Absolute, out var root) && root.Scheme == Uri.UriSchemeHttps;
 
         /// <summary>
         /// Where a sign-in started for no page in particular ends: <c>ark_oauth_server:Admin:LandingUrl</c>,
@@ -210,11 +238,16 @@ namespace Ark.oAuth.Oidc
                     o.Cookie.HttpOnly = true;
                     o.Cookie.SameSite = SameSiteMode.Lax;
                     // SameAsRequest, not Always: `dotnet run` also listens on http://localhost.
+                    // Always where BaseUrl is https, below.
                     o.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
                     o.ExpireTimeSpan = TimeSpan.FromHours(8);
                     o.SlidingExpiration = true;
                     o.AccessDeniedPath = ArkIdpConsole.AuthErrorPath;
-                    o.Events = new CookieAuthenticationEvents { OnValidatePrincipal = ArkIdpConsole.RevalidateAsync };
+                    o.Events = new CookieAuthenticationEvents
+                    {
+                        OnValidatePrincipal = ArkIdpConsole.RevalidateAsync,
+                        OnSigningIn = ArkIdpConsole.StampAsync
+                    };
                 })
                 .AddOpenIdConnect(ArkIdpConsole.OidcScheme, o =>
                 {
@@ -285,6 +318,13 @@ namespace Ark.oAuth.Oidc
             // Who the console is depends on configuration the setup wizard may only write later,
             // so it is read when the options are built, and the options are rebuilt whenever
             // configuration reloads.
+            services.AddOptions<CookieAuthenticationOptions>(ArkIdpConsole.CookieScheme)
+                .Configure<IConfiguration>((o, config) =>
+                {
+                    if (ArkIdpConsole.IsHttps(config["ark_oauth_server:BaseUrl"])) o.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                });
+            services.AddSingleton<IOptionsChangeTokenSource<CookieAuthenticationOptions>>(sp =>
+                new ConfigurationChangeTokenSource<CookieAuthenticationOptions>(ArkIdpConsole.CookieScheme, sp.GetRequiredService<IConfiguration>()));
             services.AddOptions<OpenIdConnectOptions>(ArkIdpConsole.OidcScheme)
                 .Configure<IConfiguration, IServiceProvider>((o, config, sp) =>
                 {
@@ -308,8 +348,27 @@ namespace Ark.oAuth.Oidc
 
             // Both sessions: the console's cookie here, and the IdP's through end_session —
             // dropping only the first would sign the next visitor straight back in.
+            //
+            // A request another site started is asked about first. Taken at its word, following a link
+            // ended the operator's session here and, with the id_token_hint the redirect carries, the
+            // IdP's for every application. The link on the page that asks is this site's own.
             app.MapGet(ArkIdpConsole.SignOutPath, (HttpContext ctx) =>
             {
+                if (ctx.User.Identity?.IsAuthenticated == true && ctx.Request.Headers["Sec-Fetch-Site"] == "cross-site")
+                {
+                    ctx.Response.Headers.CacheControl = "no-store";
+                    ctx.Response.Headers.XFrameOptions = "DENY";
+                    ctx.Response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+                    var root = WebUtility.HtmlEncode(ctx.Request.PathBase.ToString());
+                    return Results.Content($$$"""
+                        <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign out?</title>
+                        <style>body{font:15px/1.5 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#f4f6fb;color:#16192b}
+                        main{max-width:32rem;margin:1rem;padding:2rem;background:#fff;border:1px solid #dfe4ee;border-radius:12px}h1{font-size:1.25rem;margin:0 0 .5rem}
+                        a{color:#3457d5}@media (prefers-color-scheme:dark){body{background:#0f1220;color:#e6e9f2}main{background:#171b2e;border-color:#2a3050}a{color:#8ea6ff}}</style>
+                        </head><body><main><h1>Sign out?</h1><p>Another website asked for you to be signed out here and everywhere you are signed in.</p>
+                        <p><a href="{{{root}}}{{{ArkIdpConsole.SignOutPath}}}">Sign out</a> · <a href="{{{root}}}/">Stay signed in</a></p></main></body></html>
+                        """, "text/html; charset=utf-8");
+                }
                 var home = new AuthenticationProperties { RedirectUri = $"{ctx.Request.PathBase}/" };
                 return ctx.User.Identity?.IsAuthenticated == true
                     ? Results.SignOut(home, new List<string> { ArkIdpConsole.CookieScheme, ArkIdpConsole.OidcScheme })
@@ -395,8 +454,14 @@ namespace Ark.oAuth.Oidc
             };
             foreach (var key in keys.GetValidationKeys(published)) configuration.SigningKeys.Add(key);
 
-            _cached = configuration;
-            _expires = DateTime.UtcNow.AddMinutes(5);
+            // Kept only when it is the same for everybody. With no BaseUrl the addresses follow the
+            // request's Host, and one request under a made-up name sent every sign-in that followed
+            // it to that name for five minutes.
+            if (!string.IsNullOrWhiteSpace(ser.BaseUrl))
+            {
+                _cached = configuration;
+                _expires = DateTime.UtcNow.AddMinutes(5);
+            }
             return configuration;
         }
 

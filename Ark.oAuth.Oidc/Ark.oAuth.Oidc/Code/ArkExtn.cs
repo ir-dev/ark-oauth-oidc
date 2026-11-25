@@ -261,7 +261,11 @@ namespace Ark.oAuth.Oidc
         internal static async Task SeedDatabase(IServiceProvider services, ArkAuthServerConfig ser, HttpContext? http, bool thumbprintKid = false, ArkSeedOverrides? seed = null)
         {
             var dbContext = services.GetRequiredService<ArkDataContext>();
-            var admin = ResolveAdminUser(ser, seed?.AdminPassword);
+            // A reset (thumbprintKid, no seed) is an operator asking to start over, and is told which
+            // password that leaves. Anything else that finds a wizard's server empty was not asked for.
+            var setUpByWizard = seed == null && !thumbprintKid
+                && services.GetRequiredService<IConfiguration>().GetSection("ark_setup").Exists();
+            var admin = ResolveAdminUser(ser, seed?.AdminPassword, allowDefaultPw: !setUpByWizard);
             var util = services.GetRequiredService<ArkUtil>();
             // Signing keys are generated here, in this process, unless the wizard brought one —
             // generated there with the same call, or imported. They used to be fetched from an
@@ -497,14 +501,24 @@ namespace Ark.oAuth.Oidc
         /// A password from the setup wizard, which is never written to configuration and so wins
         /// over anything there.
         /// </param>
-        internal static (string Username, string Password, string Name) ResolveAdminUser(ArkAuthServerConfig ser, string? password = null)
+        /// <param name="allowDefaultPw">
+        /// Whether <c>DefaultPw</c> will do. Not on a server the wizard set up: it collected a password
+        /// for the administrator and this one for everybody new, so an install cut short, or a second
+        /// instance that read the settings first, gave the administrator the one everybody is told.
+        /// </param>
+        internal static (string Username, string Password, string Name) ResolveAdminUser(ArkAuthServerConfig ser, string? password = null, bool allowDefaultPw = true)
         {
             var cfg = ser.AdminUser ?? new ArkAdminUserConfig();
 
             var username = string.IsNullOrWhiteSpace(cfg.Username) ? "admin" : cfg.Username.Trim();
             var name = string.IsNullOrWhiteSpace(cfg.Name) ? "Admin User" : cfg.Name.Trim();
-            password = Configured(password) ?? Configured(cfg.Password) ?? Configured(ser.DefaultPw);
+            password = Configured(password) ?? Configured(cfg.Password) ?? (allowDefaultPw ? Configured(ser.DefaultPw) : null);
 
+            if (string.IsNullOrWhiteSpace(password) && !allowDefaultPw)
+                throw new ApplicationException(
+                    $"this server was set up by the wizard, its database holds no tenant, and no password is configured for the administrator account '{username}', " +
+                    "so the database cannot be seeded. Restore the database, or set 'ark_oauth_server:AdminUser:Password' " +
+                    "(ark_oauth_server__AdminUser__Password) to start with an empty one. 'ark_oauth_server:DefaultPw' is not used for the administrator here.");
             if (string.IsNullOrWhiteSpace(password))
                 throw new ApplicationException(
                     $"no password is configured for the administrator account '{username}', so the " +
@@ -816,6 +830,10 @@ namespace Ark.oAuth.Oidc
 
             // the management API answers only to the operator — see ArkManagementAuth
             services.AddArkManagementAuth();
+
+            // The onboarding agent: the setup wizard's other way in, a conversation. It has work only
+            // while the server is unconfigured; on one that is set up nothing of it is built (AgentGate).
+            Ark.Agents.TenantOnboarding.ArkOnboardingAgentExtensions.AddBuiltIn(services);
 
             // the interactive endpoints render Razor views shipped inside this package
             services.AddControllersWithViews();

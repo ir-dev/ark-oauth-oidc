@@ -150,6 +150,14 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
         public IReadOnlyList<ArkMcpTool> All { get; }
         public DateTime? DraftUpdatedAt => _draft.UpdatedAt;
 
+        /// <summary>Setup is finished, by either route: forgets everything that was collected or made for it.</summary>
+        public void Close()
+        {
+            _draft.Close();
+            _generatedKey = null;
+            _generatedSecret = null;
+        }
+
         public SetupTools(ArkSetupMiddleware setup, ArkSetupDraft draft)
         {
             _setup = setup;
@@ -533,7 +541,10 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
 
         async Task<object> Review(ArkMcpCall call)
         {
-            var views = Sections.Select(s => Describe(call, s)).ToList();
+            // One look at the draft: the plan shown below and the review_id that names it are of the
+            // same values, whatever another caller stores while the database is being asked.
+            var (views, req, reviewId, sources, owed) = _draft.Read(() =>
+                (Sections.Select(s => Describe(call, s)).ToList(), Request(), _draft.ReviewId(), _draft.Sources(), TestsOwed(call)));
             var problems = views.SelectMany(v => v.Missing.Select(m => (object)new { section = v.Section.Name, field = m, code = "missing", message = $"{v.Section.Name}.{m} is required.", ask = v.Section.Owner })
                 .Concat(v.Problems.Select(p => (object)new { section = v.Section.Name, problem = p, ask = v.Section.Owner }))).ToList();
             if (!Writable(_setup.DataDirectory))
@@ -545,14 +556,13 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
 
             if (problems.Count == 0)
             {
-                var req = Request();
                 var byLink = string.IsNullOrEmpty(req.Admin?.Password);
                 if (byLink) req.Admin!.Password = ArkCrypto.RandomToken(32);
                 try
                 {
                     var checkedPlan = await Task.Run(() => _setup.Validate(call.Http, req));
                     plan = PlanView(checkedPlan, req, byLink);
-                    foreach (var (_, why) in TestsOwed(call).Where(t => t.Tool != "setup_test_database")) warnings.Add(why + ".");
+                    foreach (var (_, why) in owed.Where(t => t.Tool != "setup_test_database")) warnings.Add(why + ".");
                     if (!checkedPlan.BaseUrl.Equals(call.Endpoint.Root, StringComparison.OrdinalIgnoreCase))
                         warnings.Add($"You reached this server at {call.Endpoint.Root}, and its public URL will be {checkedPlan.BaseUrl}. People and tokens go through the public URL, so it has to lead here.");
                     if (checkedPlan.Provider == "sqlite")
@@ -572,13 +582,12 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
             var assumed = views.SelectMany(v => v.Section.Fields
                 .Where(f => f.Default != null && !v.Collected.Contains(f.Name) && f.Name is not ("sqlite_file" or "port" or "ssl"))
                 .Select(f => $"{v.Section.Name}.{f.Name}: {f.Default}")).ToList();
-            var sources = _draft.Sources();
             var unattributed = views.SelectMany(v => v.Collected.Select(c => $"{v.Section.Name}.{c}")).Where(k => !sources.ContainsKey(k)).ToList();
 
             return new
             {
                 ready = problems.Count == 0,
-                review_id = problems.Count == 0 ? _draft.ReviewId() : null,
+                review_id = problems.Count == 0 ? reviewId : null,
                 plan, problems, warnings,
                 assumed_defaults = assumed,
                 supplied_by = sources.ToDictionary(s => s.Key, s => s.Value),
@@ -622,17 +631,20 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
 
         async Task<object> Complete(ArkMcpCall call)
         {
-            var server = _draft.Section("server");
-            var tenant = Str(server, "tenant_id") ?? "";
-            if (!string.Equals(call.Args.Required("confirm"), tenant, StringComparison.Ordinal))
-                throw new ArkMcpToolException("confirmation_required", "confirm must be the tenant id exactly as collected.");
-            if (!string.Equals(call.Args.Required("review_id"), _draft.ReviewId(), StringComparison.Ordinal))
-                throw new ArkMcpToolException("not_reviewed",
-                    "that is not the review of the draft as it stands: something changed since, or it was never reviewed. Call setup_review again and have the plan agreed.");
-
-            var req = Request();
+            // Checked and taken in one look at the draft: a value stored between the two would have
+            // been installed under a review that never showed it.
+            var (req, collected) = _draft.Read(() =>
+            {
+                var tenant = Str(_draft.Section("server"), "tenant_id") ?? "";
+                if (!string.Equals(call.Args.Required("confirm"), tenant, StringComparison.Ordinal))
+                    throw new ArkMcpToolException("confirmation_required", "confirm must be the tenant id exactly as collected.");
+                if (!string.Equals(call.Args.Required("review_id"), _draft.ReviewId(), StringComparison.Ordinal))
+                    throw new ArkMcpToolException("not_reviewed",
+                        "that is not the review of the draft as it stands: something changed since, or it was never reviewed. Call setup_review again and have the plan agreed.");
+                return (Request(), _draft.Sources());
+            });
             var byLink = string.IsNullOrEmpty(req.Admin?.Password);
-            var sources = _draft.Sources().ToDictionary(s => s.Key,
+            var sources = collected.ToDictionary(s => s.Key,
                 s => string.Join(" / ", new[] { "department", "provided_by", "reference" }.Select(k => s.Value[k]?.GetValue<string>()).Where(v => !string.IsNullOrEmpty(v))),
                 StringComparer.Ordinal);
 
@@ -774,7 +786,7 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                 b["Database"] = Str(db, "database") ?? "";
                 b["User ID"] = Str(db, "username") ?? "";
                 b["Password"] = Str(db, "password") ?? "";
-                b["SslMode"] = ssl switch { "require" => "Required", "disable" => "None", _ => "Preferred" };
+                b["SslMode"] = ssl switch { "require" => "Required", "disable" => "Disabled", _ => "Preferred" };
             }
             return b.ConnectionString;
         }
@@ -785,7 +797,9 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
             {
                 var b = new DbConnectionStringBuilder { ConnectionString = connection };
                 foreach (string name in b.Keys.Cast<string>().ToList())
-                    if (Regex.IsMatch(name, "^(password|pwd|user password)$", RegexOptions.IgnoreCase)) b[name] = "(set)";
+                    // By what the name contains: each driver has its own spellings (PWD, PSW, SSL Password,
+                    // CertificatePassword, Password2), and a plan is shown to people and to a model.
+                    if (Regex.IsMatch(name, "pass|pwd|psw|secret|token", RegexOptions.IgnoreCase)) b[name] = "(set)";
                 return b.ConnectionString;
             }
             catch (ArgumentException)

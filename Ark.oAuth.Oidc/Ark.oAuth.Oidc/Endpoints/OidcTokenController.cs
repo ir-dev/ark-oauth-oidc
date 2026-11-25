@@ -179,6 +179,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                     throw OAuthException.InvalidScope($"scope cannot be widened on refresh: {string.Join(", ", widened)}.");
                 scopes = wanted;
             }
+            scopes = await _claims.StillAllowedAsync(scopes, client);
 
             // auth_time is when the user authenticated, not when this refresh token was minted:
             // under rotation created_at moves forward on every refresh, and an ID token claiming
@@ -429,6 +430,14 @@ namespace Ark.oAuth.Oidc.Endpoints
 
             // The approving session's sign-in time; left unset it defaulted to now.
             var session = await _grants.GetSessionAsync(entry.session_id);
+            // Approved is not yet issued, and minutes may pass between the two. Signing out, being
+            // deactivated or losing access in between counts, as it does on a refresh.
+            if (!string.IsNullOrEmpty(entry.session_id) && session == null)
+                throw OAuthException.InvalidGrant("the session that approved this device has ended.");
+            if (await _claims.FindUserAsync(entry.subject!) is { is_active: false })
+                throw OAuthException.InvalidGrant("the account that approved this device has been deactivated.");
+            if (!await _claims.HasClientAccessAsync(entry.subject!, tenant.tenant_id, client))
+                throw OAuthException.InvalidGrant("the account that approved this device no longer has access to this client.");
             var resource = await Mcp.ArkMcpIndicators.ForGrantAsync(Ctx, ServerConfig, ep, tenant, entry.resource, form["resource"]);
 
             var ctx = new TokenRequestContext

@@ -19,6 +19,7 @@ The provider is multi-tenant; administration is not (one operator tenant adminis
 | `Samples/client-js/react-client` | React SPA sample (browser only) on `ark-oauth-client-js`, with a guided QuickStart setup page | not published |
 | `Ark.oAuth.Oidc/Ark.oAuth.Oidc.Host` | Runnable IdP host, configured through appsettings | not published |
 | `Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart` | Zero-config IdP host: `AddArkIdp()` + `UseArkIdp()`, setup wizard on first run | not published |
+| `agents/agent-001-tenant-onboarding` | Ark Pilot: an agent that sets a server up by conversation, over the MCP setup tools (library, sample host, checks) | the library ships inside NuGet `Ark.oAuth.Oidc` |
 
 The three client packages are **ports of each other and carry the same version number**. A change to
 one is usually owed to the other two. An integration written in one translates almost line for line.
@@ -155,6 +156,27 @@ These apply in every language and are the source of most "it just says the passw
   own validators, and setup secrets that never reach `settings.json` never reach the draft file either.
   The protocol is hand-written (no MCP SDK dependency): test it against the official Python, TypeScript
   and C# clients, in both the 2026-07-28 and the `initialize` era.
+* **The onboarding agent ships inside the server and stays its client** (`agents/agent-001-tenant-onboarding`,
+  its `README.md` is the spec). `Ark.oAuth.Oidc.csproj` references it with `PrivateAssets="all"` and packs its
+  DLL and PDB beside its own (there is no such package to depend on, so anything that builds the server needs
+  `agents/` in its checkout or Docker context). `AddArkOidcServer` registers it (`AddBuiltIn`), `UseArkSetup`
+  places its page at `/ark-agent` in front of the setup gate (`UseBuiltIn`), and the wizard's Welcome step links
+  to it with a status from `AgentStatusReader`. The reference goes one way: the agent uses no `Ark.oAuth.Oidc`
+  type, and a change to a setup tool or its fields reaches it through `tools/list` and `setup_fields`. It
+  captures the setup code from the start-up log and works `/ark-idp/mcp` with it. Keep these
+  true: a configured server builds nothing of it (`AgentGate`); who may open it without a code is the same
+  rule as the wizard's (`ArkSetup.IsLocal`, `AgentAccess.IsLocal`); the status carries no value anybody gave;
+  `LookForDatabases` stays off by default; the setup code reaches no page, model or colleague; secrets reach the server and never the model
+  (`Brain/Scrubber.cs`, the vault); a value nobody gave is a proposal to click, never stored; a colleague's
+  link reaches the sections it names; `setup_complete` is only ever the lead's button. The model sits
+  behind `IArkAgentModel` (GenericLLM, ARK-LLM, Azure AI Foundry, Bedrock, or none: guided mode).
+  GenericLLM cuts an answer at about 1,000 tokens, thinking included, so `Reply.Parse` salvages a
+  cut-off answer and the turn asks again. ARK-LLM is a 2B model on a very small server: it sets
+  `SmallPromptChars`, so code reads first (`Brain/SmallModel.cs`) and the model gets one short call for
+  what is left; never loosen its one-at-a-time gate, its rest after a problem, its caps or
+  `enableTools: false`. Credentials and caller identity go in user secrets or the environment.
+  Checks: `dotnet run` in `Ark.Agents.TenantOnboarding.Checks`; end to end against a scratch host and
+  data directory, never a real server.
 * **The audit trail to ARK-RAPID Watch is optional and must cost nothing when it is off**
   (`ark_oauth_server:Watch`, `Code/ArkWatch.cs`, package `Ark.Watch.Client`). No client, thread or
   file exists until an endpoint and a key are configured. Every `DataAccess.Log` / `Record` /

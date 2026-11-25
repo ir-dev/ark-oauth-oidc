@@ -2,9 +2,14 @@
 
 ## Next release
 
-No change to this package. In this release the provider, `Ark.oAuth.Oidc`, is itself an MCP server, with
-which an agent sets it up and administers it. Nothing a client sees changes, and the two can be upgraded in
-either order.
+- **The access check runs again with each token refresh.** With `accountSwitch.requireArkClaims` or
+  `onEvaluateAccess`, an account that has lost its access becomes `denied` at the next refresh, with
+  the way out, and its refresh token is revoked; `refresh()` then rejects with
+  `ArkLoginRequiredError`. A rule that throws takes up no new access token and is asked again. It
+  used to be asked at the callback only.
+
+In this release the provider, `Ark.oAuth.Oidc`, is itself an MCP server, with which an agent sets it up
+and administers it. The client and the provider can be upgraded in either order.
 
 ## 2.4.2
 

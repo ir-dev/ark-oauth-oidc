@@ -85,6 +85,11 @@ namespace Ark.oAuth.Oidc.Endpoints
                     ["request_uri_parameter_supported"] = opt.EnablePushedAuthorizationRequests,
                     ["require_request_uri_registration"] = false,
                     ["authorization_response_iss_parameter_supported"] = true, // RFC 9207
+                    // What an ordinary access token of this tenant carries as `aud`. It is in every
+                    // token already; published so that a resource server which was told no audience
+                    // can still refuse a token addressed to one agent (A2A) or one MCP endpoint.
+                    ["ark_access_token_audience"] =
+                        string.IsNullOrWhiteSpace(tenant.audience) ? null : tenant.audience,
                     // Back-channel logout is implemented: a client that registers a
                     // backchannel_logout_uri is POSTed a logout token when a session it took part
                     // in ends, and that token always carries sid.

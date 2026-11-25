@@ -79,9 +79,9 @@ Token access
 API protection (resource server / bearer)
  ├── Purpose        Validate incoming JWT access tokens on an API
  ├── Entry point    AuthenticationBuilder.AddArkOidcApi(ArkAuthConfig[, scheme])
- ├── Config         Authority (issuer), Audience (optional; validated only if set)
+ ├── Config         Authority (issuer), Audience (optional; empty = the tenant's, as published)
  ├── Keys           From the provider's JWKS, not a configured public key
- └── Anti-patterns  Statically configured signing keys; validating audience you never set
+ └── Anti-patterns  Statically configured signing keys; switching the audience check off
 
 Account switch / shared-browser recovery
  ├── Purpose        Recover from SSO signing the wrong person in on a shared browser

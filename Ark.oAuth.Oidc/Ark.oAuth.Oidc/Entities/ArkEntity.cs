@@ -24,6 +24,12 @@ namespace Ark.oAuth
     {
         [Key]
         public string tenant_id { get; set; }
+        /// <summary>
+        /// Never serialised. Loading the tenant for anything else in the same request (a bearer
+        /// token is validated against it) fills this in behind the caller's back, and with it the
+        /// tenant's private signing key: the client and mapping lists used to carry it out.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
         [ForeignKey(nameof(tenant_id))]
         public ArkTenant tenant { get; set; }
         public string host_company_name { get; set; }
@@ -52,6 +58,12 @@ namespace Ark.oAuth
         public string redirect_url { get; set; }
         public string logout_url { get; set; }
         public string? redirect_relative { get; set; }
+        /// <summary>
+        /// Never serialised. Loading the tenant for anything else in the same request (a bearer
+        /// token is validated against it) fills this in behind the caller's back, and with it the
+        /// tenant's private signing key: the client and mapping lists used to carry it out.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
         [ForeignKey(nameof(tenant_id))]
         public ArkTenant tenant { get; set; }
         public int expire_mins { get; set; } = 480; // durations
@@ -332,9 +344,17 @@ namespace Ark.oAuth
         public string id { get; set; }
         public string email { get; set; } // used for login
         public string client_id { get; set; }
+        /// <summary>Never serialised: see <see cref="tenant"/>.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
         [ForeignKey(nameof(client_id))]
         public ArkClient client { get; set; }
         public string? tenant_id { get; set; }
+        /// <summary>
+        /// Never serialised. Loading the tenant for anything else in the same request (a bearer
+        /// token is validated against it) fills this in behind the caller's back, and with it the
+        /// tenant's private signing key: the client and mapping lists used to carry it out.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonIgnore]
         [ForeignKey(nameof(tenant_id))]
         public ArkTenant tenant { get; set; }
         public string? claims_ { get; set; }

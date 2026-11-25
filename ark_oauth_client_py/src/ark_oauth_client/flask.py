@@ -56,14 +56,16 @@ from .access import (
     ArkClientEvents,
     ArkClientOptions,
     ArkDeniedAccount,
+    ArkSignOutPage,
     check_same_origin,
+    is_cross_site,
     local_or_default,
     read_field,
 )
 from .auth_config import ArkAuthConfig
 from .client import ArkOAuthClient, AuthorizationRequest
 from .context import ArkAuthContext
-from .errors import ArkCallbackError, ArkConfigError, ArkOAuthError
+from .errors import ArkCallbackError, ArkConfigError, ArkOAuthError, ArkTokenError
 from .flows import ArkClientCredentials, ArkRegistration
 from .helper import AuthClientHelper
 from .probe import ArkSetupProbe
@@ -180,15 +182,12 @@ class ArkRequest:
 
     def context(self) -> ArkAuthContext:
         """The :class:`~ark_oauth_client.context.ArkAuthContext` for this request."""
-        from flask import request
-
         return ArkAuthContext(
             self._ark.config,
             claims=self.user,
             ark_claims=self.claims,
             client_id=self._ark.config.client_id,
-            ip=request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
-            or None,
+            ip=self._ark._client_ip(),
             is_authenticated=self.is_authenticated,
         )
 
@@ -286,8 +285,9 @@ class ArkFlask:
         # same session at once would present the same refresh token twice — which the server reads
         # as theft and answers by revoking the entire family, signing the user out of everything.
         # Within one process this collapses them into a single exchange; across processes, a shared
-        # store needs a lock of its own.
-        self._refresh_locks: Dict[str, threading.Lock] = {}
+        # store needs a lock of its own. Each entry is the lock and how many requests hold or wait
+        # for it. The guard covers that table, and the moment a session is written or destroyed.
+        self._refresh_locks: Dict[str, List[Any]] = {}
         self._refresh_guard = threading.Lock()
 
         http = {"timeout": 15.0}
@@ -373,7 +373,7 @@ class ArkFlask:
         if path == self.callback_path:
             return self._complete_login()
         if path == self.logout_path:
-            return self._end_session()
+            return self._serve_logout()
 
         self._attach_context()
         return None
@@ -425,6 +425,32 @@ class ArkFlask:
             return self._render_access_denied()
 
         return None
+
+    def _serve_logout(self):
+        """
+        Signs out from a link, a typed address or a form on this site, as it always has.
+
+        A request another site started is asked about first. Taken at its word it ended the session
+        here and, with the ``id_token_hint`` the redirect carries, the provider's session for every
+        other application too, because somebody followed a link.
+        """
+        from flask import Response, request
+
+        if is_cross_site(request.headers, self._origin()):
+            if request.method == "POST":
+                return Response("cross-site request rejected.", status=400, mimetype="text/plain")
+            html = ArkSignOutPage.build(
+                self.switch,
+                self.switch.app_display_name or self.config.client_id,
+                f"{request.script_root}{self.logout_path}",
+            )
+            response = Response(html, status=200, mimetype="text/html")
+            response.headers["Cache-Control"] = "no-store, no-cache"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Content-Security-Policy"] = ArkSignOutPage.CSP
+            response.headers["X-Frame-Options"] = "DENY"
+            return response
+        return self._end_session()
 
     # -- the three flows -----------------------------------------------
 
@@ -502,16 +528,17 @@ class ArkFlask:
         # The last point before the session cookie is written. Refusing here rather than at the
         # first protected page is the whole difference: the browser never ends up holding a session
         # for an account that cannot use this application.
-        if self.switch.require_ark_claims or self.events.on_evaluate_access is not None:
-            if not ArkAccessGate.allowed(
-                self.switch, self.events, tokens.claims, ark_claims, tokens=tokens
-            ):
-                return self._deny(
-                    ArkAccessDeniedReasons.NO_APP_ACCESS,
-                    tokens.claims,
-                    ark_claims,
-                    local_or_default(transaction.return_to, self.switch.home_path),
-                )
+        if not self._allowed(tokens.claims, ark_claims, tokens):
+            if session is not None and session_id:
+                session["txs"].pop(state, None)
+                self._store_session(session_id, session)
+            self._revoke_quietly(tokens)
+            return self._deny(
+                ArkAccessDeniedReasons.NO_APP_ACCESS,
+                tokens.claims,
+                ark_claims,
+                local_or_default(transaction.return_to, self.switch.home_path),
+            )
 
         # A fresh session id at the moment privileges change, so a session id an attacker planted
         # before sign-in is not the one that ends up authenticated (session fixation).
@@ -522,12 +549,17 @@ class ArkFlask:
         carried = _prune_transactions(dict((session or {}).get("txs") or {}))
         carried.pop(state, None)
         if session_id:
-            self.store.destroy(session_id)
+            self._destroy_session(session_id)
 
         user: Dict[str, Any] = dict(tokens.claims or {})
         if self.fetch_user_info and tokens.access_token and tokens.has_scope("openid"):
             try:
-                user.update(self.client.user_info(tokens.access_token))
+                info = self.client.user_info(tokens.access_token)
+                # OIDC Core §5.3.2: claims about anybody but the ID token's subject are not used.
+                if info.get("sub") == tokens.subject:
+                    user.update(info)
+                else:
+                    _log.warning("userinfo answered for another subject; its claims were not used")
             except Exception as error:
                 # UserInfo is supplementary; the ID token already carries what the scopes unlocked.
                 _log.debug("userinfo lookup failed; continuing with the ID token's claims: %s", error)
@@ -550,18 +582,7 @@ class ArkFlask:
 
         session_id, session = self._load_session()
         tokens = TokenSet.from_dict((session or {}).get("tokens"))
-
-        if tokens and tokens.refresh_token:
-            try:
-                # Ending the local session leaves the refresh token live at the provider until it
-                # expires; revoking takes down its whole family, which is what "sign out" is
-                # expected to mean.
-                # token_type_hint names the kind of token (RFC 7009), it is not a credential.
-                self.client.revoke(tokens.refresh_token, token_type_hint="refresh_token")  # nosec B106
-            except Exception as error:
-                # Best effort: a provider that is down must not prevent a local sign-out. Logged,
-                # because the refresh token then stays live at the provider until it expires.
-                _log.warning("refresh token revocation at sign-out failed: %s", error)
+        self._revoke_quietly(tokens)
 
         target = local_or_default(return_to, self.config.signed_out_redirect_uri) or self.default_return_to
         try:
@@ -599,9 +620,10 @@ class ArkFlask:
         # Dropped before the challenge is built, not after: _start_login stores the new login
         # transaction in the session, so destroying the old session afterwards would take the
         # transaction with it and the callback would have nothing to match against.
-        session_id, _ = self._load_session()
+        session_id, session = self._load_session()
+        self._revoke_quietly(TokenSet.from_dict((session or {}).get("tokens")))
         if session_id:
-            self.store.destroy(session_id)
+            self._destroy_session(session_id)
 
         properties = ArkChallengeProperties.switch_user(target, login_hint, self.switch.prompt)
         response = self._start_login(
@@ -626,7 +648,8 @@ class ArkFlask:
         """Ends this application's session only, leaving the provider session intact."""
         from flask import redirect
 
-        session_id, _ = self._load_session()
+        session_id, session = self._load_session()
+        self._revoke_quietly(TokenSet.from_dict((session or {}).get("tokens")))
         response = redirect(local_or_default(return_url, self.switch.home_path))
         self._drop_session(response, session_id)
         ArkAccessDeniedState.clear(response)
@@ -801,6 +824,19 @@ class ArkFlask:
         data = self.store.get(session_id)
         return (session_id, data) if data else (None, None)
 
+    def _store_session(self, session_id: str, data: Dict[str, Any]) -> int:
+        """
+        Writes a session and returns how long it is kept.
+
+        One that holds nothing but sign-ins still under way is kept for as long as a sign-in may
+        take. Kept for a signed-in session's eight hours, every visit to the login page by a caller
+        that keeps no cookie was another entry in the store until the evening.
+        """
+        data["updated_at"] = int(time.time())
+        ttl = self.session_ttl_seconds if data.get("tokens") else TRANSACTION_TTL_SECONDS
+        self.store.set(session_id, data, ttl)
+        return ttl
+
     def _save_session(
         self,
         response: Any,
@@ -810,13 +846,14 @@ class ArkFlask:
         replace_cookie: bool = False,
     ) -> str:
         new_id = session_id or create_session_id()
-        data["updated_at"] = int(time.time())
-        self.store.set(new_id, data, self.session_ttl_seconds)
-        if session_id is None or replace_cookie:
+        ttl = self._store_session(new_id, data)
+        # A sign-in under way moves its cookie along with it: a second one, started in another tab,
+        # has its own ten minutes.
+        if session_id is None or replace_cookie or not data.get("tokens"):
             response.set_cookie(
                 self.cookie_name,
                 sign_session_id(new_id, self._secret),
-                max_age=self.session_ttl_seconds,
+                max_age=ttl,
                 httponly=True,
                 secure=bool(self.cookie_secure),
                 samesite=self.cookie_samesite,
@@ -829,11 +866,44 @@ class ArkFlask:
         self, response: Any, session_id: Optional[str], *, keep_new_cookie: bool = False
     ) -> None:
         if session_id:
-            self.store.destroy(session_id)
+            self._destroy_session(session_id)
         if not keep_new_cookie:
             response.delete_cookie(
                 self.cookie_name, domain=self.cookie_domain, path="/", samesite=self.cookie_samesite
             )
+
+    def _destroy_session(self, session_id: str) -> None:
+        # Under the guard, so that a refresh coming back at this very moment either wrote before
+        # and is destroyed here, or finds the session gone and does not write it back to life.
+        with self._refresh_guard:
+            self.store.destroy(session_id)
+
+    def _revoke_quietly(self, tokens: Optional[TokenSet]) -> None:
+        """
+        Revokes a session's refresh token at the provider. Without it, a session ended here leaves a
+        live refresh token behind until it expires; revoking takes its whole rotation family down,
+        which is what "sign out" is expected to mean.
+        """
+        if not tokens or not tokens.refresh_token:
+            return
+        try:
+            # token_type_hint names the kind of token (RFC 7009), it is not a credential.
+            self.client.revoke(tokens.refresh_token, token_type_hint="refresh_token")  # nosec B106
+        except Exception as error:
+            # Best effort: a provider that is down must not prevent a local sign-out. Logged,
+            # because the refresh token then stays live at the provider until it expires.
+            _log.warning("refresh token revocation at sign-out failed: %s", error)
+
+    def _allowed(
+        self,
+        claims: Optional[Mapping[str, Any]],
+        ark_claims: Sequence[str],
+        tokens: TokenSet,
+    ) -> bool:
+        """Whether the account these tokens are for may use this application."""
+        if not self.switch.require_ark_claims and self.events.on_evaluate_access is None:
+            return True
+        return ArkAccessGate.allowed(self.switch, self.events, claims, ark_claims, tokens=tokens)
 
     def _attach_context(self) -> None:
         from flask import g
@@ -858,42 +928,94 @@ class ArkFlask:
         if tokens is None or not tokens.expired(self.refresh_leeway_seconds) or not tokens.refresh_token:
             return tokens
 
+        # Held until the answer is in the store, by everybody who asked. Given up any earlier, the
+        # next request loads the tokens this one has just spent and presents them again.
         with self._refresh_guard:
-            lock = self._refresh_locks.setdefault(session_id, threading.Lock())
-
-        with lock:
-            # Another thread may have refreshed while this one waited, so the freshest answer is
-            # whatever is in the store now -- not the copy this request loaded a moment ago.
-            stored = self.store.get(session_id) or {}
-            current = TokenSet.from_dict(stored.get("tokens"))
-            if current and not current.expired(self.refresh_leeway_seconds):
-                session["tokens"] = current.to_dict()
-                return current
-
-            try:
-                refreshed = self.client.refresh(tokens.refresh_token)
-            except ArkOAuthError as error:
-                # invalid_grant means the refresh token is spent, revoked, or its session ended at
-                # the provider. There is nothing to retry: the user has to sign in again.
-                if error.error == "invalid_grant":
-                    self.store.destroy(session_id)
-                    self._drop_cookie_after_request()
-                    return None
-                # A transient failure must not sign the user out; the next request retries.
-                return tokens
-            except Exception:
-                return tokens
-            finally:
-                with self._refresh_guard:
+            entry = self._refresh_locks.setdefault(session_id, [threading.Lock(), 0])
+            entry[1] += 1
+        try:
+            with entry[0]:
+                return self._refresh_session(session_id, session, tokens)
+        finally:
+            with self._refresh_guard:
+                entry[1] -= 1
+                if entry[1] == 0:
                     self._refresh_locks.pop(session_id, None)
 
-            session["tokens"] = refreshed.to_dict()
-            # The ID token is reissued on refresh; keep the identity in step with it.
-            if refreshed.claims:
-                session["user"] = {**(session.get("user") or {}), **refreshed.claims}
-            session["ark_claims"] = refreshed.ark_claims()
-            self.store.set(session_id, session, self.session_ttl_seconds)
-            return refreshed
+    def _refresh_session(
+        self, session_id: str, session: Dict[str, Any], tokens: TokenSet
+    ) -> Optional[TokenSet]:
+        """Runs one refresh. The answer is new tokens, the old ones, or ``None``: signed out."""
+        # The store is the source of truth: another request may have refreshed while this one
+        # waited, or signed out, and the copy loaded a moment ago knows of neither.
+        stored = self.store.get(session_id)
+        if stored is None:
+            return self._signed_out(session_id)
+        current = TokenSet.from_dict(stored.get("tokens")) or tokens
+        if not current.expired(self.refresh_leeway_seconds) or not current.refresh_token:
+            session.update(stored)
+            return current
+
+        try:
+            refreshed = self.client.refresh(current.refresh_token, subject=stored.get("sub"))
+        except ArkOAuthError as error:
+            # invalid_grant means the refresh token is spent, revoked, or its session ended at
+            # the provider. There is nothing to retry: the user has to sign in again.
+            if error.error == "invalid_grant":
+                return self._signed_out(session_id)
+            # A transient failure must not sign the user out; the next request retries.
+            return current
+        except ArkTokenError as error:
+            # The provider answered and the answer cannot be trusted, which no retry changes.
+            _log.warning("a refreshed token set was refused; the session was ended: %s", error)
+            self._revoke_quietly(current)
+            return self._signed_out(session_id)
+        except Exception:
+            return current
+
+        user = stored.get("user")
+        # The ID token is reissued on refresh; keep the identity in step with it.
+        if refreshed.claims:
+            user = {**(user or {}), **refreshed.claims}
+        # Not reissued by every provider; the last one still serves as id_token_hint at sign-out.
+        refreshed.id_token = refreshed.id_token or current.id_token
+        ark_claims = refreshed.ark_claims()
+
+        # Asked again with the claims just issued. Asked only at the callback, an account that lost
+        # its access kept the session it already had for as long as it could be refreshed.
+        try:
+            allowed = self._allowed(refreshed.claims or user, ark_claims, refreshed)
+        except Exception as error:
+            # An entitlement rule that cannot answer has not said yes. The sign-in that follows
+            # asks it again, where the failure is seen.
+            _log.warning("the access check failed on refresh; the session was ended: %s", error)
+            allowed = False
+        if not allowed:
+            self._revoke_quietly(refreshed)
+            return self._signed_out(session_id)
+
+        refreshed.claims = refreshed.claims or current.claims
+        with self._refresh_guard:
+            # Signed out while the provider was answering: writing now would undo it.
+            latest = self.store.get(session_id)
+            if latest is not None:
+                fresh = {
+                    **latest,
+                    "tokens": refreshed.to_dict(),
+                    "user": user,
+                    "ark_claims": ark_claims,
+                }
+                self._store_session(session_id, fresh)
+        if latest is None:
+            self._revoke_quietly(refreshed)
+            return self._signed_out(session_id)
+        session.update(fresh)
+        return refreshed
+
+    def _signed_out(self, session_id: str) -> None:
+        """The session is over: gone from the store, and its cookie cleared with the response."""
+        self._destroy_session(session_id)
+        self._drop_cookie_after_request()
 
     # -- helpers -------------------------------------------------------
 
@@ -907,6 +1029,20 @@ class ArkFlask:
                 # An origin used to build redirect URLs, never a response body.
                 return f"{proto}://{host}{request.script_root}"  # nosemgrep: python.flask.security.audit.directly-returned-format-string.directly-returned-format-string
         return f"{request.scheme}://{request.host}{request.script_root}"
+
+    def _client_ip(self) -> Optional[str]:
+        """
+        The caller's address. Behind a proxy that is the last entry of ``X-Forwarded-For``, the one
+        the proxy wrote itself; whatever stands before it arrived with the request and is what the
+        caller typed. With ``trust_proxy`` off the header is not read at all.
+        """
+        from flask import request
+
+        if self.trust_proxy:
+            forwarded = (request.headers.get("X-Forwarded-For") or "").split(",")[-1].strip()
+            if forwarded:
+                return forwarded
+        return request.remote_addr or None
 
     def _absolute(self, path: str) -> str:
         return f"{self._origin()}{path}" if path.startswith("/") else path
@@ -960,7 +1096,8 @@ class ArkBearer:
         # An agent (A2A) accepts only tokens addressed to it: the audience is its own client_id.
         self.audience = audience or (self.client.config.client_id if agent else None)
         self.optional = optional
-        self.require_type_header = require_type_header
+        # Always on for an agent: its own ID tokens and logout tokens carry its audience too.
+        self.require_type_header = require_type_header or agent
 
     def protect(self, app: Any, prefix: str = "") -> "ArkBearer":
         """Protects every path under ``prefix``, in the manner of ``app.use('/api', bearer)``."""
@@ -1312,13 +1449,24 @@ def _prune_transactions(transactions: Dict[str, Any]) -> Dict[str, Any]:
     return dict(live[:MAX_CONCURRENT_TRANSACTIONS])
 
 
+def _header_text(value: Any) -> str:
+    """
+    Makes text safe for a quoted-string in a header. A token's ``kid`` reaches error messages, and a
+    CR or LF in one made the header refuse to be written: a 500, where the answer is a 401.
+    """
+    return "".join(
+        "?" if not " " <= char <= "~" else "'" if char in '"\\' else char for char in str(value)
+    )[:200]
+
+
 def _challenge(status: int, error: str, description: str):
     from flask import jsonify
 
-    response = jsonify({"error": error, "error_description": description})
+    text = _header_text(description)
+    response = jsonify({"error": error, "error_description": text})
     response.status_code = status
     response.headers["WWW-Authenticate"] = (
-        f'Bearer realm="ark", error="{error}", error_description="{description.replace(chr(34), chr(39))}"'
+        f'Bearer realm="ark", error="{error}", error_description="{text}"'
     )
     return response
 

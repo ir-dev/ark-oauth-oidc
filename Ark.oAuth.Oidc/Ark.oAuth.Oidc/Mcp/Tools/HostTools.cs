@@ -18,8 +18,12 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
 
         static readonly Regex TenantId = new("^[A-Za-z0-9][A-Za-z0-9_-]{1,62}$", RegexOptions.CultureInvariant);
 
-        /// <summary>First path segments this server uses itself: a tenant of that name would be unreachable.</summary>
-        static readonly string[] Reserved = { "ark-idp", "ark-admin", "api", "oauth", "admin", "signin-oidc", "signout-callback-oidc" };
+        /// <summary>
+        /// First path segments this server uses itself: a tenant of that name would be unreachable.
+        /// The last three are what the audit trail calls the server's own doings. A tenant that has
+        /// one of them already goes on working; a new one is not made.
+        /// </summary>
+        static readonly string[] Reserved = { "ark-idp", "ark-admin", "api", "oauth", "admin", "signin-oidc", "signout-callback-oidc", "host", "mcp", "v1" };
 
         static bool HasWebhooks(ArkMcpCall call) => call.Services.GetService(typeof(ArkWebhookRegistry)) != null;
 
@@ -239,7 +243,7 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
             if (!TenantId.IsMatch(id))
                 throw new ArkMcpToolException("invalid_tenant", "tenant_id: 2-63 letters, digits, '_' or '-', starting with a letter or digit.");
             if (Reserved.Contains(id, StringComparer.OrdinalIgnoreCase))
-                throw new ArkMcpToolException("reserved_tenant", $"'{id}' is a path of the server itself. Choose another id.");
+                throw new ArkMcpToolException("reserved_tenant", $"'{id}' is a name the server uses itself. Choose another id.");
             if (await ArkLookup.TenantAsync(call.Db, id) != null)
                 throw new ArkMcpToolException("tenant_exists", $"tenant '{id}' already exists.");
 

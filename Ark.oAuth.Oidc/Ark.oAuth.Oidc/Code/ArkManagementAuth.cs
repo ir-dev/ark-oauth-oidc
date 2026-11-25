@@ -117,9 +117,14 @@ namespace Ark.oAuth.Oidc
             // gave it another (authorization_code, device) would otherwise make every user mapped
             // to it an operator.
             if (string.Equals(clientId, machine, StringComparison.Ordinal))
-                return string.Equals(identity.FindFirst("sub")?.Value, machine, StringComparison.Ordinal)
+            {
+                if (!string.Equals(identity.FindFirst("sub")?.Value, machine, StringComparison.Ordinal))
+                    return $"the token issued to '{machine}' was not issued to the client itself (client_credentials)";
+                // As it is now, not as it was when the token was made.
+                return await Protocol.ArkLookup.ClientAsync(da.GetCtx(), tenantId, machine) is { is_active: true }
                     ? null
-                    : $"the token issued to '{machine}' was not issued to the client itself (client_credentials)";
+                    : $"'{machine}' has been deactivated or removed";
+            }
 
             var deviceClients = config.Management?.OperatorDeviceClients ?? new List<string>();
             if (!string.IsNullOrWhiteSpace(clientId)
@@ -130,18 +135,20 @@ namespace Ark.oAuth.Oidc
                 // without the operator approving anything on this server.
                 var client = await da.GetClient(tenantId, clientId);
                 var grants = client?.EffectiveGrantTypes ?? new List<string>();
-                var deviceOnly = client != null
+                var deviceOnly = client is { is_active: true }
                     && string.Equals(client.token_endpoint_auth_method, "none", StringComparison.OrdinalIgnoreCase)
                     && grants.Contains(DeviceCodeGrant)
                     && grants.All(g => g == DeviceCodeGrant || g == "refresh_token")
                     && client.EffectiveRedirectUris.Count == 0;
                 if (!deviceOnly)
-                    return $"'{clientId}' is listed in Management:OperatorDeviceClients but is not registered as a " +
+                    return $"'{clientId}' is listed in Management:OperatorDeviceClients but is not registered as an active " +
                            "public client with only the device_code grant and no redirect URIs";
 
+                var approver = identity.FindFirst("sub")?.Value;
                 if (!ArkOperator.IsOperator(new ClaimsPrincipal(identity), config))
-                    return $"the device code for '{clientId}' was approved by " +
-                           $"'{identity.FindFirst("sub")?.Value}', who is not the operator";
+                    return $"the device code for '{clientId}' was approved by '{approver}', who is not the operator";
+                if (await Protocol.ArkLookup.UserAsync(da.GetCtx(), approver) is not { is_active: true })
+                    return $"the account '{approver}' that approved the device code has been deactivated";
                 return null;
             }
 
@@ -162,17 +169,23 @@ namespace Ark.oAuth.Oidc
     internal sealed class ArkOperatorHandler : AuthorizationHandler<ArkOperatorRequirement>
     {
         private readonly ArkUtil _util;
+        private readonly IHttpContextAccessor _http;
 
-        public ArkOperatorHandler(ArkUtil util) => _util = util;
+        public ArkOperatorHandler(ArkUtil util, IHttpContextAccessor http)
+        {
+            _util = util;
+            _http = http;
+        }
 
-        protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, ArkOperatorRequirement requirement)
+        protected override async Task HandleRequirementAsync(AuthorizationHandlerContext context, ArkOperatorRequirement requirement)
         {
             var bearer = context.User.Identities.Any(i =>
                 i.IsAuthenticated && i.AuthenticationType == ArkManagementAuth.BearerScheme);
 
-            if (bearer || ArkOperator.IsOperator(context.User, _util.ServerConfig))
+            // Endpoint routing hands the request over as the resource.
+            var http = context.Resource as HttpContext ?? _http.HttpContext;
+            if (bearer || (http != null && await ArkOperator.IsOperatorNowAsync(http, context.User, _util.ServerConfig)))
                 context.Succeed(requirement);
-            return Task.CompletedTask;
         }
     }
 
@@ -241,7 +254,8 @@ namespace Ark.oAuth.Oidc
         protected override Task HandleForbiddenAsync(AuthenticationProperties properties) =>
             WriteAsync(StatusCodes.Status403Forbidden, "forbidden",
                 "the management API is restricted to the administrator account. Another console user needs the " +
-                "'admin' claim on their mapping to the console client.");
+                "'admin' claim on their mapping to the console client. If this session had that authority until now, it " +
+                "has been ended or the claim taken away: sign out and in again.");
 
         private Task WriteAsync(int status, string code, string msg)
         {

@@ -212,6 +212,7 @@ namespace Ark.oAuth.Oidc
                 throw new ArkProvisionException("invalid_request", "client_name is required.");
             if (string.IsNullOrWhiteSpace(userName))
                 throw new ArkProvisionException("invalid_request", "user_name is required.");
+            RequireClaimKeys(req.claims);
 
             var tenantId = string.IsNullOrWhiteSpace(req.tenant_id)
                 ? _util.ServerConfig.TenantId
@@ -338,6 +339,7 @@ namespace Ark.oAuth.Oidc
                 throw new ArkProvisionException("invalid_request", "client_id is required.");
             if (string.IsNullOrWhiteSpace(userName))
                 throw new ArkProvisionException("invalid_request", "user_name is required.");
+            RequireClaimKeys(req.claims);
             // checked here rather than left to UpsertUser, which would refuse only after an
             // existing-user lookup and report it as a server fault
             if (!DataAccess.IsValidLoginId(userName))
@@ -431,6 +433,13 @@ namespace Ark.oAuth.Oidc
                 mapping_created = existingMapping == null,
                 claims = merged
             };
+        }
+
+        /// <summary>Before anything is written: the save refuses the key as well, but by then there is a client or an account.</summary>
+        static void RequireClaimKeys(List<string>? claims)
+        {
+            foreach (var claim in Clean(claims))
+                if (ArkText.ClaimKeyProblem(claim) is { } problem) throw new ArkProvisionException("invalid_claim", problem);
         }
 
         static List<string> Clean(List<string>? values) =>

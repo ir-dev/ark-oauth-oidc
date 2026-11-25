@@ -47,9 +47,15 @@ namespace Ark.oAuth.Oidc.Mcp
         public const string TenantAdmin = "ark.tenant.admin";
         /// <summary>Administrator of the application the mapping is to.</summary>
         public const string ClientAdmin = "ark.client.admin";
+        /// <summary>
+        /// Older than the prefix, and authority over the tenant all the same: dynamic registration takes
+        /// a token that carries it as leave to register applications there.
+        /// </summary>
+        public const string ServiceRole = "service_role";
 
         public static bool IsReserved(string? claim) =>
-            (claim ?? "").Trim().StartsWith(Prefix, StringComparison.OrdinalIgnoreCase);
+            (claim ?? "").Trim() is var name
+            && (name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase) || name.Equals(ServiceRole, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>What an MCP resource identifier names, before it is looked up.</summary>

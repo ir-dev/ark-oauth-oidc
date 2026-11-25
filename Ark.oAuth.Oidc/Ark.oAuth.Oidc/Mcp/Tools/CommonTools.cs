@@ -256,7 +256,8 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
             (client ? new ArkMcpParams().Text("client_id", "The application.", required: true, maxLength: 500) : new ArkMcpParams())
             .Text("username", "Who.", required: true, maxLength: 200)
             .List("claims", "What they may do there, as the application's own claims (for example billing.admin). " +
-                            $"{ArkMcpClaims.ClientAdmin} makes them its administrator over MCP, {ArkMcpClaims.TenantAdmin} the tenant's.");
+                            $"{ArkMcpClaims.ClientAdmin} makes them its administrator over MCP, {ArkMcpClaims.TenantAdmin} the tenant's.")
+            .Text("confirm", "Asked for when another tenant manages the account, or when an account that exists is made an administrator. The answer says what to put here.", maxLength: 200);
 
         /// <summary>Who may use an application: at the tenant level any of its applications, at an application its own.</summary>
         public static List<ArkMcpTool> Access(ArkMcpRole role, bool client) => new()
@@ -272,8 +273,8 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                     if (ArkMcpOps.IsSystem(app) && !call.Caller.Operator)
                         throw new ArkMcpToolException("system_client", "access to the server's own clients is the operator's to give.");
                     var (user, _, _, _) = await ArkMcpOps.PersonAsync(call, call.Args.Required("username"), null, null, null, create: false);
-                    var (created, claims) = await ArkMcpOps.GrantAsync(call, user, app, call.Args.List("claims") ?? new(), replace: false);
-                    return new { username = user.email, client_id = app.client_id, access = created ? "granted" : "extended", claims };
+                    var (created, claims) = await ArkMcpOps.GrantAsync(call, user, app, call.Args.List("claims") ?? new(), replace: false, confirm: call.Args.Text("confirm"));
+                    return new { username = user.email, managed_by = ArkMcpOps.ManagedBy(user), client_id = app.client_id, access = created ? "granted" : "extended", claims };
                 }
             },
             new ArkMcpTool
@@ -289,8 +290,8 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                     var user = await ArkMcpOps.VisibleUserAsync(call, call.Args.Required("username"));
                     if (await ArkLookup.MappingAsync(call.Db, user.email, app.tenant_id, app.id) == null)
                         throw new ArkMcpToolException("no_access", $"'{user.email}' has no access to '{app.client_id}' yet; give it with access_grant.");
-                    var (_, claims) = await ArkMcpOps.GrantAsync(call, user, app, call.Args.List("claims") ?? new(), replace: true);
-                    return new { username = user.email, client_id = app.client_id, claims };
+                    var (_, claims) = await ArkMcpOps.GrantAsync(call, user, app, call.Args.List("claims") ?? new(), replace: true, confirm: call.Args.Text("confirm"));
+                    return new { username = user.email, managed_by = ArkMcpOps.ManagedBy(user), client_id = app.client_id, claims };
                 }
             },
             new ArkMcpTool
@@ -326,10 +327,10 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                     ArkMcpOps.CheckClaims(call, claims); // before an account is made for nothing
                     var (user, created, credential, link) = await ArkMcpOps.PersonAsync(call, call.Args.Required("username"),
                         call.Args.Text("name"), call.Args.Text("credential"), call.Args.Text("password"), create: true);
-                    var granted = await ArkMcpOps.GrantAsync(call, user, app, claims, replace: false);
+                    var granted = await ArkMcpOps.GrantAsync(call, user, app, claims, replace: false, made: created, confirm: call.Args.Text("confirm"));
                     return new
                     {
-                        username = user.email, account = created ? "created" : "already existed", credential, password_link = link,
+                        username = user.email, account = created ? "created" : "already existed", managed_by = ArkMcpOps.ManagedBy(user), credential, password_link = link,
                         client_id = app.client_id, access = granted.Created ? "granted" : "extended", claims = granted.Claims,
                         note = link == null ? null : $"Hand this link to them over a private channel: it sets their password, once, within {call.Config.PasswordLinkLifetimeHours} hours."
                     };

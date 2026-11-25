@@ -59,7 +59,8 @@ class ArkAccountSwitchOptions:
     #: (the default, so an upgrade changes no behaviour) the wrong account is signed in and every
     #: protected page answers 403. Turned on, the callback is stopped before the cookie is written
     #: — the wrong person never gets a session here at all — and the user is sent to
-    #: :attr:`access_denied_path` where they can switch accounts.
+    #: :attr:`access_denied_path` where they can switch accounts. It is asked again with each token
+    #: refresh, so an account that loses its access loses its session too.
     require_ark_claims: bool = False
 
     #: Narrow the check further: the user must carry at least one of these claim values. Empty
@@ -198,7 +199,8 @@ class ArkClientEvents:
     #: Decide entitlement yourself — a group claim, a licence lookup, a row in your own database.
     #: Return true to let the sign-in complete. Runs only when
     #: :attr:`ArkAccountSwitchOptions.require_ark_claims` is on, or when this handler is the only
-    #: rule there is.
+    #: rule there is. Asked at the callback and again each time the session's tokens are refreshed;
+    #: there, false — or an exception — ends the session.
     on_evaluate_access: Optional[Callable[[ArkAccessEvaluationContext], bool]] = None
 
     #: Called before the user is redirected to the access-denied page. Log it, raise a

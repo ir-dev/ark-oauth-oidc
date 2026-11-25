@@ -119,7 +119,7 @@ Only `authority` and `clientId` are required; `redirectUri` too for interactive 
 | `redirectUri` | — | Absolute, no fragment, `https` unless loopback. The server matches it **exactly** |
 | `postLogoutRedirectUri` | — | Must also be registered |
 | `scopes` | `openid profile email offline_access` | `offline_access` is what earns a refresh token |
-| `audience` | `null` | Expected `aud` when verifying access tokens in an API |
+| `audience` | `null` | Expected `aud` when verifying access tokens in an API. `null`: the one the provider publishes for the tenant |
 | `usePar` | `false` | Push authorization parameters over the back channel |
 | `responseMode` | `query` | `query`, `fragment` or `form_post` |
 | `prompt`, `acrValues`, `extraAuthorizationParams` | — | Passed through to `/authorize` |
@@ -149,7 +149,7 @@ It claims these paths and passes everything else through:
 |---|---|
 | `loginPath` (`/login`) | Starts a sign-in. `?returnTo=/somewhere` comes back to that page — same-origin paths only |
 | `callbackPath` (path of `redirectUri`, else `/signin-oidc`) | Completes it. **Never add a route of your own here** |
-| `logoutPath` (`/logout`) | Revokes the refresh token, destroys the session, clears the cookie, then redirects to the provider's `end_session_endpoint` |
+| `logoutPath` (`/logout`) | Revokes the refresh token, destroys the session, clears the cookie, then redirects to the provider's `end_session_endpoint`. A link from another site gets a page that asks first |
 | `/ark/no-access`, `/ark/switch-user`, `/ark/sign-out` | The access-denied page and its two POSTs — see [account switching](#account-switching-on-a-shared-browser) |
 
 ### `req.ark`
@@ -242,7 +242,8 @@ const auth = arkExpress({
 * **`requireArkClaims`** moves the entitlement check to the callback. An account the provider issued
   no `ark_claims` for is refused *before* the session is written — the browser never holds a session
   for somebody who cannot use the application — and its refresh token is revoked. `requiredClaims`
-  narrows it to particular values. **Set `requiredClaims` in practice:** the Ark server issues the
+  narrows it to particular values. It is asked again with each token refresh, so an account that loses
+  its access loses its session too. **Set `requiredClaims` in practice:** the Ark server issues the
   whole access-mapping list as `ark_claims`, identity names (`sub`, `email`, …) included, so a
   mapping with no authorization claim still satisfies "any `ark_claims`".
 * **`/ark/no-access`** names the account that is signed in and offers **Sign in as a different user**,
@@ -300,8 +301,7 @@ import { arkBearer } from 'ark-oauth-client-node';
 
 const bearer = arkBearer({
   authority: 'https://idp.example.com/my_idp',
-  clientId: 'my-api',
-  audience: 'my_idp_api'          // omit to skip the audience check
+  clientId: 'my-api'              // audience: '…' only to expect another one than the tenant's
 });
 
 app.use('/api', bearer);
@@ -311,6 +311,12 @@ app.get('/api/reports', bearer.require({ claims: ['reports.read'] }), handler);
 
 Verification is local, against the cached JWKS, so a request costs no round trip to the identity
 server. `optional: true` lets anonymous requests through with `req.ark.isAuthenticated === false`.
+
+The expected audience is the one the provider publishes for this tenant's access tokens
+(`ark_access_token_audience` in its metadata), so a token addressed to one agent or one MCP endpoint
+is refused. `audience` replaces it. Against a provider that publishes none the audience is not
+checked, but a token carrying `act` — one an agent holds on a user's behalf — is still refused. Every
+client of a tenant shares that audience: authorise on `claims`, never on "the token is valid".
 
 ---
 
@@ -516,9 +522,11 @@ browser clients redeeming their own codes.
   your identity server.
 - **`returnTo` accepts same-origin paths only**, so the login route cannot become an open redirect.
 - **Sign-out revokes the refresh token** before ending the local session; so do switching accounts
-  and a refused sign-in.
+  and a refused sign-in. `/logout` asks before it acts on a request another site started.
 - **A refresh is shared, and its result reaches every waiting request.** With rotation on, a request
-  left holding the retired refresh token would present it again and revoke the whole family.
+  left holding the retired refresh token would present it again and revoke the whole family. An
+  answer that arrives after the session ended is dropped and revoked.
+- **The access check is asked again with each refresh** (`requireArkClaims`, `onEvaluateAccess`).
 - **Bodies are bounded and parameters are strings.** A callback or account form over 64 KiB is
   refused; `state` is looked up as an own property only.
 - **Error text never reaches a header unescaped.** A forged token's `kid` cannot inject a header or

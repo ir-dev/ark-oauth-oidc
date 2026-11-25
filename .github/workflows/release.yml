@@ -296,15 +296,48 @@ jobs:
         with:
           cache-dependency-glob: ark_oauth_client_py/pyproject.toml
 
-      - name: Test
-        run: uv run --extra dev pytest -q
-
       - name: Build
         run: |
           rm -rf dist
           uv build
           ls -l dist
           [ -f "dist/ark_oauth_client-$VERSION-py3-none-any.whl" ] && [ -f "dist/ark_oauth_client-$VERSION.tar.gz" ]
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: python
+          path: ark_oauth_client_py/dist/
+          if-no-files-found: error
+
+  # Apart from build-python, because pytest, twine and what they bring are whatever PyPI serves that
+  # day: here they can fail the release, and cannot touch the files it publishes.
+  test-python:
+    needs: [prepare, build-python]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    defaults:
+      run:
+        working-directory: ark_oauth_client_py
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # As in build-python.
+      - name: Stamp the version
+        working-directory: .
+        run: scripts/version.sh stamp "$VERSION"
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          cache-dependency-glob: ark_oauth_client_py/pyproject.toml
+
+      - name: Test
+        run: uv run --extra dev pytest -q
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: python
+          path: ark_oauth_client_py/dist
 
       - name: README renders on PyPI
         run: uvx twine check dist/*
@@ -320,12 +353,6 @@ jobs:
           uv run --no-project --with "${wheel}[flask]" --with pytest -- pytest tests -q
           uv run --no-project --with "$wheel" -- python -c \
             "import ark_oauth_client as a, sys; sys.exit(0 if a.__version__ == '$VERSION' else 'wheel says ' + a.__version__)"
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: python
-          path: ark_oauth_client_py/dist/
-          if-no-files-found: error
 
   build-node:
     needs: prepare
@@ -444,7 +471,7 @@ jobs:
           if-no-files-found: error
 
   publish-nuget:
-    needs: [prepare, build-dotnet, build-python, build-node, build-js]
+    needs: [prepare, build-dotnet, build-python, test-python, build-node, build-js]
     if: ${{ !inputs.dry_run && needs.prepare.outputs.nuget_live == 'false' }}
     runs-on: ubuntu-latest
     environment: release
@@ -482,7 +509,7 @@ jobs:
           done
 
   publish-pypi:
-    needs: [prepare, build-dotnet, build-python, build-node, build-js]
+    needs: [prepare, build-dotnet, build-python, test-python, build-node, build-js]
     if: ${{ !inputs.dry_run && needs.prepare.outputs.pypi_live == 'false' }}
     runs-on: ubuntu-latest
     environment: release
@@ -504,7 +531,7 @@ jobs:
   # The two npm jobs below are the same steps for two separate packages: only `env` and the
   # artifact name differ. Each package has its own trusted publisher on npmjs.com (setup step d).
   publish-npm-node:
-    needs: [prepare, build-dotnet, build-python, build-node, build-js]
+    needs: [prepare, build-dotnet, build-python, test-python, build-node, build-js]
     if: ${{ !inputs.dry_run && needs.prepare.outputs.npm_node_live == 'false' }}
     runs-on: ubuntu-latest
     environment: release
@@ -538,7 +565,9 @@ jobs:
           fi
           [ "$code" = 200 ] || { echo "::error::registry.npmjs.org answered HTTP $code"; exit 1; }
 
-      # Trusted Publishing needs npm 11.5.1 or later; provenance is attached automatically. npm's
+      # Trusted Publishing needs npm 11.5.1 or later; provenance is attached automatically. The version
+      # is exact, here and below: what runs in this job can ask for the token that every registry
+      # accepts, so it is raised by hand and not by whoever moves npm's `latest`. npm's
       # own reason is raised as an annotation, because raw logs need auth to read. The tarball is
       # given as ./npm/...: a bare npm/x.tgz is read as the GitHub shorthand owner/repo, which
       # current npm refuses with EALLOWGIT. npm shows a version some minutes after accepting it (four,
@@ -548,7 +577,7 @@ jobs:
         id: publish
         run: |
           set -o pipefail
-          npm install -g npm@latest
+          npm install -g npm@11.9.0
           if ! npm publish ./npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
             if grep -qi 'cannot publish over the previously published version' "$RUNNER_TEMP/npm.log"; then
               for _ in $(seq 40); do
@@ -569,7 +598,7 @@ jobs:
           fi
 
   publish-npm-js:
-    needs: [prepare, build-dotnet, build-python, build-node, build-js]
+    needs: [prepare, build-dotnet, build-python, test-python, build-node, build-js]
     if: ${{ !inputs.dry_run && needs.prepare.outputs.npm_js_live == 'false' }}
     runs-on: ubuntu-latest
     environment: release
@@ -607,7 +636,7 @@ jobs:
         id: publish
         run: |
           set -o pipefail
-          npm install -g npm@latest
+          npm install -g npm@11.9.0
           if ! npm publish ./npm/*.tgz --access public 2>&1 | tee "$RUNNER_TEMP/npm.log"; then
             if grep -qi 'cannot publish over the previously published version' "$RUNNER_TEMP/npm.log"; then
               for _ in $(seq 40); do
@@ -628,7 +657,7 @@ jobs:
           fi
 
   release:
-    needs: [prepare, build-dotnet, build-python, build-node, build-js, publish-nuget, publish-pypi, publish-npm-node, publish-npm-js]
+    needs: [prepare, build-dotnet, build-python, test-python, build-node, build-js, publish-nuget, publish-pypi, publish-npm-node, publish-npm-js]
     # Skipped publish jobs (already live) are fine; a failed or cancelled one stops the release.
     if: ${{ !cancelled() && !failure() && !inputs.dry_run }}
     runs-on: ubuntu-latest

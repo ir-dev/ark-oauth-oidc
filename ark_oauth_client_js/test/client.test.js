@@ -516,6 +516,45 @@ describe('account switching on a shared browser', () => {
     assert.equal(state.status, 'authenticated');
   });
 
+  test('an account that loses its access is refused at the next refresh, with the way out', async () => {
+    const { client } = await tab.signIn('/billing', {}, { accountSwitch: { requireArkClaims: true } });
+    const denied = [];
+    client.on('accessDenied', (d) => denied.push(d));
+
+    idp.arkClaims = [];
+    await assert.rejects(client.refresh(), ArkLoginRequiredError);
+
+    const state = client.getSnapshot();
+    assert.equal(state.status, 'denied');
+    assert.equal(state.denial.email, 'alice@example.com');
+    assert.equal(state.denial.returnTo, '/billing');
+    assert.equal(denied.length, 1);
+    assert.equal(await client.getAccessToken(), null);
+    assert.equal(tab.sessionStorage.getItem(tokensKey(client)), null);
+    await until(() => idp.revocations.length === 1); // the refresh token that came with the refused answer
+  });
+
+  test('a rule that throws on refresh takes up no new access token, and is asked again', async () => {
+    let failing = false;
+    const onEvaluateAccess = () => {
+      if (failing) throw new Error('the licence service is down');
+      return true;
+    };
+    const { client } = await tab.signIn('/', {}, { onEvaluateAccess, automaticRefresh: false });
+    const before = JSON.parse(tab.sessionStorage.getItem(tokensKey(client)));
+
+    failing = true;
+    await assert.rejects(client.refresh(), /licence service/);
+    const held = JSON.parse(tab.sessionStorage.getItem(tokensKey(client)));
+    assert.equal(held.access_token, before.access_token);
+    assert.notEqual(held.refresh_token, before.refresh_token, 'the server rotated, so the new refresh token is kept');
+
+    failing = false;
+    await client.refresh();
+    assert.equal(client.getSnapshot().status, 'authenticated');
+    assert.equal(idp.familyRevocations, 0);
+  });
+
   test('endProviderSessionOnSwitch logs out at the provider, then signs in with prompt=login on return', async () => {
     const options = { accountSwitch: { endProviderSessionOnSwitch: true } };
     const { client } = await tab.signIn('/', {}, options);

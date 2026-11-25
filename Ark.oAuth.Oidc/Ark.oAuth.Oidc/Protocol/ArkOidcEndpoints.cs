@@ -45,6 +45,13 @@ namespace Ark.oAuth.Oidc.Protocol
         /// <summary>Refuse plain /authorize requests that did not arrive via PAR.</summary>
         public bool RequirePushedAuthorizationRequests { get; set; } = false;
 
+        /// <summary>
+        /// Let <c>/oauth/{tenant}/v1/token</c> redeem the codes of a client that has a secret. Off: that
+        /// endpoint authenticates no client, so there it would stand for nothing. On only while an
+        /// application registered with a secret is still on the v1 flow.
+        /// </summary>
+        public bool AllowConfidentialClientsAtV1Token { get; set; } = false;
+
         public int DeviceCodeLifetimeSeconds { get; set; } = 600;
         public int DevicePollIntervalSeconds { get; set; } = 5;
         public int ParLifetimeSeconds { get; set; } = 90;

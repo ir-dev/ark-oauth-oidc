@@ -32,13 +32,36 @@ namespace Ark.oAuth.Oidc.Mcp
 
         string PathName => Path.Combine(_directory, FileName);
 
-        /// <summary>Removes the file. Called when setup finishes, and safe when there is none.</summary>
-        public static void Delete(string directory)
+        bool _closed;
+
+        /// <summary>
+        /// Setup is finished: the file goes, what was held is forgotten, and nothing is stored again.
+        /// A call still under way at that moment used to write the whole draft back, passwords and
+        /// all, to a file nobody would look at any more.
+        /// </summary>
+        public void Close()
         {
-            try { File.Delete(Path.Combine(directory, FileName)); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            lock (_lock)
+            {
+                _closed = true;
+                _document = new JsonObject();
+                _held.Clear();
+                try { File.Delete(PathName); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
         }
+
+        void ThrowIfClosed()
+        {
+            if (_closed) throw new ArkMcpToolException("already_configured", "This server has been set up; there is nothing left to collect.");
+        }
+
+        /// <summary>
+        /// Several things read off the draft as it stands at one moment, so that they agree: the plan
+        /// and the review that names it, the review that was agreed and what is installed.
+        /// </summary>
+        public T Read<T>(Func<T> read) { lock (_lock) return read(); }
 
         JsonObject Document
         {
@@ -99,6 +122,7 @@ namespace Ark.oAuth.Oidc.Mcp
         {
             lock (_lock)
             {
+                ThrowIfClosed();
                 var sections = Part("sections");
                 if (sections[section] is not JsonObject target) sections[section] = target = new JsonObject();
                 foreach (var (field, value) in values)
@@ -131,6 +155,7 @@ namespace Ark.oAuth.Oidc.Mcp
         {
             lock (_lock)
             {
+                ThrowIfClosed();
                 Part("sections").Remove(section);
                 foreach (var key in Part("sources").Select(p => p.Key).Where(k => k.StartsWith(section + ".", StringComparison.Ordinal)).ToList())
                     Part("sources").Remove(key);
@@ -145,6 +170,7 @@ namespace Ark.oAuth.Oidc.Mcp
         {
             lock (_lock)
             {
+                ThrowIfClosed();
                 Part("tests")[section] = new JsonObject
                 {
                     ["ok"] = ok, ["message"] = message, ["at"] = DateTime.UtcNow.ToString("O"), ["of"] = Fingerprint(section)

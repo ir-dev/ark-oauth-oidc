@@ -198,6 +198,13 @@ namespace Ark.oAuth.Oidc.Webhooks
             {
                 return Fail(sw, null, ex.Message, retryable: false);
             }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Anything else is an attempt that failed, and counts as one. Left to the
+                // dispatcher it was handed back uncounted, so a receiver that could bring it about
+                // was called once a minute for ever, and never disabled for it.
+                return Fail(sw, null, $"could not be sent: {ex.GetBaseException().Message}", retryable: true);
+            }
         }
 
         private static ArkWebhookSendResult Fail(Stopwatch sw, int? status, string error, bool retryable)
@@ -368,7 +375,7 @@ namespace Ark.oAuth.Oidc.Webhooks
                     if (n == 0) break;
                     read += n;
                 }
-                return read == 0 ? null : Encoding.UTF8.GetString(buffer, 0, read);
+                return read == 0 ? null : ArkText.Storable(Encoding.UTF8.GetString(buffer, 0, read));
             }
             catch
             {

@@ -126,9 +126,11 @@ namespace Ark.oAuth.Oidc.Protocol
             ArkHashGate.Configure(options.MaxConcurrentPasswordHashes, options.MaxPasswordHashWaitSeconds);
             async Task<bool> AcceptsAsync(ArkClient? c)
             {
-                // The dummy hash, as at the token endpoint: an unknown client costs the same time.
-                var ok = await ArkSecretVerifier.VerifyAsync(secret, c?.client_secret_hash ?? DummyHash.Value, options.ClientSecretCacheSeconds);
-                return ok && c is { is_active: true }
+                // The dummy hash, as at the token endpoint: an unknown client, and one that has no
+                // secret, cost the same time. Neither is ever accepted on the strength of it.
+                var hasSecret = !string.IsNullOrEmpty(c?.client_secret_hash);
+                var ok = await ArkSecretVerifier.VerifyAsync(secret, hasSecret ? c!.client_secret_hash : DummyHash.Value, options.ClientSecretCacheSeconds);
+                return ok && hasSecret && c is { is_active: true }
                     && (c.client_secret_expires_at == null || c.client_secret_expires_at > DateTime.UtcNow)
                     && c.token_endpoint_auth_method is { } method
                     && (method.Equals("client_secret_basic", StringComparison.OrdinalIgnoreCase)
@@ -146,9 +148,16 @@ namespace Ark.oAuth.Oidc.Protocol
         private static async Task<OAuthException?> RefusalAsync(
             ArkClient? client, string? secret, string method, ArkOidcOptions options, bool viaHeader)
         {
-            // Verify against a dummy hash when the client is unknown so that a bad client_id and a
-            // bad secret cost the same amount of time and cannot be told apart by an attacker.
-            var stored = client?.client_secret_hash ?? DummyHash.Value;
+            // Verify against a dummy hash when there is nothing to verify against, so that a bad
+            // client_id and a bad secret cost the same amount of time and cannot be told apart by
+            // an attacker.
+            //
+            // What the dummy says is never an answer. A client that exists but has no secret yet
+            // (the seeded machine client, until somebody presses Regenerate secret) is refused
+            // whatever was presented: falling back to the dummy for it and then believing the
+            // result made the dummy's own plaintext that client's secret, on every deployment.
+            var hasSecret = !string.IsNullOrEmpty(client?.client_secret_hash);
+            var stored = hasSecret ? client!.client_secret_hash : DummyHash.Value;
             bool ok;
             try
             {
@@ -164,7 +173,7 @@ namespace Ark.oAuth.Oidc.Protocol
                     "the server is busy; retry the request shortly.", 503);
             }
 
-            if (client == null || !ok)
+            if (client == null || !hasSecret || !ok)
                 return OAuthException.InvalidClient("client authentication failed.", viaHeader);
             if (!client.is_active)
                 return OAuthException.InvalidClient("client is disabled.", viaHeader);
@@ -318,8 +327,11 @@ namespace Ark.oAuth.Oidc.Protocol
             return await ArkIdpCache.ClientAsync(_ctx, tenantId, clientId);
         }
 
-        /// <summary>A fixed valid-format hash used to keep unknown-client timing indistinguishable.</summary>
-        private static readonly Lazy<string> DummyHash = new(() => ArkCrypto.HashSecret("ark-oidc-dummy-secret"));
+        /// <summary>
+        /// A hash in the right format that nothing verifies against, to keep unknown-client timing
+        /// indistinguishable. Of a random value nobody has: never of a constant, which anyone can read.
+        /// </summary>
+        private static readonly Lazy<string> DummyHash = new(() => ArkCrypto.HashSecret(ArkCrypto.RandomToken(32)));
     }
 
     /// <summary>Redirect URI matching per OAuth 2.1 §4.1.3 and RFC 8252 §7.3.</summary>

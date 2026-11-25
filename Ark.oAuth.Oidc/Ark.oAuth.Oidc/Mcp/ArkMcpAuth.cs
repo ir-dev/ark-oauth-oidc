@@ -27,7 +27,8 @@ namespace Ark.oAuth.Oidc.Mcp
         /// <summary>How this endpoint is named in the audit trail.</summary>
         public string Reference => Level switch
         {
-            ArkMcpLevel.Host => "host/mcp",
+            // The slash in front keeps it from being read as the tenant endpoint of a tenant called that.
+            ArkMcpLevel.Host => ArkMcpResources.HostPath,
             ArkMcpLevel.Tenant => $"{Tenant!.tenant_id}/mcp",
             _ => $"{Tenant!.tenant_id}/mcp/{Client!.client_id}"
         };

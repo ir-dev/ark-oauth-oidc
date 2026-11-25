@@ -158,7 +158,7 @@ plain-http authority, `private_key_jwt` with no key, a `client_secret` alongside
 |---|---|
 | `/login` | Starts a sign-in. `?returnTo=/somewhere` comes back to that page — same-origin paths only |
 | `/signin-oidc` | Completes it |
-| `/logout` | Revokes the refresh token, destroys the session, clears the cookie, then redirects to the provider's `end_session_endpoint` |
+| `/logout` | Revokes the refresh token, destroys the session, clears the cookie, then redirects to the provider's `end_session_endpoint`. A link from another site gets a page that asks first |
 | `/ark/no-access` | The built-in access-denied page |
 | `/ark/switch-user` | POST: abandon this account and ask for the sign-in form |
 | `/ark/sign-out` | POST: end this application's session and the provider's |
@@ -213,7 +213,7 @@ on. A signed-in user missing a claim gets the access-denied page (403), never a 
 | `refresh_leeway_seconds` | `120` | Renew the access token this long before it expires |
 | `fetch_user_info` | `False` | Also call `/userinfo` at sign-in and merge it into `current_ark.user` |
 | `default_return_to` | `/` | |
-| `trust_proxy` | `True` | Honour `X-Forwarded-Proto` / `X-Forwarded-Host` when deriving this app's origin |
+| `trust_proxy` | `True` | Honour `X-Forwarded-Proto` / `X-Forwarded-Host` when deriving this app's origin, and the last `X-Forwarded-For` entry as the caller's address. Turn it off when nothing in front of the app sets them |
 | `service_token` | — | The `auth_service_tkn` for `AuthClientHelper` onboarding calls |
 
 ---
@@ -227,8 +227,7 @@ from ark_oauth_client.flask import add_ark_oidc_api
 app = Flask(__name__)
 bearer = add_ark_oidc_api(app, "/api",
     authority="https://idp.example.com/my_idp",
-    client_id="my-api",
-    audience="my_idp_api")          # omit to skip the audience check
+    client_id="my-api")             # audience="…" only to expect another one than the tenant's
 
 @app.get("/api/me")
 def me():
@@ -242,6 +241,12 @@ def reports():
 
 Verification is local, against the cached JWKS, so a request costs no round trip to the identity
 server. `optional=True` lets anonymous requests through with `g.ark.is_authenticated == False`.
+
+The expected audience is the one the provider publishes for this tenant's access tokens
+(`ark_access_token_audience` in its metadata), so a token addressed to one agent or one MCP endpoint
+is refused. `audience` replaces it. Against a provider that publishes none the audience is not
+checked, but a token carrying `act` — one an agent holds on a user's behalf — is still refused. Every
+client of a tenant shares that audience: authorise on `claims`, never on "the token is valid".
 
 ---
 
@@ -444,7 +449,10 @@ it is used with must be registered for that method. For a client registered any 
 `ArkOAuthClient.client_credentials`, which applies whichever method the client is configured for.
 
 `AuthClientHelper` wraps the provisioning API (`onboard_user`, `onboard_customer`), and treats
-"already exists in tenant" as success so an installer is safe to run twice.
+"already exists in tenant" as success so an installer is safe to run twice. `onboard_user` is the old
+onboarding route, which takes the new user's password in its query string: whatever logs request
+lines between here and the provider sees it. Prefer `POST /api/oauth/v1/provision/user`, with an
+activation link instead of a password.
 
 ---
 
@@ -565,11 +573,19 @@ parity but the legacy cookie/bearer middleware is not reimplemented — it never
 - **A POST is never redirected.** A GET of metadata or keys may follow a redirect; a POST carries a
   client secret or an authorization code and must not.
 - **`returnTo` accepts same-origin paths only**, so the login route cannot become an open redirect.
-- **The switch and sign-out endpoints require a same-origin POST**, so a cross-site page cannot end
-  a user's session.
+- **The switch and sign-out endpoints require a same-origin POST**, and `/logout` asks before it acts
+  on a request another site started, so a cross-site page cannot end a user's session.
 - **The denial cookie is encrypted and spent on first read**, so a stale one cannot name the wrong
   account on a later visit.
-- **Sign-out revokes the refresh token** before ending the local session.
+- **Sign-out revokes the refresh token** before ending the local session; so do switching accounts
+  and a refused sign-in.
+- **A refresh is shared, and never undoes a sign-out.** One request redeems the refresh token and the
+  rest wait for its answer; an answer that arrives after the session ended is dropped and revoked.
+- **The access check is asked again with each refresh** (`require_ark_claims`,
+  `on_evaluate_access`), so an account that loses its access loses its session too.
+- **A token is never forwarded to another origin.** A redirect from a GET is followed without it.
+- **Extra authorization parameters cannot replace** `state`, `nonce`, the PKCE challenge or the
+  redirect URI.
 
 ---
 

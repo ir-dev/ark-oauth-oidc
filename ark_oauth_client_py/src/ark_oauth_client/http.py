@@ -52,12 +52,30 @@ class _NoRedirectOnWrite(urllib.request.HTTPRedirectHandler):
     A GET of metadata or keys may follow a redirect — an http-to-https hop is common, and the
     issuer check on the document is what actually establishes trust. A POST may not: it carries a
     client secret or an authorization code, and a redirect would forward them somewhere else.
+
+    A GET that carries a token (UserInfo, a registration read) is followed without it once the
+    redirect leaves the origin it was meant for. ``fetch`` does that for the Node client; urllib
+    copies every header across.
     """
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
         if req.get_method() != "GET":
             return None
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is not None and _origin(redirected.full_url) != _origin(req.full_url):
+            redirected.remove_header("Authorization")
+        return redirected
+
+
+def _origin(url: str) -> Tuple[str, str, Optional[int]]:
+    parts = urllib.parse.urlsplit(url)
+    port = parts.port or {"http": 80, "https": 443}.get(parts.scheme)
+    return parts.scheme, (parts.hostname or "").lower(), port
+
+
+def _without_query(url: str) -> str:
+    """A URL as it may appear in an error or a log: its query string can carry a password."""
+    return url.split("?", 1)[0]
 
 
 _opener = urllib.request.build_opener(_NoRedirectOnWrite)
@@ -134,10 +152,11 @@ def request(
     except (urllib.error.URLError, socket.timeout, TimeoutError, OSError) as cause:
         reason = getattr(cause, "reason", cause)
         timed_out = isinstance(reason, (socket.timeout, TimeoutError)) or "timed out" in str(reason)
+        shown = _without_query(url)
         raise ArkNetworkError(
-            f"{method} {url} timed out after {timeout}s."
+            f"{method} {shown} timed out after {timeout}s."
             if timed_out
-            else f"{method} {url} failed: {reason}"
+            else f"{method} {shown} failed: {reason}"
         ) from cause
 
     content_type = ""
@@ -148,7 +167,7 @@ def request(
 
     parsed, text = _parse(raw, content_type)
     if not 200 <= status < 300:
-        raise ArkOAuthError.from_response(status, parsed, url)
+        raise ArkOAuthError.from_response(status, parsed, _without_query(url))
     return Response(status, response_headers or {}, parsed, text)
 
 
@@ -156,10 +175,11 @@ def get_json(url: str, **options: Any) -> Dict[str, Any]:
     """GET returning a JSON object."""
     response = request(url, method="GET", **options)
     if not isinstance(response.body, dict):
+        shown = _without_query(url)
         raise ArkOAuthError(
             "server_error",
-            f"{url} did not return a JSON object.",
-            endpoint=url,
+            f"{shown} did not return a JSON object.",
+            endpoint=shown,
             body=response.body,
         )
     return response.body

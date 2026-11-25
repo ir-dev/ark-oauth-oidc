@@ -13,6 +13,10 @@ namespace Ark.oAuth
     public class ArkAuthConfig
     {
         public string Issuer { get; set; }
+        /// <summary>
+        /// The <c>aud</c> an API expects (<c>AddArkOidcApi</c>). Left empty, it is the one the
+        /// provider publishes for this tenant's access tokens.
+        /// </summary>
         public string Audience { get; set; }
         public string RsaPublic { get; set; }
         public string LogoutUri { get; set; }
@@ -61,10 +65,10 @@ namespace Ark.oAuth
         /// <summary>
         /// API bearer validation (<c>AddArkOidcApi</c>) accepts only tokens whose header declares
         /// <c>typ: at+jwt</c> (RFC 9068) — what Ark puts on every access token. Without it an ID
-        /// token, which any SPA holds and whose audience the API does not check unless
-        /// <see cref="Audience"/> is set, passed as an access token. Same default as the Node
+        /// token, which any SPA holds, could pass as an access token. Same default as the Node
         /// (<c>requireTypeHeader</c>) and Python (<c>require_type_header</c>) ports; turn it off only
-        /// for a provider that does not type its access tokens.
+        /// for a provider that does not type its access tokens. An agent's API
+        /// (<c>AddArkAgentApi</c>) requires the type either way.
         /// </summary>
         public bool RequireAccessTokenTypeHeader { get; set; } = true;
 
@@ -146,9 +150,16 @@ namespace Ark.oAuth
                 SameSite = SameSiteMode.None
             });
         }
+        /// <summary>
+        /// The v1 flow's claims cookie. Under the standard flow nothing writes it, so whatever it
+        /// holds came from the browser and is not read (see <see cref="ArkAuthContext"/>); the
+        /// identity there is the authenticated principal.
+        /// </summary>
         public static dynamic ArkUser(this HttpRequest request, string client_id)
         {
-            return System.Text.Json.JsonSerializer.Deserialize<dynamic>(request.Cookies[$"ark_oauth_ui_claims_{client_id}"] ?? "{}");
+            var legacy = request.HttpContext.RequestServices?.GetService<ArkAuthConfig>()?.UseLegacyFlow == true;
+            var cookie = legacy ? request.Cookies[$"ark_oauth_ui_claims_{client_id}"] : null;
+            return System.Text.Json.JsonSerializer.Deserialize<dynamic>(cookie ?? "{}");
         }
         public static string? ReadRoute(this HttpRequest request, string key)
         {
@@ -217,7 +228,7 @@ namespace Ark.oAuth
                 services.AddTransient<IStartupFilter, ArkAccountStartupFilter>();
 
             services.AddHttpContextAccessor();
-            services.AddHttpClient("ark-oidc-client", c => c.Timeout = TimeSpan.FromSeconds(15));
+            services.AddArkHttpClient();
             services.AddSingleton<ArkAuthConfig>(t => ccc);
             services.AddSingleton<AuthClientHelper>();
             services.AddScoped<ArkAuthContext>();

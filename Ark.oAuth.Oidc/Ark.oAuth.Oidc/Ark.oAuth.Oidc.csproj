@@ -56,7 +56,17 @@
 		<PackageReleaseNotes>
 Next release — the identity server is an MCP server. On by default; nothing answers without a credential.
 
-Sign-in, discovery, tokens, pages, the management API and existing configuration are as in 2.4.2.
+Apart from the security changes, sign-in, discovery, tokens, pages, the management API and existing
+configuration are as in 2.4.2.
+* **Security: upgrade promptly.** A confidential client whose secret was never set, above all the seeded
+  {tenant}_machine client, could be authenticated as; every release since 2.0 is affected. It is now always
+  refused. On a server not yet upgraded, press Regenerate secret on each such client. The private signing
+  key is no longer returned inside client and mapping rows. The lockout holds for parallel attempts. A
+  password change ends that account's sessions and refresh tokens. The setup code is asked for outside
+  Development on localhost too, and a configured server never falls back into setup. The v1 token endpoint
+  refuses a client that has a credential (Oidc:AllowConfidentialClientsAtV1Token while one is still on v1).
+  An account another tenant manages cannot be made an administrator over MCP. All of it, with what to check
+  before and after upgrading, is under "Next release" in MIGRATION.md.
 * **Set the server up with an agent.** While it is unconfigured, /ark-idp/mcp offers the setup wizard
   as tools, with the setup code as the bearer token. Values are collected section by section, in any
   order and over several conversations, each with who supplied it; tested; reviewed; and installed
@@ -76,6 +86,11 @@ Sign-in, discovery, tokens, pages, the management API and existing configuration
   null, which is every existing one, is the operator.
 * **Every change over MCP, and every call refused for want of permission, is recorded**, whatever
   EnableLogTrace says.
+* **The onboarding agent is included.** The setup wizard's first page links to Ark Pilot (/ark-agent),
+  which collects the same answers in a chat, hands sections to colleagues by link, and shows what is
+  waiting for a person. It runs only while the server is unconfigured; a configured server has no route,
+  client or thread of it. No model is used unless ark_onboarding_agent:Llm names one. The package
+  carries a second assembly, Ark.Agents.TenantOnboarding. ark_onboarding_agent:Enabled=false removes it.
 * **The console lists every MCP endpoint**, for the operator, at /{tenant}/admin/mcp: search, filter by
   tenant and level, and open the documents of each in a new tab. GET /api/oauth/v1/mcp/endpoints
   returns the same list.
@@ -530,5 +545,36 @@ release notes of 2.4.1 on nuget.org: nuget.org takes 35,000 characters at most.
 		-->
 		<PackageReference Include="Ark.Watch.Client" Version="0.1.3" />
 	</ItemGroup>
+
+	<!-- ==============================================================================
+		The onboarding agent (Ark Pilot): what the setup wizard's "set it up by conversation" opens.
+
+		A project of its own, because it is a client of this server over MCP and must not see its
+		types; but not a package of its own. PrivateAssets="all" keeps it out of the nuspec, where a
+		dependency on a package that does not exist would fail every consumer's restore, and the two
+		targets below put its assembly and symbols beside this one's, in lib/ of the same package.
+	     ============================================================================== -->
+	<ItemGroup>
+		<ProjectReference Include="..\..\agents\agent-001-tenant-onboarding\Ark.Agents.TenantOnboarding\Ark.Agents.TenantOnboarding.csproj" PrivateAssets="all" />
+	</ItemGroup>
+	<PropertyGroup>
+		<TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);PackOnboardingAgent</TargetsForTfmSpecificBuildOutput>
+		<TargetsForTfmSpecificDebugSymbolsInPackage>$(TargetsForTfmSpecificDebugSymbolsInPackage);PackOnboardingAgentSymbols</TargetsForTfmSpecificDebugSymbolsInPackage>
+	</PropertyGroup>
+	<Target Name="PackOnboardingAgent" DependsOnTargets="ResolveReferences">
+		<ItemGroup>
+			<OnboardingAgentAssembly Include="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)%(Extension)' == 'Ark.Agents.TenantOnboarding.dll'" />
+			<BuildOutputInPackage Include="@(OnboardingAgentAssembly)" />
+		</ItemGroup>
+		<Error Condition="'@(OnboardingAgentAssembly)' == ''" Text="Ark.Agents.TenantOnboarding.dll is not among the references to copy: the package would ship without it and fail at start-up." />
+	</Target>
+	<Target Name="PackOnboardingAgentSymbols" DependsOnTargets="PackOnboardingAgent">
+		<ItemGroup>
+			<TfmSpecificDebugSymbolsFile Include="@(OnboardingAgentAssembly->'%(RootDir)%(Directory)%(Filename).pdb')">
+				<TargetPath>Ark.Agents.TenantOnboarding.pdb</TargetPath>
+				<TargetFramework>$(TargetFramework)</TargetFramework>
+			</TfmSpecificDebugSymbolsFile>
+		</ItemGroup>
+	</Target>
 
 </Project>

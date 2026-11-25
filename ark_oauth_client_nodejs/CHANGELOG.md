@@ -2,9 +2,34 @@
 
 ## Next release
 
-No change to this package. In this release the provider, `Ark.oAuth.Oidc`, is itself an MCP server, with
-which an agent sets it up and administers it. Nothing a client sees changes, and the two can be upgraded in
-either order.
+Security fixes. No API is removed or renamed and nothing has to be configured, but some requests that
+used to pass are now refused:
+
+- **An API that was given no `audience` now checks one.** `arkBearer` and `verifyAccessToken` expect
+  the audience the provider publishes for the tenant's access tokens (`ark_access_token_audience`,
+  published from this release of `Ark.oAuth.Oidc`). A token addressed to one agent (A2A) or one MCP
+  endpoint used to be accepted by every such API. Against an older provider the audience is still not
+  checked, but a token carrying `act` is refused. An explicit `audience` works as before.
+- **The access check runs again with each token refresh.** With `requireArkClaims` or
+  `onEvaluateAccess`, an account that has lost its access is signed out at the next refresh; a rule
+  that throws there signs out too. It used to be asked at the callback only.
+- **`/logout` asks before it acts on a request another site started** (`Sec-Fetch-Site: cross-site`):
+  the answer is a page with a button. Links on the same site, typed addresses and bookmarks sign out
+  straight away, as before. A cross-site POST is refused.
+- **With refresh token rotation off, the refresh token is kept.** `refresh()` returns the one it was
+  given when the provider sends none. A session used to lose it at the first refresh, and with it
+  every later check of the account.
+- **A session is not written back after it was ended.** A refreshed ID token about another user, or
+  one that does not validate, ends the session. UserInfo about another subject is not merged.
+- **A sign-in that is under way is kept for ten minutes**, not for a working day, so one that takes
+  longer has to be started again.
+- `verifyAgentToken` and `arkBearer({ agent: true })` require `typ: at+jwt` whatever
+  `requireTypeHeader` says: the client's own ID tokens carry the same audience.
+
+New: `refresh(token, { subject })`, `verifyIdToken(token, { subject })`.
+
+In this release the provider, `Ark.oAuth.Oidc`, is itself an MCP server, with which an agent sets it up
+and administers it. The client and the provider can be upgraded in either order.
 
 ## 2.4.2
 

@@ -19,7 +19,8 @@ const port = Number(process.env.API_PORT ?? 3001);
 const bearer = arkBearer({
   authority,
   clientId: process.env.ARK_API_CLIENT_ID ?? 'my-api',
-  // Set when the tenant issues an audience for this API and you want it enforced.
+  // Left out, the `aud` expected is the one the provider publishes for this tenant's access tokens.
+  // Set it only when the tenant issues another one for this API.
   audience: process.env.ARK_API_AUDIENCE ?? undefined,
   // Every request through this middleware must carry these:
   scopes: [],

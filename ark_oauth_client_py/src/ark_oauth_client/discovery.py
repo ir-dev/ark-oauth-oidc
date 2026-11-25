@@ -14,10 +14,11 @@ import time
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlsplit
 
+from .config import require_https_authority
 from .errors import ArkConfigError, ArkOAuthError
 from .http import get_json
 
-__all__ = ["MetadataResolver", "discovery_urls", "ArkDiscoveryCache"]
+__all__ = ["MetadataResolver", "discovery_urls", "check_issuer", "ArkDiscoveryCache"]
 
 DEFAULT_TTL = 300.0  # the server sends Cache-Control: max-age=300
 
@@ -32,6 +33,25 @@ def discovery_urls(authority: str) -> Tuple[str, str]:
         f"{base}/.well-known/openid-configuration",
         f"{origin}/.well-known/oauth-authorization-server{path}",
     )
+
+
+def check_issuer(metadata: Dict[str, Any], authority: str, url: str) -> None:
+    """
+    OIDC Discovery §4.3: the issuer in the document must equal the one used to look it up.
+
+    A mismatch means the URL is not the authority it claims to be — the shape of a mix-up attack,
+    and much more often a stray /auth or a missing tenant id in configuration.
+    """
+    if not metadata.get("issuer"):
+        raise ArkOAuthError(
+            "server_error", f"{url} returned a document with no 'issuer'.", endpoint=url
+        )
+    if str(metadata["issuer"]).rstrip("/") != authority.rstrip("/"):
+        raise ArkConfigError(
+            f"the provider at {url} identifies itself as '{metadata['issuer']}', but this "
+            f"client is configured for '{authority}'. Set `authority` to exactly the issuer "
+            "value — for Ark that is the base URL and the tenant id joined."
+        )
 
 
 class MetadataResolver:
@@ -86,23 +106,7 @@ class MetadataResolver:
             else:
                 raise
 
-        if not metadata.get("issuer"):
-            raise ArkOAuthError(
-                "server_error",
-                f"{primary} returned a document with no 'issuer'.",
-                endpoint=primary,
-            )
-
-        # OIDC Discovery §4.3: the issuer in the document must equal the one used to look it up.
-        # A mismatch means the URL is not the authority it claims to be — the shape of a mix-up
-        # attack, and much more often a stray /auth or a missing tenant id in configuration.
-        if str(metadata["issuer"]).rstrip("/") != authority:
-            raise ArkConfigError(
-                f"the provider at {primary} identifies itself as '{metadata['issuer']}', but this "
-                f"client is configured for '{authority}'. Set `authority` to exactly the issuer "
-                "value — for Ark that is the base URL and the tenant id joined."
-            )
-
+        check_issuer(metadata, authority, primary)
         return metadata
 
 
@@ -113,7 +117,9 @@ class ArkDiscoveryCache:
     The token refresher and the account endpoints both need the token endpoint without holding a
     client instance, and re-reading the document per refresh would turn every silent renewal into
     two requests. Unlike :class:`MetadataResolver` it serves a stale document rather than raising
-    when the provider is briefly unreachable, because a refresh that fails signs a user out.
+    when the provider is briefly unreachable, because a refresh that fails signs a user out. What it
+    serves has passed the same checks: https unless loopback (or ``require_https=False``), and an
+    issuer that is the authority asked for.
     """
 
     _lock = threading.Lock()
@@ -121,7 +127,9 @@ class ArkDiscoveryCache:
     _ttl = 1800.0  # 30 minutes, as in the .NET client
 
     @classmethod
-    def get(cls, authority: str, **http: Any) -> Optional[Dict[str, Any]]:
+    def get(
+        cls, authority: str, *, require_https: bool = True, **http: Any
+    ) -> Optional[Dict[str, Any]]:
         if not authority:
             return None
         with cls._lock:
@@ -129,7 +137,9 @@ class ArkDiscoveryCache:
             if hit and time.monotonic() - hit[1] < cls._ttl:
                 return hit[0]
             try:
-                metadata = get_json(discovery_urls(authority)[0], **http)
+                url = discovery_urls(require_https_authority(authority, require_https))[0]
+                metadata = get_json(url, **http)
+                check_issuer(metadata, authority, url)
             except Exception:
                 return hit[0] if hit else None
             cls._cache[authority] = (metadata, time.monotonic())

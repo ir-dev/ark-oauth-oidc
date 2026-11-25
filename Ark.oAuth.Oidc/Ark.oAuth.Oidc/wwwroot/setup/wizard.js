@@ -307,6 +307,46 @@
             add('warn', 'This host signs the admin console in itself. After setup, point its client at the issuer shown at the end.');
     }
 
+    // The agent in this server: where its view is, and what it is waiting for a person to do.
+    function renderAgent() {
+        const a = env && env.agent;
+        $('#agentCard').hidden = !a;
+        if (!a) return;
+        $('#agentName').textContent = a.name;
+        $('#agentOpen').href = a.url;
+        $('#agentOpen').textContent = a.started ? 'Continue in the agent view' : 'Open the agent view';
+        const list = $('#agentState');
+        list.textContent = '';
+        const add = (kind, text) => { const li = document.createElement('li'); li.className = kind; li.textContent = text; list.appendChild(li); };
+        if (a.phase === 'starting') { add('', `Getting ready: ${a.why || 'the server is starting.'}`); return; }
+        if (!a.started) { add('ok', 'Ready. Nobody has talked to it yet.'); return; }
+        if (a.ready_for_review) add('ok', 'Everything needed is in: the plan is ready for you to review.');
+        else add('', `${a.essentials_done} of the ${a.essentials_total} things it needs are in.`);
+        if (a.waiting_for_lead) add('wait', `Waiting for you: ${a.waiting_for_lead} ${a.waiting_for_lead === 1 ? 'answer' : 'answers'} to confirm or turn down.`);
+        if (a.waiting_for_colleagues.length) add('wait', `Waiting for ${a.waiting_for_colleagues.join(', ')}.`);
+        if (a.last_message_at) add('', `Last message ${new Date(a.last_message_at).toLocaleString()}.`);
+    }
+
+    // The agent asks for the same setup code. Entered here once, it is presented there too, so its
+    // view opens without asking again. Nothing depends on it: without this, that page asks.
+    async function unlockAgent() {
+        const a = env && env.agent;
+        if (!a || !env.code_required || !setupCode) return;
+        try {
+            await fetch(`${a.url}/api/unlock`, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json', 'X-Ark-Agent': '1' }, body: JSON.stringify({ code: setupCode })
+            });
+        } catch { /* the agent view will ask */ }
+    }
+
+    // Back from the agent view in another tab: say where things stand now, or leave if it has
+    // installed the server meanwhile. On the first page only, where nothing can be lost by it.
+    document.addEventListener('visibilitychange', async () => {
+        if (document.hidden || current !== 0 || handover || !env || !env.agent) return;
+        try { if (await loadState()) { renderAgent(); renderMcp(); } } catch { /* the server will answer the next one */ }
+    });
+
     // The other way in: the same setup, as tools. Says where, never the code.
     function renderMcp() {
         const url = env && env.mcp_url;
@@ -331,6 +371,7 @@
             steps[0].dataset.error = '';
             await loadState();
             initialize();
+            await unlockAgent();
         } catch (err) {
             codeOk = false;
             setupCode = '';
@@ -449,7 +490,7 @@
         const ssl = val('db_ssl');
         if (provider === 'postgres')
             return `Host=${host};Port=${port};Database=${db};Username=${user};Password=${pw};SSL Mode=${{ prefer: 'Prefer', require: 'Require', disable: 'Disable' }[ssl]}`;
-        return `Server=${host};Port=${port};Database=${db};User ID=${user};Password=${pw};SslMode=${{ prefer: 'Preferred', require: 'Required', disable: 'None' }[ssl]}`;
+        return `Server=${host};Port=${port};Database=${db};User ID=${user};Password=${pw};SslMode=${{ prefer: 'Preferred', require: 'Required', disable: 'Disabled' }[ssl]}`;
     }
 
     const signature = () => `${val('provider')}|${connection()}`;
@@ -1057,6 +1098,7 @@
             loadDraft();
         }
         renderChecks();
+        renderAgent();
         renderMcp();
         renderPreview();
         renderServer();

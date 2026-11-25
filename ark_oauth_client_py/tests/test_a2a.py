@@ -9,6 +9,7 @@ from ark_oauth_client import (
     ArkConfigError,
     ArkOAuthClient,
     ArkOAuthError,
+    ArkTokenError,
     agent_actors,
     decode_jwt,
 )
@@ -217,3 +218,61 @@ def test_flask_agent_api_accepts_only_tokens_addressed_to_it(idp):
     assert "invalid_token" in answer.headers["WWW-Authenticate"]
 
     assert http.post("/a2a/tasks").status_code == 401
+
+
+def test_a_token_addressed_to_an_agent_is_refused_by_an_ordinary_api(idp):
+    """
+    An API that was told no audience checks the tenant's. Without that it took a token meant for one
+    agent as readily as its own, and whoever was handed one could replay it as the user it names.
+    """
+    from ark_oauth_client.flask import ark_bearer
+
+    idp.agents = {"post-app": {"confidential-app": {"claims": ["orders.read"], "delegate_users": True}}}
+    idp.user_claims_at = {"post-app": ["orders.read"]}
+    web = confidential_client(idp)
+
+    api = Flask(__name__)
+    api.config["TESTING"] = True
+    bearer = ark_bearer(authority=idp.issuer, client_id="payroll-api", require_https=False)
+
+    @api.get("/payroll")
+    @bearer.require()
+    def payroll():
+        return "payroll"
+
+    def call(token):
+        return api.test_client().get("/payroll", headers={"Authorization": f"Bearer {token}"}).status_code
+
+    assert call(user_token(idp, web)) == 200, "an ordinary token of this tenant"
+    assert call(web.agent_token("post-app").access_token) == 401
+    assert call(web.agent_token("post-app", subject_token=user_token(idp, web)).access_token) == 401
+
+
+def test_an_older_provider_publishes_no_audience_and_a_delegated_token_is_still_refused(idp):
+    idp.publish_audience = False
+    idp.agents = {"post-app": {"confidential-app": {"claims": ["orders.read"], "delegate_users": True}}}
+    idp.user_claims_at = {"post-app": ["orders.read"]}
+    web = confidential_client(idp)
+    api = ArkOAuthClient(authority=idp.issuer, client_id="payroll-api", require_https=False)
+
+    assert api.verify_access_token(user_token(idp, web))["sub"] == "alice@example.com"
+    delegated = web.agent_token("post-app", subject_token=user_token(idp, web)).access_token
+    with pytest.raises(ArkTokenError, match="issued to an agent"):
+        api.verify_access_token(delegated)
+    # Told which audience to expect, it is that check and nothing else.
+    assert api.verify_access_token(delegated, audience="post-app")["act"] == {"sub": "confidential-app"}
+
+
+def test_an_id_token_is_no_agent_token_even_with_the_type_check_off(idp):
+    """Both carry this client's id as their audience; the type header is all that tells them apart."""
+    from ark_oauth_client.flask import ArkBearer
+
+    web = confidential_client(idp)
+    transaction = web.create_authorization_url(
+        redirect_uri="http://127.0.0.1:9999/signin-oidc", scopes=["openid"]
+    )
+    tokens = web.handle_callback(follow(web, transaction), transaction)
+
+    with pytest.raises(ArkTokenError, match="at\\+jwt"):
+        web.verify_agent_token(tokens.id_token, require_type_header=False)
+    assert ArkBearer(web, agent=True, require_type_header=False).require_type_header is True

@@ -358,8 +358,8 @@ public async Task SignOutAll()
 > **PROMPT:** "The zero-config IdP runs as a container on Azure App Service. Make the wizard's
 > settings survive restarts, and tell me where to find the setup code."
 
-The wizard asks for a setup code from every address except unproxied loopback, so in a container it
-**always** asks. And its directory (`Setup:DataPath`) is the server's configuration, so it must
+The wizard asks for a setup code everywhere but on a Development server at unproxied loopback, so in a
+container it **always** asks. And its directory (`Setup:DataPath`) is the server's configuration, so it must
 outlive the container.
 
 **1. Before the first start:** persistent storage, `DataPath` inside it, and the forwarded scheme.

@@ -474,7 +474,7 @@ def test_bearer_tokens_protect_an_api(idp):
         "/api",
         authority=idp.issuer,
         client_id="web-app",
-        audience="web-app",
+        audience=idp.audience,
         require_https=False,
     )
 
@@ -616,3 +616,266 @@ def test_the_session_cookie_is_secure_by_default(idp):
     cookies = [c for c in response.headers.getlist("Set-Cookie") if c.startswith(auth.cookie_name + "=")]
     assert cookies, "the login step writes the session cookie"
     assert all("Secure" in c for c in cookies)
+
+
+# -- what a session must not outlive ------------------------------------------
+
+
+def test_a_refresh_with_rotation_off_leaves_a_session_that_can_be_refreshed_again(idp):
+    """The refresh token used to be lost with the first answer, and the session with it stood unchecked."""
+    idp.rotate_refresh_tokens = False
+    idp.access_token_lifetime = 1
+    app, auth = make_app(idp)
+
+    with app.test_client() as client:
+        sign_in(app, client)
+        assert client.get("/billing").status_code == 200  # refreshed here
+        session_id = _session_id(client, auth)
+        assert auth.store.get(session_id)["tokens"]["refresh_token"]
+        assert auth.store.get(session_id)["tokens"]["id_token"]
+
+        idp.ark_claims = ["reports.read"]
+        assert client.get("/billing").status_code == 403, "the withdrawn claim is gone at the next refresh"
+
+        idp.refresh_tokens.clear()  # the account is deactivated
+        assert client.get("/").data == b"anonymous"
+
+
+def test_an_account_that_loses_its_access_is_signed_out_at_the_next_refresh(idp):
+    idp.access_token_lifetime = 1
+    app, auth = make_app(idp, configure=_require_claims)
+
+    with app.test_client() as client:
+        sign_in(app, client)
+        assert client.get("/").data == b"signed in"
+
+        idp.ark_claims = []
+        assert client.get("/").data == b"anonymous"
+        assert len(auth.store) == 0
+        assert idp.revoked, "the refresh token that came with the refused answer is revoked"
+
+
+def test_a_host_rule_that_cannot_answer_on_refresh_is_not_a_yes(idp):
+    idp.access_token_lifetime = 1
+    answers = iter([True])
+    events = ArkClientEvents(on_evaluate_access=lambda _ctx: next(answers))
+    app, _ = make_app(idp, events=events)
+
+    with app.test_client() as client:
+        sign_in(app, client)
+        assert client.get("/").data == b"anonymous", "StopIteration: the rule failed"
+
+
+def test_a_sign_out_during_a_refresh_is_not_undone_by_it(idp):
+    import threading
+
+    idp.access_token_lifetime = 1
+    app, auth = make_app(idp)
+    client = app.test_client()
+    sign_in(app, client)
+    session_id = _session_id(client, auth)
+    cookie = f"{auth.cookie_name}={_cookie_value(client, auth.cookie_name)}"
+
+    redeemed, proceed = threading.Event(), threading.Event()
+    refresh = auth.client.refresh
+
+    def slow(*args, **kwargs):
+        answer = refresh(*args, **kwargs)
+        redeemed.set()
+        proceed.wait(5)
+        return answer
+
+    auth.client.refresh = slow
+    answers = []
+
+    def request():
+        other = app.test_client(use_cookies=False)
+        answers.append(other.get("/", headers={"Cookie": cookie}).data)
+
+    thread = threading.Thread(target=request)
+    thread.start()
+    assert redeemed.wait(5)
+    idp.access_token_lifetime = 3600
+    with app.test_request_context("/", headers={"Cookie": cookie}):
+        auth.sign_out_locally()
+    proceed.set()
+    thread.join()
+
+    assert answers == [b"anonymous"]
+    assert auth.store.get(session_id) is None
+    assert app.test_client(use_cookies=False).get("/", headers={"Cookie": cookie}).data == b"anonymous"
+    assert auth._refresh_locks == {}
+
+
+def test_concurrent_requests_share_one_refresh(idp):
+    import copy
+    import threading
+    import time
+
+    from ark_oauth_client import MemorySessionStore
+
+    class SharedStore(MemorySessionStore):
+        """A store outside the process: every read is a copy, and a write takes a moment."""
+
+        def get(self, session_id):
+            return copy.deepcopy(super().get(session_id))
+
+        def set(self, session_id, data, ttl_seconds):
+            time.sleep(0.05)  # where a lock given up early let the next request in
+            super().set(session_id, copy.deepcopy(data), ttl_seconds)
+
+    idp.access_token_lifetime = 1
+    app, auth = make_app(idp)
+    auth.store = SharedStore()
+    client = app.test_client()
+    sign_in(app, client)
+    cookie = f"{auth.cookie_name}={_cookie_value(client, auth.cookie_name)}"
+    idp.access_token_lifetime = 3600
+    idp.requests.clear()
+    answers = []
+
+    def request():
+        answers.append(app.test_client(use_cookies=False).get("/", headers={"Cookie": cookie}).data)
+
+    threads = [threading.Thread(target=request) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+        time.sleep(0.01)
+    for thread in threads:
+        thread.join()
+
+    refreshes = [r for r in idp.requests if r["form"].get("grant_type") == "refresh_token"]
+    assert len(refreshes) == 1 and answers == [b"signed in"] * 8
+
+
+def test_signing_out_locally_and_switching_account_revoke_the_refresh_token(idp):
+    app, auth = make_app(idp)
+    with app.test_client() as client:
+        sign_in(app, client)
+        client.post("/ark/switch-user")
+        assert len(idp.revoked) == 1
+
+    with app.test_client() as client:
+        sign_in(app, client)
+        cookie = f"{auth.cookie_name}={_cookie_value(client, auth.cookie_name)}"
+        with app.test_request_context("/", headers={"Cookie": cookie}):
+            auth.sign_out_locally()
+        assert len(idp.revoked) == 2
+
+
+def test_a_refused_sign_in_leaves_neither_a_refresh_token_nor_its_transaction(idp):
+    idp.ark_claims = []
+    app, auth = make_app(idp, configure=_require_claims)
+    with app.test_client() as client:
+        sign_in(app, client)
+        assert len(idp.revoked) == 1
+        assert auth.store.get(_session_id(client, auth))["txs"] == {}
+
+
+def test_userinfo_about_somebody_else_is_not_used(idp):
+    app, auth = make_app(idp)
+    auth.fetch_user_info = True
+    answer = auth.client.user_info
+    auth.client.user_info = lambda token: {**answer(token), "sub": "mallory", "name": "Mallory"}
+    with app.test_client() as client:
+        sign_in(app, client)
+        assert client.get("/me").get_json()["name"] == "Alice Example"
+
+    auth.client.user_info = lambda token: {**answer(token), "name": "Alice from UserInfo"}
+    with app.test_client() as client:
+        sign_in(app, client)
+        assert client.get("/me").get_json()["name"] == "Alice from UserInfo"
+
+
+# -- signing out from somebody else's page ------------------------------------
+
+
+def test_a_sign_out_another_site_asked_for_is_a_question(idp):
+    app, _ = make_app(idp)
+    with app.test_client() as client:
+        sign_in(app, client)
+
+        asked = client.get("/logout", headers={"Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "navigate"})
+        assert asked.status_code == 200
+        body = asked.data.decode()
+        assert "Sign out of web-app?" in body and '<form method="post" action="/logout">' in body
+        assert asked.headers["X-Frame-Options"] == "DENY" and "no-store" in asked.headers["Cache-Control"]
+        assert client.get("/").data == b"signed in" and idp.revoked == []
+
+        forged = client.post("/logout", headers={"Sec-Fetch-Site": "cross-site", "Origin": "https://evil.example"})
+        assert forged.status_code == 400
+        # An older browser sends no Sec-Fetch-Site, but a cross-site form carries its Origin.
+        assert client.post("/logout", headers={"Origin": "https://evil.example"}).status_code == 400
+        assert client.get("/").data == b"signed in"
+
+        # The page's own button.
+        done = client.post("/logout", headers={"Sec-Fetch-Site": "same-origin"})
+        assert done.status_code == 302 and "id_token_hint=" in done.headers["Location"]
+        assert client.get("/").data == b"anonymous" and len(idp.revoked) == 1
+
+
+def test_a_link_on_this_site_and_a_typed_address_sign_out_as_before(idp):
+    app, _ = make_app(idp)
+    for site in (None, "none", "same-origin", "same-site"):
+        with app.test_client() as client:
+            sign_in(app, client)
+            response = client.get("/logout", headers={"Sec-Fetch-Site": site} if site else {})
+            assert response.status_code == 302, site
+            assert client.get("/").data == b"anonymous"
+
+
+# -- what arrives from outside -------------------------------------------------
+
+
+def test_a_visit_to_the_login_page_is_not_kept_for_a_working_day(idp):
+    from ark_oauth_client.flask import TRANSACTION_TTL_SECONDS
+
+    app, auth = make_app(idp)
+    kept = []
+    write = auth.store.set
+    auth.store.set = lambda sid, data, ttl: (kept.append(ttl), write(sid, data, ttl))
+
+    with app.test_client() as client:
+        response = client.get("/login")
+        assert kept == [TRANSACTION_TTL_SECONDS]
+        assert f"Max-Age={TRANSACTION_TTL_SECONDS}" in response.headers["Set-Cookie"]
+        sign_in(app, client)
+        assert kept[-1] == auth.session_ttl_seconds
+
+
+def test_a_key_id_with_a_line_break_is_a_401_and_not_a_500(idp):
+    import base64
+    import json
+
+    api = Flask(__name__)
+    add_ark_oidc_api(api, "/api", authority=idp.issuer, client_id="web-app", require_https=False)
+
+    def segment(value):
+        return base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b"=").decode()
+
+    header = {"alg": "RS256", "typ": "at+jwt", "kid": 'a\r\nX-Injected: "y" \u2603'}
+    token = f"{segment(header)}.{segment({})}.AA"
+    response = api.test_client().get("/api/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 401
+    assert "X-Injected" not in response.headers
+    assert "\n" not in response.headers["WWW-Authenticate"]
+
+
+def test_the_callers_address_is_the_one_the_proxy_wrote(idp):
+    app, auth = make_app(idp)
+
+    @app.get("/ip")
+    def ip():
+        return jsonify(current_ark.context().ip)
+
+    forged = {"X-Forwarded-For": "6.6.6.6, 203.0.113.9"}
+    assert app.test_client().get("/ip", headers=forged).get_json() == "203.0.113.9"
+    auth.trust_proxy = False
+    assert app.test_client().get("/ip", headers=forged).get_json() == "127.0.0.1"
+
+
+def _session_id(client, auth):
+    from ark_oauth_client.session import unsign_session_id
+
+    return unsign_session_id(_cookie_value(client, auth.cookie_name), SECRET)

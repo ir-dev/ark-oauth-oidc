@@ -62,7 +62,7 @@ When using Ark.oAuth.Oidc:
 10. Point the admin console's Sign out at your OWN route (ark_oauth_server:Admin:SignOutUrl) that
     drops the host cookie AND the OIDC scheme.
 11. Wizard in a container or behind any proxy (Docker, Azure App Service, Kubernetes, nginx):
-    - The setup code is ALWAYS required there (no request is unproxied loopback). It is in the
+    - The setup code is ALWAYS required there (only a Development server at unproxied loopback goes without). It is in the
       container log (docker logs / az webapp log tail / Portal Log stream), written once per start,
       and in {DataPath}/setup-code.txt until setup is finished.
     - BEFORE the first start, set ark_oauth_server__Setup__DataPath to persistent storage. The
@@ -195,14 +195,15 @@ DO NOT:
 - Run the setup wizard in a container with the default Setup:DataPath. The container's filesystem is
   replaced on every restart; settings.json goes with it and the wizard comes back. Point DataPath at
   a volume (App Service: under /home) first.
-- Tell someone to "open the wizard from localhost" on a hosted server. Behind a proxy nothing is
-  loopback; the code comes from the container log or {DataPath}/setup-code.txt.
+- Tell someone to "open the wizard from localhost" on a hosted server. Outside Development the code is
+  asked for on localhost too; it comes from the container log or {DataPath}/setup-code.txt.
 ```
 
 ## 6. Version & compatibility
 
 - Target framework `net10.0`; EF Core `10.0.x` (`net9.0` and EF Core `9.0.x` up to 2.2.1).
 - Current version **2.4.2**; ships with `Ark.oAuth.Client 2.4.2`. 2.4.1 added webhooks, an opt-in module (`AddArkWebhooks()`, see `WEBHOOKS.md`) that changes nothing for a host that does not call it; 2.4.0 was the scale release (indexed lookups, the reference and client-secret caches, the key ring in the database, bounded password hashing) and changes nothing on the wire; 2.3.0 was 2.2.1 moved to .NET 10 / EF Core 10, with no behaviour change.
+- **Next release: the onboarding agent is included.** `AddArkIdp()` / `AddArkOidcServer()` register Ark Pilot; the wizard's first page links to `/ark-agent`. Nothing to add in `Program.cs`. It is active only while the server is unconfigured, uses no model unless `ark_onboarding_agent:Llm` names one, and is switched off with `ark_onboarding_agent:Enabled=false`. `AddArkOnboardingAgent(configuration)` is for an application that sets up a server elsewhere (`McpUrl`, `SetupCode`).
 - **Next release: the server is itself an MCP server** (`MCP.md`, code in `Mcp/`). `/ark-idp/mcp` is setup while unconfigured (setup code = bearer token) and the operator's level afterwards; `/{tenant}/mcp` administers a tenant; `/{tenant}/mcp/{client_id}` is one application. Tokens are addressed to the endpoint with `resource` (RFC 8707); `mcp.read` looks, `mcp.manage` changes. Start with `setup_status`, `host_overview` or `tenant_overview`: each ends in `next_steps`. `ark_oauth_server:Mcp:Enabled=false` removes it. Do not write a gateway MCP server in front of the management API for what these tools already do.
 - **2.4.2 adds agent-to-agent (A2A) tokens** (`A2A.md`): `client_credentials` + `audience` and RFC 8693 token exchange issue a token whose `aud` is the target agent's client_id, only to callers the target lists in `ArkClient.a2a_callers`. On by default, inert until a caller is listed; `Oidc:EnableA2A=false` removes it. Logic in `Protocol/ArkAgentTokens.cs`.
 - **2.4.2 also adds the agent mark and an optional audit trail.** `ArkClient.is_agent` is a label (console badge, audit trail), never a permission. `ark_oauth_server:Watch` (`Endpoint` + `ApiKey`, or the wizard's *Audit trail* step) sends every audit line, and every A2A token, refusal, introspection and caller-list change in detail, to an ARK-RAPID Watch node through `Ark.Watch.Client`; without both settings nothing is constructed. Code in `Code/ArkWatch.cs` and `Protocol/ArkAgentAudit.cs`; events and attributes in `A2A.md` → "The audit trail"; status at `GET /api/oauth/v1/watch/status`.

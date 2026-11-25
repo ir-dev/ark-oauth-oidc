@@ -78,7 +78,7 @@ export interface ArkClientOptions {
   /** Sign-out and token sync across tabs over BroadcastChannel. Default true. */
   syncTabs?: boolean;
   accountSwitch?: AccountSwitchOptions;
-  /** Replaces the configured access rule at the callback. */
+  /** Replaces the configured access rule, at the callback and with each refresh. */
   onEvaluateAccess?: ((context: EvaluateAccessContext) => boolean | Promise<boolean>) | null;
   /** Where to send the user after a sign-in completes. Default: history.replaceState + popstate. */
   onRedirectCallback?: ((returnTo: string, result: RedirectCallbackResult) => unknown) | null;

@@ -28,6 +28,8 @@ cd "$(dirname "$0")/.."
 
 OIDC=Ark.oAuth.Oidc/Ark.oAuth.Oidc/Ark.oAuth.Oidc.csproj
 CLIENT=Ark.oAuth.Oidc/Ark.oAuth.Client/Ark.oAuth.Client.csproj
+# Not a package: its assembly ships inside Ark.oAuth.Oidc's, and says which release it came with.
+AGENT=agents/agent-001-tenant-onboarding/Ark.Agents.TenantOnboarding/Ark.Agents.TenantOnboarding.csproj
 PYPROJECT=ark_oauth_client_py/pyproject.toml
 PYINIT=ark_oauth_client_py/src/ark_oauth_client/__init__.py
 NPM=ark_oauth_client_nodejs/package.json
@@ -54,6 +56,7 @@ FileVersion|$OIDC|<FileVersion>([^<]*)</FileVersion>|.0
 Version|$CLIENT|<Version>([^<]*)</Version>|
 AssemblyVersion|$CLIENT|<AssemblyVersion>([^<]*)</AssemblyVersion>|.0
 FileVersion|$CLIENT|<FileVersion>([^<]*)</FileVersion>|.0
+Version|$AGENT|<Version>([^<]*)</Version>|
 version|$PYPROJECT|^version = "([^"]*)"|
 __version__|$PYINIT|^__version__ = "([^"]*)"|
 version|$NPM|^  "version": "([^"]*)"|

@@ -142,9 +142,24 @@ export function checkSameOrigin(method, headers, origin) {
 }
 
 /**
- * The entitlement decision, made once per sign-in at the callback — not "may this user open that
- * page" but "may this user use this application at all". Refusing there means no session is ever
- * written, so the person at the keyboard is not left holding somebody else's.
+ * Whether another site started this request.
+ *
+ * `Sec-Fetch-Site` says so on every current browser, for a link as well as for a form. A typed
+ * address or a bookmark is `none` and a link on this site is `same-origin` or `same-site`; only
+ * `cross-site` is somebody else's. Without that header, an `Origin` that is not this one is the only
+ * thing left to go by, and a plain link carries none.
+ */
+export function isCrossSite(headers, origin) {
+  const fetchSite = headers?.['sec-fetch-site'];
+  if (fetchSite) return fetchSite === 'cross-site';
+  const from = headers?.origin;
+  return Boolean(from) && from.replace(/\/+$/, '').toLowerCase() !== String(origin).replace(/\/+$/, '').toLowerCase();
+}
+
+/**
+ * The entitlement decision, made at the callback and again with each refresh — not "may this user
+ * open that page" but "may this user use this application at all". Refusing there means no session
+ * is ever written, so the person at the keyboard is not left holding somebody else's.
  *
  * `onEvaluateAccess` replaces the configured rule rather than being ANDed with it; a handler that
  * wants both reads `allowedByConfiguration` and says so.

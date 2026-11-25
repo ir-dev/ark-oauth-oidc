@@ -271,6 +271,15 @@ input[readonly], textarea[readonly] { background: var(--ark-surface-2); }
 .card p { margin: 0 0 10px; }
 .card.subtle { background: var(--ark-surface-2); }
 .card.warn { background: var(--ark-warn-soft); border-color: transparent; }
+.card.agent { background: var(--ark-accent-soft); border-color: var(--ark-accent); }
+.card.agent .row { margin-bottom: 0; }
+.agent-state { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; font-size: calc(13.5px * var(--ark-text-scale, 1)); }
+.agent-state:empty { display: none; }
+.agent-state li { padding-left: 18px; position: relative; color: var(--ark-fg-muted); }
+.agent-state li::before { content: ""; position: absolute; left: 2px; top: .5em; width: 8px; height: 8px; border-radius: 50%; background: var(--ark-border-strong); }
+.agent-state li.wait { color: var(--ark-fg); font-weight: 600; }
+.agent-state li.wait::before { background: var(--ark-warn); }
+.agent-state li.ok::before { background: var(--ark-success); }
 .plain { margin: 0; padding-left: 18px; }
 .plain li { margin: 4px 0; }
 

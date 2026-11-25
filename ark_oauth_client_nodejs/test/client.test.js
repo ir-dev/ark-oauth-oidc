@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { ArkOAuthClient } from '../src/client.js';
 import { ArkCallbackError, ArkOAuthError, ArkTokenError } from '../src/errors.js';
 import { createServer } from 'node:http';
+import { getJson } from '../src/http.js';
 import { StubIdp } from './stub-idp.js';
 
 let idp;
@@ -548,5 +549,60 @@ describe('2.1.1 fixes', () => {
     assert.equal(report.tenantId, 'test_idp');
     assert.equal(report.adminConsoleUrl, `${idp.baseUrl}/test_idp/admin`);
     assert.equal(report.supportsClientCredentials, true);
+  });
+});
+
+describe('what a refresh must keep', () => {
+  const signIn = async (client) => {
+    const tx = await client.createAuthorizationUrl();
+    return client.handleCallback(await visit(tx.url), tx);
+  };
+
+  test('a refresh without a new refresh token keeps the one presented', async () => {
+    const client = publicClient();
+    const tokens = await signIn(client);
+    idp.rotateRefreshTokens = false;
+    try {
+      const first = await client.refresh(tokens.refreshToken);
+      assert.equal(first.refreshToken, tokens.refreshToken);
+      assert.ok((await client.refresh(first.refreshToken)).accessToken);
+    } finally {
+      idp.rotateRefreshTokens = true;
+    }
+  });
+
+  test('a refreshed ID token must be about the same user', async () => {
+    const client = publicClient();
+    const tokens = await signIn(client);
+    idp.refreshSubject = 'mallory@example.com';
+    try {
+      await assert.rejects(() => client.refresh(tokens.refreshToken, { subject: tokens.subject }), (e) => e instanceof ArkTokenError && e.claim === 'sub');
+    } finally {
+      idp.refreshSubject = null;
+    }
+  });
+});
+
+describe('a token in a header', () => {
+  test('does not follow a redirect to another origin', async () => {
+    const received = {};
+    const elsewhere = createServer((req, res) => {
+      received[req.url] = req.headers.authorization ?? null;
+      res.setHeader('Content-Type', 'application/json');
+      res.end('{}');
+    });
+    await new Promise((resolve) => elsewhere.listen(0, '127.0.0.1', resolve));
+    const provider = createServer((req, res) => {
+      res.writeHead(302, { Location: `http://127.0.0.1:${elsewhere.address().port}/other` });
+      res.end();
+    });
+    await new Promise((resolve) => provider.listen(0, '127.0.0.1', resolve));
+    try {
+      await getJson(`http://127.0.0.1:${provider.address().port}/userinfo`, { headers: { Authorization: 'Bearer user-token' } });
+      assert.deepEqual(received, { '/other': null });
+    } finally {
+      await new Promise((resolve) => provider.close(resolve));
+      await new Promise((resolve) => elsewhere.close(resolve));
+    }
   });
 });

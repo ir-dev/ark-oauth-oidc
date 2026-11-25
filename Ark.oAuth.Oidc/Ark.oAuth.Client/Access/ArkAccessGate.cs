@@ -4,8 +4,8 @@ using Microsoft.AspNetCore.Http;
 namespace Ark.oAuth
 {
     /// <summary>
-    /// Decides, once per sign-in, whether the account the provider authenticated is entitled to
-    /// this application, and drives the denial when it is not.
+    /// Decides, at the sign-in and again with each token refresh, whether the account the provider
+    /// authenticated is entitled to this application, and drives the denial when it is not.
     ///
     /// The check belongs at the callback rather than at each <c>[Authorize]</c>. An entitlement
     /// failure is not "this user may not open that page", it is "this user may not use this

@@ -46,8 +46,8 @@
                     <div class="card" id="codeCard" hidden>
                         <h2>Setup code</h2>
                         <p>
-                            You’re not on the server’s own machine, so we need to confirm you can see it. The setup code is
-                            printed in the server log, and saved in <code id="codeFile">setup-code.txt</code> next to the settings.
+                            Whoever finishes setup becomes the administrator, so we need to confirm you can see this server. Its
+                            setup code is printed in the server log, and saved in <code id="codeFile">setup-code.txt</code> next to the settings.
                         </p>
                         <div class="row">
                             <label class="field grow">
@@ -68,8 +68,21 @@
                         </ul>
                     </div>
 
+                    <div class="card agent" id="agentCard" hidden>
+                        <h2>Or set it up by conversation</h2>
+                        <p>
+                            <b id="agentName">Ark Pilot</b>, the onboarding agent in this server, collects the same answers in a chat. Tell it what
+                            you know, and hand it the names of the colleagues who know the rest: each gets a link to their own part. In the agent
+                            view you follow every question that is waiting for a person, confirm what was read, and press Install yourself.
+                        </p>
+                        <ul class="agent-state" id="agentState" aria-live="polite"></ul>
+                        <div class="row">
+                            <a class="btn primary" id="agentOpen" target="_blank" rel="noopener">Open the agent view</a>
+                        </div>
+                    </div>
+
                     <div class="card subtle" id="mcpCard" hidden>
-                        <h2>Or have an agent do it</h2>
+                        <h2>Or connect an agent of your own</h2>
                         <p>
                             An AI agent can collect these answers from the people who have them and set the server up over MCP. Connect it to
                             <code id="mcpUrl"></code> <button type="button" class="link" data-copy="#mcpUrl">Copy</button>, with the setup code from
@@ -82,8 +95,8 @@
                                 <textarea id="mcpConfig" rows="11" readonly spellcheck="false"></textarea>
                             </label>
                         </details>
-                        <p class="note warn" id="mcpDraftNote" hidden></p>
                     </div>
+                    <p class="note warn" id="mcpDraftNote" hidden></p>
                 </section>
 
                 <!-- ============================================================ organization -->

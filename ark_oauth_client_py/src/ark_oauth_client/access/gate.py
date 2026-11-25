@@ -1,6 +1,6 @@
 """
-Decides, once per sign-in, whether the account the provider authenticated is entitled to this
-application.
+Decides, at the sign-in and again with each token refresh, whether the account the provider
+authenticated is entitled to this application.
 
 The check belongs at the callback rather than at each protected view. An entitlement failure is not
 "this user may not open that page", it is "this user may not use this application at all", and the

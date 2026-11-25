@@ -657,7 +657,7 @@ app.Run();</pre>
         <ol class="checklist">
           <li><span class="n">1</span><span><strong>Any database.</strong> SQLite, PostgreSQL or MySQL, with <em>Test connection</em>. Point it at an existing Ark database and it attaches instead of re-seeding.</span></li>
           <li><span class="n">2</span><span><strong>Your keys.</strong> Generate RSA 2048, 3072 or 4096, or import a PEM. The private half goes into the database, never into the settings file.</span></li>
-          <li><span class="n">3</span><span><strong>Safe on a network.</strong> From anywhere but localhost the wizard asks for the setup code printed in the start-up log. After install, <code>/ark-idp/setup</code> answers 404.</span></li>
+          <li><span class="n">3</span><span><strong>Safe on a network.</strong> Outside Development, and from any other machine, the wizard asks for the setup code printed in the start-up log. After install, <code>/ark-idp/setup</code> answers 404.</span></li>
           <li><span class="n">4</span><span><strong>Overridable.</strong> The wizard's <code>settings.json</code> sits below user secrets and environment variables, so a key vault can still override any value.</span></li>
         </ol>
         <div class="stack" style="margin-top:22px">

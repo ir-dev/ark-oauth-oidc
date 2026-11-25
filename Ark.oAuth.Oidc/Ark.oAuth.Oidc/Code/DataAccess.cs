@@ -172,7 +172,7 @@ namespace Ark.oAuth.Oidc
         /// console, the management API — ends in <see cref="UpsertClient"/>. A save that changes
         /// neither writes nothing.
         /// </summary>
-        void RecordAgentChanges(ArkClient client, List<ArkAgentCaller> before, bool wasAgent)
+        internal void RecordAgentChanges(ArkClient client, List<ArkAgentCaller> before, bool wasAgent)
         {
             try
             {
@@ -273,7 +273,7 @@ namespace Ark.oAuth.Oidc
                 try { _watch.Log(null, watch ?? ArkWatchMap.FromRow(ref_key, ref_val, message, details, "audit", by)); }
                 catch { /* the trail is never a reason to fail */ }
             }
-            var row = new ArkAudit()
+            var row = ArkAuditWriter.Storable(new ArkAudit()
             {
                 ref_key = ref_key,
                 ref_val = ref_val,
@@ -283,7 +283,7 @@ namespace Ark.oAuth.Oidc
                 by = string.IsNullOrWhiteSpace(by) ? "ark_admin" : by,
                 ip = ip ?? "",
                 at = DateTime.UtcNow
-            };
+            });
             if (_audit != null && _audit.TryEnqueue(row)) return;
             _ctx.audit_trace.Add(row);
             _ctx.SaveChanges();
@@ -398,16 +398,39 @@ namespace Ark.oAuth.Oidc
         {
             if (string.IsNullOrEmpty(client.id)) return client; //added on the UI, delete before even saving
             var tt = await _ctx.clients.FirstOrDefaultAsync(t => t.id.ToLower() == client.id.ToLower());
-            if (tt == null)
-            {
-                
-            }
-            else
-            {
-                _ctx.clients.Remove(tt);
-            }
+            if (tt == null) return client;
+
+            var forgotten = await ForgetAgentCaller(tt);
+            _ctx.clients.Remove(tt);
             await _ctx.SaveChangesAsync();
+            foreach (var (agent, before) in forgotten) RecordAgentChanges(agent, before, agent.is_agent == true);
             return client;
+        }
+        /// <summary>
+        /// Takes a client that is going away off the caller lists it is on (A2A.md), and returns
+        /// the clients that had listed it, with their lists as they were. The caller saves.
+        ///
+        /// A list names its callers by client_id, and a client_id is free again once its client is
+        /// gone: whoever registered it next would have been let in as the agent that used to have
+        /// it, acting for users included.
+        /// </summary>
+        internal async Task<List<(ArkClient Agent, List<ArkAgentCaller> Before)>> ForgetAgentCaller(ArkClient gone)
+        {
+            var tenant = (gone.tenant_id ?? "").ToLower();
+            var listing = await _ctx.clients
+                .Where(c => c.tenant_id.ToLower() == tenant && c.id != gone.id && c.a2a_callers_ != null && c.a2a_callers_ != "[]")
+                .ToListAsync();
+            var changed = new List<(ArkClient, List<ArkAgentCaller>)>();
+            foreach (var agent in listing)
+            {
+                var before = agent.a2a_callers;
+                var after = before.Where(c => !string.Equals(c.client_id.Trim(), gone.client_id, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (after.Count == before.Count) continue;
+                agent.a2a_callers = after;
+                _ctx.clients.Update(agent);
+                changed.Add((agent, before));
+            }
+            return changed;
         }
         public async Task<List<ArkClaim>> GetClaims()
         {
@@ -419,6 +442,10 @@ namespace Ark.oAuth.Oidc
         }
         public async Task<ArkClaim> UpsertClaim(ArkClaim claim)
         {
+            // Refused here because every caller ends here. A refusal the provisioning API answers
+            // as one (400 invalid_claim) rather than as a fault of the server.
+            if (ArkText.ClaimKeyProblem(claim.key) is { } problem)
+                throw new ArkProvisionException("invalid_claim", problem);
             var tt = await _ctx.claims.FirstOrDefaultAsync(t => t.key == claim.key);
             if (tt == null)
             {
@@ -633,7 +660,11 @@ namespace Ark.oAuth.Oidc
                 if (string.IsNullOrEmpty(user.home_tenant_id)) user.home_tenant_id = tt.home_tenant_id;
                 _ctx.ChangeTracker.Clear();
                 user.id = tt.id;
-                user.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+                // While a password link is out, `at` is when it was issued (see UpdatePassword).
+                // Stamping it on any other save gave an expired link its whole life back.
+                user.at = tt.reset_mode == true && user.reset_mode == true && !string.IsNullOrEmpty(tt.at)
+                    ? tt.at
+                    : DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Update(user);
             }
             await _ctx.SaveChangesAsync();
@@ -644,7 +675,14 @@ namespace Ark.oAuth.Oidc
                 await RevokeAccessForSubject(user.email);
             return user;
         }
-        public async Task<ArkUser> UserResetPw(ArkUser user)
+        public Task<ArkUser> UserResetPw(ArkUser user) => UserResetPw(user, endAccess: true);
+
+        /// <param name="user">The account, by its login id.</param>
+        /// <param name="endAccess">
+        /// Ends what the account has open (<see cref="EndAccessAsync"/>). False only for a caller
+        /// that does that itself and reports on it.
+        /// </param>
+        public async Task<ArkUser> UserResetPw(ArkUser user, bool endAccess)
         {
             var login_id = (user?.email ?? "").ToLower().Trim();
             var uu = await _ctx.users.FirstOrDefaultAsync(t => t.email == login_id)
@@ -665,6 +703,7 @@ namespace Ark.oAuth.Oidc
             uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
             _ctx.users.Update(uu);
             await _ctx.SaveChangesAsync();
+            if (endAccess) await EndAccessAsync(uu.email, "password_reset");
             return uu;
         }
         /// <summary>
@@ -720,6 +759,7 @@ namespace Ark.oAuth.Oidc
                 uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
                 _ctx.users.Update(uu);
                 await _ctx.SaveChangesAsync();
+                await EndAccessAsync(uu.email, "password_change");
             }
             else throw new ApplicationException("reset request expired, pls contact support.");
             return true;
@@ -735,7 +775,12 @@ namespace Ark.oAuth.Oidc
                     .SetProperty(t => t.at, at));
             if (updated == 0) throw new ApplicationException($"'{email}' is not a service account.");
         }
-        public async Task<ArkUser> SetUserPassword(string email, string pw)
+        public Task<ArkUser> SetUserPassword(string email, string pw) => SetUserPassword(email, pw, endAccess: true);
+
+        /// <param name="email">The account's login id.</param>
+        /// <param name="pw">The new password.</param>
+        /// <param name="endAccess">As on <see cref="UserResetPw(ArkUser, bool)"/>.</param>
+        public async Task<ArkUser> SetUserPassword(string email, string pw, bool endAccess)
         {
             var login_id = (email ?? "").ToLower().Trim();
             if (string.IsNullOrWhiteSpace(login_id)) throw new ApplicationException("a username or email is required.");
@@ -751,6 +796,7 @@ namespace Ark.oAuth.Oidc
             uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
             _ctx.users.Update(uu);
             await _ctx.SaveChangesAsync();
+            if (endAccess) await EndAccessAsync(uu.email, "password_change");
             return uu;
         }
         /// <summary>
@@ -774,6 +820,8 @@ namespace Ark.oAuth.Oidc
         /// </summary>
         public async Task<ArkUser> ValidateUserCreds(string un, string pw, string client, string tenant_id)
         {
+            if ((un ?? "").Length > MaxLoginLength || (pw ?? "").Length > MaxPasswordLength)
+                throw new ApplicationException("invalid creds");
             var login_id = (un ?? "").ToLower().Trim();
             // Three index lookups. These were three synchronous reads of whole tables — every
             // account, then every access mapping — once per sign-in, on a request thread.
@@ -790,6 +838,13 @@ namespace Ark.oAuth.Oidc
             Protocol.ArkHashGate.Configure(_util.ServerConfig.Oidc?.MaxConcurrentPasswordHashes ?? 0,
                 _util.ServerConfig.Oidc?.MaxPasswordHashWaitSeconds ?? 0);
             var stored = usr_cl_cl != null ? usr!.hash_pw ?? "" : ArkUtil.DummyPasswordHash.Value;
+            // Attempts at one login take turns, and the count is read again when the turn comes: read
+            // only before the queue, it is the same for every attempt of a burst (ArkSignInQueue).
+            using var turn = await Protocol.ArkSignInQueue.EnterAsync(login_id);
+            var limits = _util.ServerConfig.Oidc ?? new Protocol.ArkOidcOptions();
+            if (limits.MaxFailedSignIns > 0 && await GetAuthStatus(login_id) is { } status
+                && status.retry_count >= limits.MaxFailedSignIns && (DateTime.UtcNow - status.at).TotalMinutes < limits.LockoutMinutes)
+                throw new Protocol.ArkAccountLockedException(limits.LockoutMinutes);
             var verified = await Protocol.ArkHashGate.RunAsync(() => _util.VerifyPasswordPBKDF2(pw, stored));
             // Every failure counts towards the lockout, not only a wrong password for an account
             // that exists and is mapped. Counting only those made the lockout message itself the
@@ -868,12 +923,42 @@ namespace Ark.oAuth.Oidc
 
             _ctx.ChangeTracker.Clear();
             uu.is_active = active;
-            uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
+            // Not while a password link is out: there `at` is the link's clock (UpsertUser).
+            if (uu.reset_mode != true) uu.at = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss");
             _ctx.users.Update(uu);
             await _ctx.SaveChangesAsync();
 
             if (!active) await RevokeAccessForSubject(uu.email);
             return uu;
+        }
+        /// <summary>
+        /// Ends what an account has open after its password changed, and tells the applications
+        /// that asked to be told.
+        ///
+        /// A password is changed because somebody else may know it. Whoever signed in with the old
+        /// one kept a session and refresh tokens that never ask for a password again, so changing
+        /// it shut out nobody until those ran out.
+        /// </summary>
+        async Task EndAccessAsync(string subject, string reason)
+        {
+            var now = DateTime.UtcNow;
+            _ctx.ChangeTracker.Clear();
+            var open = await _ctx.sessions.AsNoTracking()
+                .Where(s => s.subject == subject && !s.revoked && s.expires_at > now).ToListAsync();
+            await RevokeAccessForSubject(subject);
+            if (open.Count == 0) return;
+            try
+            {
+                var http = _watch?.Request();
+                if (http?.RequestServices.GetService(typeof(Protocol.ArkBackChannelLogout)) is Protocol.ArkBackChannelLogout logout)
+                    await logout.NotifyAsync(open, tid => Protocol.ArkOidcEndpoints.For(http.Request, _util.ServerConfig, tid).Issuer, reason);
+            }
+            catch (Exception ex)
+            {
+                // The access is already gone; that some application could not be told is all that
+                // is left to record.
+                LogError(ex, "backchannel_logout_failed", subject, $"applications could not be notified of a {reason}");
+            }
         }
         /// <summary>Ends every live session for a subject and revokes the refresh tokens issued under them.</summary>
         async Task RevokeAccessForSubject(string subject)
@@ -956,7 +1041,7 @@ namespace Ark.oAuth.Oidc
             try
             {
                 if (!_util.IsTraceEnabled) return;
-                var row = new ArkAudit()
+                var row = ArkAuditWriter.Storable(new ArkAudit()
                 {
                     ref_key = ref_key,
                     ref_val = ref_val,
@@ -966,7 +1051,7 @@ namespace Ark.oAuth.Oidc
                     by = "ark_admin",
                     ip = "",
                     at = DateTime.UtcNow
-                };
+                });
                 // Queued and written in batches off the request path when the writer is running.
                 if (_audit != null && _audit.TryEnqueue(row)) return;
                 _ctx.audit_trace.Add(row);
@@ -998,7 +1083,7 @@ namespace Ark.oAuth.Oidc
             try
             {
                 _ctx.ChangeTracker.Clear();
-                _ctx.audit_trace.Add(new ArkAudit()
+                _ctx.audit_trace.Add(ArkAuditWriter.Storable(new ArkAudit()
                 {
                     ref_key = ref_key,
                     ref_val = ref_val,
@@ -1008,7 +1093,7 @@ namespace Ark.oAuth.Oidc
                     by = string.IsNullOrWhiteSpace(by) ? "ark_admin" : by,
                     ip = ip ?? "",
                     at = DateTime.UtcNow
-                });
+                }));
                 _ctx.SaveChanges();
             }
             catch (Exception ex)
@@ -1025,7 +1110,7 @@ namespace Ark.oAuth.Oidc
             }
             try
             {
-                var row = new ArkAudit()
+                var row = ArkAuditWriter.Storable(new ArkAudit()
                 {
                     ref_key = ref_key,
                     ref_val = ref_val,
@@ -1035,7 +1120,7 @@ namespace Ark.oAuth.Oidc
                     by = "ark_admin",
                     ip = "",
                     at = DateTime.UtcNow
-                };
+                });
                 if (_audit != null && _audit.TryEnqueue(row)) return;
                 // Cleared first, then added. It was the other way round, which threw the error row
                 // away with everything else in the tracker: no error was ever written.
@@ -1048,6 +1133,9 @@ namespace Ark.oAuth.Oidc
                 Console.WriteLine(ex.ToString());
             }
         }
+        /// <summary>Longer than any login id or password there is: an email address has at most 320 characters.</summary>
+        internal const int MaxLoginLength = 320, MaxPasswordLength = 1024;
+
         /// <summary>The failed-sign-in counter for a login id, or null when it has never failed.</summary>
         public async Task<ArkAuthStatusTrace?> GetAuthStatus(string? email)
         {

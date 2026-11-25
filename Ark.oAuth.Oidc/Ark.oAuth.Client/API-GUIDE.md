@@ -61,15 +61,15 @@ Standard-flow properties (the ones you set):
 | `AuthErrorPath` | `string?` | `/` | Failed callbacks redirect here with `?auth_error=…`. |
 | `RequireHttpsMetadata` | `bool` | `true` | Only relax for local http dev. |
 | `CookieName` | `string?` | `ark_auth` | |
-| `RoleClaimType` | `string?` | `role` | `ark_claims` are projected onto this claim type. |
+| `RoleClaimType` | `string?` | `role` | `ark_claims` are projected onto this claim type, at sign-in and again with each token refresh. |
+| `Audience` | `string` | — | `AddArkOidcApi` only: the `aud` an API expects. Left empty, the one the provider publishes for the tenant (`ark_access_token_audience`). |
 | `ExpireMins` | `int` | `480` | Cookie lifetime. |
 | `AccountSwitch` | `ArkAccountSwitchOptions` | see below | Shared-browser recovery. |
 | `UseLegacyFlow` | `bool` | `false` | Legacy cookie/bearer middleware. **Migration aid only.** |
 
 **Methods:** `string ResolveAuthority()`, `List<string> ResolveScopes()`.
 
-Legacy-only properties (present for old appsettings; ignore for new code): `Issuer`, `Audience`,
-`RsaPublic`, `LogoutUri`, `RedirectUri`, `RedirectRelative`, `AuthServerUrl`, `RouteKey`, `TenantId`,
+Legacy-only properties (present for old appsettings; ignore for new code): `Issuer`, `RsaPublic`, `LogoutUri`, `RedirectUri`, `RedirectRelative`, `AuthServerUrl`, `RouteKey`, `TenantId`,
 `Domain`, `Suffix`, `tenants` (`Dictionary<string, ArkCert>`).
 
 ## Account switch (`ArkAccountSwitchOptions`, section `ark_oauth_client:AccountSwitch`)

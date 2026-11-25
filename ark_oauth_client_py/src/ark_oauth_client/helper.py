@@ -44,7 +44,13 @@ class AuthClientHelper:
         user_claims: str,
         full_name: str,
     ) -> Dict[str, Any]:
-        """Creates a user in this tenant and maps them to this client."""
+        """
+        Creates a user in this tenant and maps them to this client.
+
+        The route is the v1 one, which reads everything from the query string, the password
+        included: whatever logs request lines on the way sees it. ``POST
+        {auth_server_url}/api/oauth/v1/provision/user`` takes a body and sends no password.
+        """
         config = self._config
         if not config or not config.auth_server_url:
             return {"error": True, "msg": "user creation failed, auth config missing."}

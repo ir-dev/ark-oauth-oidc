@@ -194,6 +194,13 @@ namespace Ark.oAuth.Oidc.Mcp
             return args;
         }
 
+        /// <summary>
+        /// How many problems are reported. Enough to put right in one go; not one for each of the
+        /// quarter of a million names that fit in a request, which made a 1.5 MB call a 50 MB answer
+        /// for anybody who could call any tool at all.
+        /// </summary>
+        const int MostProblems = 20;
+
         ArkMcpArgs Read(JsonElement? element, string at, List<string> problems)
         {
             var values = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -206,10 +213,13 @@ namespace Ark.oAuth.Oidc.Mcp
             {
                 foreach (var property in obj.EnumerateObject())
                 {
+                    if (problems.Count >= MostProblems) return new ArkMcpArgs(values);
                     var p = Items.FirstOrDefault(i => i.Name == property.Name);
                     if (p == null)
                     {
-                        problems.Add($"'{at}{property.Name}' is not a parameter here; there are: {(Items.Count == 0 ? "none" : string.Join(", ", Items.Select(i => i.Name)))}.");
+                        // The name is the caller's, and is repeated: as much of it as tells them which.
+                        var name = property.Name.Length > 60 ? property.Name[..60] + "…" : property.Name;
+                        problems.Add($"'{at}{name}' is not a parameter here; there are: {(Items.Count == 0 ? "none" : string.Join(", ", Items.Select(i => i.Name)))}.");
                         continue;
                     }
                     if (property.Value.ValueKind == JsonValueKind.Null) continue;
@@ -250,6 +260,8 @@ namespace Ark.oAuth.Oidc.Mcp
                     return value.GetBoolean();
                 case "array":
                     if (value.ValueKind != JsonValueKind.Array) return Wrong("a list of strings");
+                    // Counted before it is gone through: each entry is compared with all before it.
+                    if (p.Max is { } most && value.GetArrayLength() > most) return Wrong($"a list of at most {most}");
                     var list = new List<string>();
                     foreach (var item in value.EnumerateArray())
                     {
@@ -261,7 +273,6 @@ namespace Ark.oAuth.Oidc.Mcp
                             return Wrong($"a list of: {string.Join(", ", p.Values)}");
                         if (!list.Contains(entry, StringComparer.Ordinal)) list.Add(entry);
                     }
-                    if (p.Max is { } most && list.Count > most) return Wrong($"a list of at most {most}");
                     return list;
                 case "object":
                     return value.ValueKind != JsonValueKind.Object ? Wrong("an object") : p.Nested!.Read(value, $"{at}{p.Name}.", problems);

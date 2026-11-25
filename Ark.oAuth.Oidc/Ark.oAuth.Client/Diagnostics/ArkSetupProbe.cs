@@ -84,13 +84,30 @@ namespace Ark.oAuth
             if (string.IsNullOrWhiteSpace(authority))
                 throw new InvalidOperationException("ark_oauth_client:Authority is not set.");
 
-            var client = _http.CreateClient("ark-oidc-client");
+            var client = _http.CreateClient(ArkOidcClient.HttpClientName);
             using var response = await client.GetAsync(DiscoveryUrl(authority), cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
                 throw new HttpRequestException($"the provider answered {(int)response.StatusCode} {response.ReasonPhrase}.");
 
             return Parse(body);
+        }
+
+        /// <summary>
+        /// <see cref="ReadMetadataAsync"/> for a caller about to send a secret to what it says:
+        /// https unless loopback or <c>RequireHttpsMetadata</c> is off, and an issuer that is the
+        /// authority asked for. The plain one answers either way, so that a set-up page can show
+        /// the mismatch.
+        /// </summary>
+        internal async Task<ArkProviderMetadata> ReadTrustedMetadataAsync(string? authority, CancellationToken cancellationToken)
+        {
+            authority = string.IsNullOrWhiteSpace(authority) ? _config.ResolveAuthority() : authority!;
+            if (string.IsNullOrWhiteSpace(authority))
+                throw new InvalidOperationException("ark_oauth_client:Authority is not set.");
+            authority = ArkAuthority.RequireHttps(authority, _config.RequireHttpsMetadata);
+            var metadata = await ReadMetadataAsync(authority, cancellationToken);
+            ArkAuthority.RequireIssuer(metadata.Issuer, authority);
+            return metadata;
         }
 
         public static string DiscoveryUrl(string authority) =>

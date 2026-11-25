@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Tuple
 
-__all__ = ["local_or_default", "check_same_origin", "read_field"]
+__all__ = ["local_or_default", "check_same_origin", "is_cross_site", "read_field"]
 
 
 def local_or_default(url: Optional[str], fallback: Optional[str]) -> str:
@@ -66,6 +66,29 @@ def check_same_origin(
     if origin.rstrip("/").lower() == origin_of_this_request.rstrip("/").lower():
         return True, 200, ""
     return False, 400, "cross-site request rejected."
+
+
+def is_cross_site(headers: Mapping[str, str], origin_of_this_request: str) -> bool:
+    """
+    Whether another site started this request.
+
+    ``Sec-Fetch-Site`` says so on every current browser, for a link as well as for a form. A typed
+    address or a bookmark is ``none`` and a link on this site is ``same-origin`` or ``same-site``;
+    only ``cross-site`` is somebody else's. Without that header, an ``Origin`` that is not this one
+    is the only thing left to go by, and a plain link carries none.
+    """
+
+    def header(name: str) -> str:
+        for key, value in headers.items():
+            if key.lower() == name:
+                return value or ""
+        return ""
+
+    fetch_site = header("sec-fetch-site")
+    if fetch_site:
+        return fetch_site == "cross-site"
+    origin = header("origin")
+    return bool(origin) and origin.rstrip("/").lower() != origin_of_this_request.rstrip("/").lower()
 
 
 def read_field(form: Optional[Mapping[str, Any]], query: Optional[Mapping[str, Any]], name: str):

@@ -1,5 +1,4 @@
-# axet-graphify-managed v3
-# Semantic files excluded — graphify runs in code-only AST mode
+mode
 # Text documents (classified as semantic by graphify)
 *.md
 *.mdx

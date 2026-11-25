@@ -32,6 +32,9 @@ const STYLE =
  */
 export const DENIED_PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'";
 
+/** The same, for the page a sign-out from somebody else's site gets. */
+export const SIGN_OUT_PAGE_CSP = DENIED_PAGE_CSP;
+
 const ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ENTITIES[c]);
 
@@ -80,4 +83,30 @@ export function renderAccessDeniedPage(options, { app, account = null, returnUrl
   // somebody else works out why the account is wrong, and they cannot run `npm ls` on the host.
   parts.push(`<p class="ver">ark-oauth-client-node ${escapeHtml(VERSION)}</p>`, '</main></body></html>');
   return parts.join('');
+}
+
+/**
+ * What a sign-out somebody else's page started gets instead of being signed out: a question, and a
+ * button whose POST comes from this site.
+ *
+ * @param {ReturnType<import('./access.js').normalizeAccountSwitch>} options
+ * @param {{ app?: string|null, logoutPath: string }} model
+ */
+export function renderSignOutPage(options, { app, logoutPath }) {
+  const appName = escapeHtml(app?.trim() || 'this application');
+  return [
+    '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<title>Sign out — ${appName}</title><style>${STYLE}</style></head>`,
+    '<body><main class="card">',
+    `<h1>Sign out of ${appName}?</h1>`,
+    '<p class="lede">This was asked for by a page on another site.</p>',
+    '<p>Signing out ends your session here and at the identity provider, so the other applications you are signed in to ' +
+      'may ask for your password again.</p>',
+    '<div class="actions">',
+    `<form method="post" action="${escapeHtml(logoutPath)}">`,
+    '<button type="submit">Sign out</button></form></div>',
+    `<p class="foot"><a href="${escapeHtml(localOrDefault(options.homePath))}">Stay signed in</a></p>`,
+    '</main></body></html>'
+  ].join('');
 }

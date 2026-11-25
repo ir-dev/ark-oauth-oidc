@@ -163,7 +163,8 @@ namespace Ark.oAuth.Oidc.Webhooks
             HttpResponseMessage response;
             try
             {
-                response = await _http.CreateClient(ArkWebhookSender.HttpClientName).SendAsync(request, cts.Token);
+                response = await _http.CreateClient(ArkWebhookSender.HttpClientName)
+                    .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
             }
             catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException && !ct.IsCancellationRequested)
             {
@@ -171,7 +172,15 @@ namespace Ark.oAuth.Oidc.Webhooks
             }
             using (response)
             {
-                var text = await response.Content.ReadAsStringAsync(cts.Token);
+                string text;
+                try
+                {
+                    text = await ReadAnswerAsync(response, cts.Token);
+                }
+                catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or OperationCanceledException && !ct.IsCancellationRequested)
+                {
+                    throw new ArkWebhookException("token_failed", $"the token endpoint's answer could not be read: {ex.GetBaseException().Message}");
+                }
                 JsonElement json;
                 try { json = JsonDocument.Parse(string.IsNullOrWhiteSpace(text) ? "{}" : text).RootElement.Clone(); }
                 catch (JsonException) { json = default; }
@@ -188,7 +197,7 @@ namespace Ark.oAuth.Oidc.Webhooks
                         $"the token endpoint answered {(int)response.StatusCode} {error} {description}".Trim() + hint);
                 }
 
-                var lifetime = json.TryGetProperty("expires_in", out var ei) && ei.TryGetInt32(out var secs) ? secs
+                var lifetime = json.TryGetProperty("expires_in", out var ei) && ei.ValueKind == JsonValueKind.Number && ei.TryGetInt32(out var secs) ? secs
                     : json.TryGetProperty("expires_in", out var eis) && int.TryParse(eis.ToString(), out var parsed) ? parsed
                     : 300;
                 string? rotated = json.TryGetProperty("refresh_token", out var rt) && rt.ValueKind == JsonValueKind.String ? rt.GetString() : null;
@@ -200,6 +209,29 @@ namespace Ark.oAuth.Oidc.Webhooks
                     refresh_token = rotated ?? (grant == "refresh_token" ? refreshToken : null)
                 };
             }
+        }
+
+        /// <summary>The most of a token endpoint's answer that is read. One is a few KB.</summary>
+        private const int MaxAnswerBytes = 64 * 1024;
+
+        /// <summary>
+        /// The body, as the UTF-8 JSON is in whatever the answer calls itself, and no more of it
+        /// than an answer can be: what arrives compressed is counted as it unpacks, so a small
+        /// answer cannot become a large one in this process.
+        /// </summary>
+        private static async Task<string> ReadAnswerAsync(HttpResponseMessage response, CancellationToken ct)
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var kept = new MemoryStream();
+            var buffer = new byte[8192];
+            int n;
+            while ((n = await stream.ReadAsync(buffer, ct)) > 0)
+            {
+                if (kept.Length + n > MaxAnswerBytes)
+                    throw new ArkWebhookException("token_failed", $"the token endpoint answered with more than {MaxAnswerBytes / 1024} KB.");
+                kept.Write(buffer, 0, n);
+            }
+            return Encoding.UTF8.GetString(kept.GetBuffer(), 0, (int)kept.Length).TrimStart('﻿');
         }
     }
 }

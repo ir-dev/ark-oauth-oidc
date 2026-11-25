@@ -123,8 +123,8 @@ Two kinds of claim live in that one list:
   `ark_claims` and projected by the client onto `ark_oauth_client:RoleClaimType` (default `role`),
   so `[Authorize(Roles = "sample.admin")]` works against them.
 
-Claims are written into tokens when they are issued, so a change takes effect at the user's next
-sign-in, not immediately.
+Claims are written into tokens when they are issued, so a change, a claim taken away included,
+takes effect at the user's next sign-in or when the access token is next refreshed, not immediately.
 
 ---
 
@@ -248,6 +248,19 @@ No `offline_access`: a refresh token is a long-lived credential and a browser ha
 keep one. Tokens are held in memory rather than `localStorage`, which any script on the page can
 read. An application that needs durable browser sessions should put a backend in front of the flow
 — which is what the rest of this sample is.
+
+### Who may open the next two pages
+
+`/flows/machine` and `/flows/register` act with the machine client's secret. On the operator tenant
+that client is the operator: its token creates accounts, grants access and removes clients. Whoever
+can open those pages can do all of it, so they need somebody signed in to this app who holds the
+role **`sample.operator`** (`sample:OperatorRole`; grant it under **Access mapping** for this
+client, to operators only).
+
+The exception is a developer at this machine: with `ASPNETCORE_ENVIRONMENT=Development`, a browser on
+`localhost` opens them without signing in, because the first use of `/flows/register` is to create the
+client that signing in needs. `[OperatorOnly]` in `Controllers/` is the whole rule. A token that a page
+obtains is never drawn; its payload is.
 
 ### `/flows/machine` — client credentials
 
@@ -488,3 +501,6 @@ Entra ID, Okta, Auth0 or Keycloak is a change of `Authority` and `ClientId` alon
 4. Register production redirect URIs explicitly; they are matched exactly, so a staging URI is not
    a substring away from working.
 5. Leave dynamic client registration off unless it is deliberately needed.
+6. Do not give a deployed app the machine client's secret. If it must hold one, keep the pages that
+   use it behind an operator check, as `/flows/machine` and `/flows/register` are here, and run with
+   `ASPNETCORE_ENVIRONMENT=Production`.

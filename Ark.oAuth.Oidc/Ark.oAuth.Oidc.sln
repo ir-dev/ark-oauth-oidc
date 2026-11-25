@@ -22,6 +22,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.Client.Web", "Ark.Clien
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.oAuth.Oidc.QuickStart", "Ark.oAuth.Oidc.QuickStart\Ark.oAuth.Oidc.QuickStart.csproj", "{7084AC1A-4F94-4641-A204-F4C318711A4E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ark.Agents.TenantOnboarding", "..\agents\agent-001-tenant-onboarding\Ark.Agents.TenantOnboarding\Ark.Agents.TenantOnboarding.csproj", "{AB8983D8-786E-400F-A4EB-D4C31C3FA917}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -92,6 +94,18 @@ Global
 		{7084AC1A-4F94-4641-A204-F4C318711A4E}.Release|x64.Build.0 = Release|Any CPU
 		{7084AC1A-4F94-4641-A204-F4C318711A4E}.Release|x86.ActiveCfg = Release|Any CPU
 		{7084AC1A-4F94-4641-A204-F4C318711A4E}.Release|x86.Build.0 = Release|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Debug|x64.Build.0 = Debug|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Debug|x86.Build.0 = Debug|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Release|x64.ActiveCfg = Release|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Release|x64.Build.0 = Release|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Release|x86.ActiveCfg = Release|Any CPU
+		{AB8983D8-786E-400F-A4EB-D4C31C3FA917}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

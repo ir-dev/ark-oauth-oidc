@@ -172,9 +172,10 @@ namespace Ark.oAuth.Oidc.Endpoints
 
                 var scopes = await _claims.ResolveScopesAsync(p.GetValueOrDefault("scope"), client);
                 // RFC 8707. Read off the query as well as the parameters, which keep only the first
-                // of several values: a second one must not go unnoticed.
+                // of several values: a second one must not go unnoticed. Not off the query of a pushed
+                // request, whose parameters replace it entirely (RFC 9126 §4).
                 var resource = await InteractiveResourceAsync(tenant, ep, client,
-                    Request.Query["resource"].Append(p.GetValueOrDefault("resource")));
+                    (string.IsNullOrEmpty(requestUri) ? Request.Query["resource"] : default).Append(p.GetValueOrDefault("resource")));
                 var prompt = (p.GetValueOrDefault("prompt") ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 var nonce = p.GetValueOrDefault("nonce");
 
@@ -349,19 +350,25 @@ namespace Ark.oAuth.Oidc.Endpoints
         {
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
                 return (null, "Enter your username and password.");
+            // No account has these. What is typed here is counted, logged and raised as an event, so
+            // it is not taken at any length.
+            if (username.Length > DataAccess.MaxLoginLength || password.Length > DataAccess.MaxPasswordLength)
+                return (null, "That username and password combination was not recognised.");
 
             var opt = Options;
+            (ArkSession? session, string? error) LockedOut()
+            {
+                _da.Log("signin_lockout", tenant.tenant_id, "sign-in blocked by lockout", $"user: {username}", "warn");
+                Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.UserLockedOut,
+                    new { user = username, client_id = client.client_id, lockout_minutes = opt.LockoutMinutes, ip = Webhooks.ArkWebhookEvents.Ip(HttpContext) }, username);
+                return (null, $"Too many failed attempts. Try again in {opt.LockoutMinutes} minutes.");
+            }
             if (opt.MaxFailedSignIns > 0)
             {
                 var status = await _da.GetAuthStatus(username);
                 if (status != null && status.retry_count >= opt.MaxFailedSignIns
                     && (DateTime.UtcNow - status.at).TotalMinutes < opt.LockoutMinutes)
-                {
-                    _da.Log("signin_lockout", tenant.tenant_id, "sign-in blocked by lockout", $"user: {username}", "warn");
-                    Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.UserLockedOut,
-                        new { user = username, client_id = client.client_id, lockout_minutes = opt.LockoutMinutes, ip = Webhooks.ArkWebhookEvents.Ip(HttpContext) }, username);
-                    return (null, $"Too many failed attempts. Try again in {opt.LockoutMinutes} minutes.");
-                }
+                    return LockedOut();
             }
 
             try
@@ -388,6 +395,11 @@ namespace Ark.oAuth.Oidc.Endpoints
                 Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.UserSignInRefused,
                     new { user = username, client_id = client.client_id, reason = $"{ex.Level}_deactivated".ToLowerInvariant(), ip = Webhooks.ArkWebhookEvents.Ip(HttpContext) }, username);
                 return (null, ex.FriendlyMessage);
+            }
+            catch (ArkAccountLockedException)
+            {
+                // Locked by other attempts at this account while this one waited its turn.
+                return LockedOut();
             }
             catch (ArkBusyException ex)
             {
@@ -426,7 +438,7 @@ namespace Ark.oAuth.Oidc.Endpoints
             Response.Cookies.Append(BrowserCookie, browserId, new CookieOptions
             {
                 HttpOnly = true,
-                Secure = Request.IsHttps,
+                Secure = ArkIdpConsole.SecureCookies(Request, ServerConfig),
                 SameSite = SameSiteMode.Lax,
                 Expires = DateTimeOffset.UtcNow.AddYears(1),
                 Path = string.IsNullOrEmpty(Request.PathBase) ? "/" : Request.PathBase.Value!
@@ -444,7 +456,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 ?? throw new InvalidOperationException("only a session just created carries its cookie value."), new CookieOptions
             {
                 HttpOnly = true,
-                Secure = Request.IsHttps,
+                Secure = ArkIdpConsole.SecureCookies(Request, ServerConfig),
                 SameSite = SameSiteMode.Lax, // Lax still arrives on the top-level redirect from the client
                 Expires = new DateTimeOffset(session.expires_at, TimeSpan.Zero),
                 Path = string.IsNullOrEmpty(Request.PathBase) ? "/" : Request.PathBase.Value!

@@ -66,9 +66,32 @@ namespace Ark.oAuth.Oidc.Host.Controllers
         /// browser to the server's end_session_endpoint, which is where the IdP session actually
         /// lives. Dropping only the local cookie would leave the user silently signed straight
         /// back in on the next authorization request.
+        ///
+        /// The console's Sign out link, a typed address and a bookmark sign out straight away. A
+        /// request another site started is asked about first: taken at its word it ended the
+        /// operator's session here and, with the id_token_hint the redirect carries, the provider's
+        /// for every other application too, because somebody followed a link.
         /// </summary>
         [Authorize]
-        public IActionResult SignOutAll() =>
+        [HttpGet]
+        public IActionResult SignOutAll()
+        {
+            if (Request.Headers["Sec-Fetch-Site"] == "cross-site")
+            {
+                Response.Headers.CacheControl = "no-store";
+                Response.Headers.XFrameOptions = "DENY";
+                return View();
+            }
+            return SignOutOfBoth();
+        }
+
+        /// <summary>The button of that question: a POST this site's own page made.</summary>
+        [Authorize]
+        [HttpPost, ActionName(nameof(SignOutAll))]
+        [ValidateAntiForgeryToken]
+        public IActionResult SignOutAllConfirmed() => SignOutOfBoth();
+
+        private IActionResult SignOutOfBoth() =>
             SignOut(
                 new AuthenticationProperties { RedirectUri = "/" },
                 ArkOidcClient.CookieScheme,

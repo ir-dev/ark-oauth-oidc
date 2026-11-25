@@ -406,6 +406,9 @@ namespace Ark.oAuth.Oidc.Webhooks
                         ?? throw new ArkWebhookException("auth_incomplete", "Bearer authentication needs a token.");
                     cfg.bearer_header = Clean(dto.bearer_header);
                     cfg.bearer_scheme = dto.bearer_scheme == null ? "Bearer" : dto.bearer_scheme.Trim();
+                    // One word, as the header has it; anything else could never be sent.
+                    if (cfg.bearer_scheme.Length > 0 && !HeaderNameRe.IsMatch(cfg.bearer_scheme))
+                        throw new ArkWebhookException("bad_scheme", $"'{cfg.bearer_scheme}' is not an authentication scheme: one word, such as Bearer.");
                     if (cfg.bearer_header != null && (!HeaderNameRe.IsMatch(cfg.bearer_header) || ArkWebhookSender.ReservedHeaders.Contains(cfg.bearer_header)))
                         throw new ArkWebhookException("bad_header", $"'{cfg.bearer_header}' cannot carry the token.");
                     break;
@@ -817,10 +820,27 @@ namespace Ark.oAuth.Oidc.Webhooks
 
         private static bool Unfinished(string status) => ArkDeliveryStatus.Unfinished.Contains(status);
 
-        public async Task<object> DeliveryAsync(string? shardId, string? id)
+        /// <summary>
+        /// The shard a request names, which has to be one the registry knows.
+        ///
+        /// Opening a shard creates its tables, and keeps a model of them for as long as the
+        /// process runs. Taking any well-formed id at its word made that something a GET does: a
+        /// link, followed by a signed-in operator, left three tables behind per click.
+        /// </summary>
+        private async Task<(string Database, string Suffix)> KnownShardAsync(string? shardId)
         {
             var (db, suffix) = ArkWebhookRouter.ParseShardId(shardId);
+            var id = ArkWebhookRouter.ShardId(db, suffix);
+            await using var ctl = _dbs.Control();
+            if (!await ctl.shards.AsNoTracking().AnyAsync(s => s.id == id))
+                throw new ArkWebhookException("not_found", $"there is no shard '{id}'.", 404);
+            return (db, suffix);
+        }
+
+        public async Task<object> DeliveryAsync(string? shardId, string? id)
+        {
             if (string.IsNullOrWhiteSpace(id)) throw new ArkWebhookException("id_required", "id is required.");
+            var (db, suffix) = await KnownShardAsync(shardId);
             await using var ctx = _dbs.Shard(db, suffix);
             var row = await ctx.deliveries.AsNoTracking().FirstOrDefaultAsync(d => d.id == id)
                 ?? throw new ArkWebhookException("not_found", $"delivery '{id}' is not in shard '{shardId}'.", 404);
@@ -837,7 +857,7 @@ namespace Ark.oAuth.Oidc.Webhooks
 
         public async Task<object> CancelDeliveryAsync(ArkWebhookRowRef req)
         {
-            var (db, suffix) = ArkWebhookRouter.ParseShardId(req?.shard);
+            var (db, suffix) = await KnownShardAsync(req?.shard);
             await using var ctx = _dbs.Shard(db, suffix);
             var row = await ctx.deliveries.AsNoTracking().FirstOrDefaultAsync(d => d.id == req!.id)
                 ?? throw new ArkWebhookException("not_found", "the delivery does not exist.", 404);
@@ -860,7 +880,7 @@ namespace Ark.oAuth.Oidc.Webhooks
         /// </summary>
         public async Task<object> ReplayDeliveryAsync(ArkWebhookRowRef req, string who)
         {
-            var (db, suffix) = ArkWebhookRouter.ParseShardId(req?.shard);
+            var (db, suffix) = await KnownShardAsync(req?.shard);
             ArkWebhookDelivery row;
             await using (var ctx = _dbs.Shard(db, suffix))
             {
@@ -989,7 +1009,7 @@ namespace Ark.oAuth.Oidc.Webhooks
             }
             foreach (var item in (req?.items ?? new()).Take(1000))
             {
-                var (db, suffix) = ArkWebhookRouter.ParseShardId(item.shard);
+                var (db, suffix) = await KnownShardAsync(item.shard);
                 await using var ctx = _dbs.Shard(db, suffix);
                 var row = await ctx.dead_letters.AsNoTracking().FirstOrDefaultAsync(l => l.id == item.id);
                 if (row != null && (!openOnly || row.replayed_at == null)) list.Add((item.shard!, row));

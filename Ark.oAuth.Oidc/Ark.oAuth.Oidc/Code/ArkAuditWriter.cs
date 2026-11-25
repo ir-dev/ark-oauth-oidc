@@ -45,6 +45,28 @@ namespace Ark.oAuth.Oidc
             _log = log;
         }
 
+        /// <summary>The longest text a row keeps in <c>details</c>: a stack trace, a list of what changed.</summary>
+        internal const int MaxDetails = 4000;
+        /// <summary>...and in each of its other columns.</summary>
+        internal const int MaxText = 400;
+
+        /// <summary>
+        /// The row with every text in it fit to store (<see cref="ArkText"/>), of a length worth
+        /// storing, and none of them null: the columns are required, and what is in them was
+        /// partly typed by whoever was being turned away. A form field may be megabytes.
+        /// </summary>
+        internal static ArkAudit Storable(ArkAudit row)
+        {
+            row.ref_key = ArkText.Truncate(row.ref_key, MaxText) ?? "";
+            row.ref_val = ArkText.Truncate(row.ref_val, MaxText) ?? "";
+            row.log_type = ArkText.Truncate(row.log_type, MaxText) ?? "";
+            row.message = ArkText.Truncate(row.message, MaxText) ?? "";
+            row.details = ArkText.Truncate(row.details, MaxDetails) ?? "";
+            row.by = ArkText.Truncate(row.by, MaxText) ?? "";
+            row.ip = ArkText.Truncate(row.ip, MaxText) ?? "";
+            return row;
+        }
+
         /// <summary>
         /// Queues a row. False when the writer is not running — a host that registered the
         /// services without starting hosted services, or one that is shutting down — and the
@@ -53,7 +75,7 @@ namespace Ark.oAuth.Oidc
         public bool TryEnqueue(ArkAudit row)
         {
             if (!_running) return false;
-            if (!_queue.Writer.TryWrite(row)) Interlocked.Increment(ref _dropped);
+            if (!_queue.Writer.TryWrite(Storable(row))) Interlocked.Increment(ref _dropped);
             return true;
         }
 
@@ -107,8 +129,47 @@ namespace Ark.oAuth.Oidc
             {
                 // Never fatal, as it never was: a trace that cannot be written must not take the
                 // server down. Before the setup wizard has run there is no database to write to.
-                _log.LogWarning(ex, "Ark IdP could not write {Count} audit rows.", batch.Count);
+                var lost = await WriteSinglyAsync(batch);
+                _log.LogWarning(ex, "Ark IdP could not write {Count} of {Total} audit rows.", lost, batch.Count);
             }
+        }
+
+        /// <summary>
+        /// Writes a batch the database refused again, one row at a time, and says how many were
+        /// lost. The rows are the audit trail of everybody who did anything in the same moment:
+        /// one that cannot be stored costs itself, not the rest. Only when the database answers at
+        /// all; a database that is down is not asked five hundred times.
+        /// </summary>
+        private async Task<int> WriteSinglyAsync(List<ArkAudit> batch)
+        {
+            if (batch.Count < 2) return batch.Count;
+            try
+            {
+                using var probe = _scopes.CreateScope();
+                if (!await probe.ServiceProvider.GetRequiredService<ArkDataContext>().Database.CanConnectAsync()) return batch.Count;
+            }
+            catch
+            {
+                return batch.Count;
+            }
+
+            var lost = 0;
+            foreach (var row in batch)
+            {
+                try
+                {
+                    // A context each: one that has failed keeps the row it failed on.
+                    using var scope = _scopes.CreateScope();
+                    var ctx = scope.ServiceProvider.GetRequiredService<ArkDataContext>();
+                    ctx.audit_trace.Add(row);
+                    await ctx.SaveChangesAsync();
+                }
+                catch
+                {
+                    lost++;
+                }
+            }
+            return lost;
         }
     }
 }

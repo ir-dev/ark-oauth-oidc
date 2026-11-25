@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The zero-configuration identity server (as Ark.oAuth.Oidc.QuickStart), opened on the onboarding
+    agent that comes with it. In your own app the ProjectReference is a package reference.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Ark.Agents.TenantOnboarding.Sample</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Which model the agent talks through, and as whom, is this machine's business: user secrets
+         (see README), which sit above appsettings and below the environment, and never in the repo. -->
+    <UserSecretsId>ark-agent-001-tenant-onboarding-sample</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Ark.oAuth.Oidc\Ark.oAuth.Oidc\Ark.oAuth.Oidc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- What setup writes (settings, secrets, the SQLite file) is this machine's, not the build's. -->
+    <Content Remove="ark-idp-data\**" />
+    <None Remove="ark-idp-data\**" />
+  </ItemGroup>
+
+</Project>

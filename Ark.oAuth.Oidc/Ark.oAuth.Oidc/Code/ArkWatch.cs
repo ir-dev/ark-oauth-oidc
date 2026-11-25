@@ -163,6 +163,10 @@ namespace Ark.oAuth.Oidc
                 }
                 if (!string.IsNullOrWhiteSpace(e.Tenant) && !e.Attributes.ContainsKey("tenant"))
                     e.Attributes["tenant"] = e.Tenant;
+                // Whoever built the event: no single value makes it too large to send.
+                foreach (var (name, value) in e.Attributes.ToList())
+                    if (value is string { Length: > ArkAuditWriter.MaxDetails } text)
+                        e.Attributes[name] = Clip(text, ArkAuditWriter.MaxDetails);
 
                 var entry = new AuditEntry
                 {
@@ -422,6 +426,13 @@ namespace Ark.oAuth.Oidc
             }
         }
 
+        /// <summary>The request being served, when one is, for the code that has no other way to it.</summary>
+        internal HttpContext? Request()
+        {
+            try { return (_services.GetService(typeof(IHttpContextAccessor)) as IHttpContextAccessor)?.HttpContext; }
+            catch { return null; }
+        }
+
         /// <summary>Who is acting and from where, for the audit rows written to the database.</summary>
         internal (string? who, string? ip) Caller()
         {
@@ -481,7 +492,7 @@ namespace Ark.oAuth.Oidc
         }
 
         private static string? Clip(string? value, int max) =>
-            string.IsNullOrEmpty(value) || value.Length <= max ? value : value[..max] + "…";
+            string.IsNullOrEmpty(value) || value.Length <= max ? value : ArkText.Truncate(value, max) + "…";
 
         // ---------------------------------------------------------------- shutdown
 
@@ -664,6 +675,11 @@ namespace Ark.oAuth.Oidc
             var key = (refKey ?? "").Trim();
             Rules.TryGetValue(key, out var rule);
 
+            // The lengths the row itself keeps. Before the details are read for facts, too: they
+            // may be a form field of any size, and reading them costs more than their length.
+            refVal = ArkText.Truncate(refVal, ArkAuditWriter.MaxText);
+            message = ArkText.Truncate(message, ArkAuditWriter.MaxText);
+
             var e = new ArkWatchEvent
             {
                 Action = rule?.Action ?? FallbackAction(key),
@@ -684,7 +700,10 @@ namespace Ark.oAuth.Oidc
             // The reason a sign-in was turned away is in the key, not the sentence.
             if (key.StartsWith("signin_", StringComparison.OrdinalIgnoreCase)) e.With("reason_code", key["signin_".Length..]);
 
-            var facts = Facts(details);
+            var typed = TypedLines.TryGetValue(key, out var tail);
+            var facts = typed ? TypedFacts(details, tail) : null;
+            details = ArkText.Truncate(details, ArkAuditWriter.MaxDetails);
+            if (!typed) facts = Facts(details);
             if (facts == null)
             {
                 e.With("details", details);
@@ -759,13 +778,12 @@ namespace Ark.oAuth.Oidc
                 System = Host,
                 Level = AuditLevel.Error,
                 Outcome = Outcome.Failure,
-                Message = message
+                Message = ArkText.Truncate(message, ArkAuditWriter.MaxText)
             };
-            e.With("ref_key", refKey).With("ref", refVal)
+            e.With("ref_key", refKey).With("ref", ArkText.Truncate(refVal, ArkAuditWriter.MaxText))
                 .With("error_type", ex.GetType().FullName)
-                .With("error", ex.Message);
-            var stack = ex.ToString();
-            e.With("stack", stack.Length > 4000 ? stack[..4000] + "…" : stack);
+                .With("error", ArkText.Truncate(ex.Message, ArkAuditWriter.MaxText))
+                .With("stack", ArkText.Truncate(ex.ToString(), ArkAuditWriter.MaxDetails));
             return e;
         }
 
@@ -792,6 +810,52 @@ namespace Ark.oAuth.Oidc
             "user", "client", "sub", "audience", "act", "scopes", "reason", "notified", "failed", "not registered", "error", "jti", "sid",
             "user_created", "claims"
         };
+
+        /// <summary>
+        /// The sign-in lines: <c>user: …</c>, then the one fact named here when there is one.
+        ///
+        /// What follows <c>user:</c> is what somebody typed on an anonymous form. Read like any
+        /// other line, a username of <c>x, client: ark_idp_machine, jti: 1</c> became facts of the
+        /// event — in the trail an auditor reads — and <c>x, reason: …</c> replaced the reason.
+        /// </summary>
+        private static readonly Dictionary<string, string?> TypedLines = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["signin"] = "client",
+            ["signin_failed"] = "reason",
+            ["signin_inactive"] = "client",
+            ["signin_no_access"] = "client",
+            ["signin_lockout"] = null,
+            ["signin_busy"] = null
+        };
+
+        /// <summary>
+        /// The facts of such a line: the server's own is the last one, read from the end, and
+        /// everything before it is the username, whatever it looks like. Null when the line is not
+        /// in that shape.
+        /// </summary>
+        private static Dictionary<string, string>? TypedFacts(string? details, string? tail)
+        {
+            const string lead = "user: ";
+            var text = details ?? "";
+            if (!text.StartsWith(lead, StringComparison.Ordinal)) return null;
+
+            var facts = new Dictionary<string, string>(StringComparer.Ordinal);
+            var user = text[lead.Length..];
+            string? own = null;
+            if (tail != null)
+            {
+                var marker = $", {tail}: ";
+                var cut = user.LastIndexOf(marker, StringComparison.Ordinal);
+                if (cut >= 0)
+                {
+                    own = user[(cut + marker.Length)..].Trim();
+                    user = user[..cut];
+                }
+            }
+            facts["user"] = ArkText.Truncate(user.Trim(), 256);
+            if (own != null) facts[tail!] = own;
+            return facts;
+        }
 
         /// <summary>
         /// The facts in a protocol line's details — <c>client: a, sub: b, reason: …</c> — or null

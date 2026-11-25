@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Ark.Client.Web.Models;
 using Ark.oAuth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Ark.Client.Web.Controllers
@@ -23,7 +24,10 @@ namespace Ark.Client.Web.Controllers
     ///  * <b>dynamic registration</b> — creating a client at runtime rather than by hand, and the
     ///    one-shot credentials that come back with it.
     /// </summary>
-    // Sample app: each flow page authorises per action; the public ones are deliberate.
+    // Every page here needs the operator (see OperatorOnlyAttribute for the one exception), except
+    // the SPA page, which is a redirect URI and says [AllowAnonymous] for itself. The analyser does
+    // not know the attribute.
+    [OperatorOnly]
     [Route("flows")]  // nosemgrep: csharp.dotnet.security.audit.missing-or-broken-authorization.missing-or-broken-authorization
     public class FlowsController : Controller
     {
@@ -63,6 +67,7 @@ namespace Ark.Client.Web.Controllers
         /// why the action must stay anonymous: putting [Authorize] on it would start a second,
         /// server-side sign-in the moment the SPA's callback arrived.
         /// </summary>
+        [AllowAnonymous]
         [HttpGet("spa")]
         public async Task<IActionResult> Spa()
         {
@@ -106,11 +111,16 @@ namespace Ark.Client.Web.Controllers
         /// one — a client credentials token lasts an hour and has no session behind it, so asking
         /// for a fresh one per outbound call doubles the traffic and rate-limits the caller
         /// against its own identity provider.
+        ///
+        /// The token itself is not shown. Its payload is what there is to learn from, and the token
+        /// is the operator's credential: on a page it is in the browser's cache, a screenshot and
+        /// whatever else reads the screen.
         /// </summary>
         [HttpPost("machine")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> MachineToken()
         {
+            Response.Headers.CacheControl = "no-store";
             var model = await BuildMachineModelAsync();
             var secret = MachineSecret();
 

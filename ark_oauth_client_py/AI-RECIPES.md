@@ -101,7 +101,7 @@ def things():
 ## Recipe 4 — Protect an API (resource server)
 
 > **PROMPT:** "Protect a Flask API with bearer JWTs from the Ark provider. Verify locally against the
-> cached JWKS; validate audience only if configured."
+> cached JWKS; leave `audience` out, so that the tenant's published one is expected."
 
 ```python
 from flask import Flask, g, jsonify
@@ -110,8 +110,7 @@ from ark_oauth_client.flask import add_ark_oidc_api
 app = Flask(__name__)
 bearer = add_ark_oidc_api(app, "/api",
     authority="https://idp.example.com/my_idp",
-    client_id="my-api",
-    audience="my_idp_api")            # omit to skip the audience check
+    client_id="my-api")               # audience="…" only to expect another one than the tenant's
 
 @app.get("/api/me")
 def me():

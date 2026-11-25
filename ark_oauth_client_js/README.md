@@ -433,7 +433,8 @@ your own page calling:
   the provider session is ended first (right for a kiosk).
 - `ark.signoutRedirect()`: sign out completely.
 
-`onEvaluateAccess({ claims, arkClaims, allowedByConfiguration })` replaces the rule with your own.
+`onEvaluateAccess({ claims, arkClaims, allowedByConfiguration })` replaces the rule with your own. The
+check is asked again with each refresh: an account that has lost its access becomes `denied` there.
 `ArkChallengeProperties.switchUser(returnTo)` / `.selectAccount()` build the sign-in options by hand.
 
 ---

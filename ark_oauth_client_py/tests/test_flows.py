@@ -95,7 +95,7 @@ def test_client_credentials_reports_the_exchange(idp):
     assert result.expires_in == 3600
     assert result.token_endpoint.endswith("/oauth2/token")
     assert result.access_token_payload  # decoded for display
-    assert "ark_claims" in result.access_token_payload
+    assert '"sub": "post-app"' in result.access_token_payload, "the service, not a person"
 
 
 def test_the_secret_is_never_echoed_back(idp):
@@ -224,3 +224,78 @@ def test_a_wrong_secret_is_not_answered_from_the_cache(idp):
     assert wrong is not good
     assert wrong.succeeded is False
     assert wrong.error == "invalid_client"
+
+
+def test_a_secret_is_not_sent_to_a_plain_http_provider(idp):
+    """The helpers ask what the client's constructor asks: https, unless loopback or told otherwise."""
+    seen = []
+
+    def transport(url, method, headers, body, timeout):
+        seen.append((method, url))
+        return 200, {"Content-Type": "application/json"}, b"{}"
+
+    config = config_for(
+        idp, authority="http://idp.example.com/t", require_https_metadata=True
+    )
+    result = ArkClientCredentials(config, transport=transport).request_token("post-app", "post-secret")
+    assert not result.succeeded and "plain http" in result.error_description
+    assert seen == [], "nothing was sent, the discovery request included"
+
+    registration = ArkRegistration(ArkSetupProbe(config, transport=transport), transport=transport)
+    refused = registration.register({"client_name": "x"}, "initial-access-token")
+    assert not refused.succeeded and "plain http" in refused.error_description
+    assert seen == []
+
+
+def test_a_secret_is_not_sent_where_another_issuer_says(idp):
+    import json
+
+    seen = []
+
+    def transport(url, method, headers, body, timeout):
+        seen.append((method, url))
+        document = {"issuer": "https://elsewhere.example/t", "token_endpoint": "https://elsewhere.example/token"}
+        return 200, {"Content-Type": "application/json"}, json.dumps(document).encode()
+
+    config = config_for(idp, authority="https://idp.example.com/t", require_https_metadata=True)
+    probe = ArkSetupProbe(config, transport=transport)
+    result = ArkClientCredentials(config, probe, transport=transport).request_token("post-app", "post-secret")
+
+    assert not result.succeeded and "identifies itself as" in result.error_description
+    assert [method for method, _ in seen] == ["GET"], "the secret went nowhere"
+    # A set-up page still gets to show the mismatch.
+    assert probe.probe().issuer_mismatch is True
+
+
+def test_the_discovery_cache_makes_the_same_checks(idp):
+    import json
+
+    from ark_oauth_client import ArkDiscoveryCache
+
+    def says(issuer):
+        return lambda *_args: (200, {}, json.dumps({"issuer": issuer}).encode())
+
+    ArkDiscoveryCache.clear()
+    try:
+        assert ArkDiscoveryCache.get(idp.issuer)["issuer"] == idp.issuer
+        plain = "http://idp.example.com/t"
+        assert ArkDiscoveryCache.get(plain, transport=says(plain)) is None
+        assert ArkDiscoveryCache.get(plain, require_https=False, transport=says(plain))
+        other = says("https://elsewhere.example/t")
+        assert ArkDiscoveryCache.get("https://idp.example.com/t", transport=other) is None
+    finally:
+        ArkDiscoveryCache.clear()
+
+
+def test_a_failed_onboarding_call_does_not_repeat_the_password():
+    from ark_oauth_client import AuthClientHelper
+
+    config = ArkAuthConfig.from_mapping(
+        {"auth_server_url": "http://127.0.0.1:9", "tenant_id": "t", "client_id": "c"}
+    )
+    answer = AuthClientHelper(config, "service-token").onboard_user(
+        "bob@example.com", "S3cret-Pa55!", "reader", "Bob"
+    )
+    assert answer["error"] is True
+    assert "S3cret" not in str(answer) and "user_pw" not in str(answer)
+    assert "/api/oauth/onboard/user" in answer["data"], "what failed is still said"

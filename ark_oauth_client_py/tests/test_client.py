@@ -315,7 +315,7 @@ def test_verify_access_token_checks_scopes_and_claims(idp):
 
     payload = client.verify_access_token(
         tokens.access_token,
-        audience="web-app",
+        audience=idp.audience,
         scopes=["reports.read"],
         ark_claims=["billing.admin"],
     )
@@ -323,7 +323,7 @@ def test_verify_access_token_checks_scopes_and_claims(idp):
 
     with pytest.raises(ArkOAuthError) as caught:
         client.verify_access_token(
-            tokens.access_token, audience="web-app", scopes=["something.else"]
+            tokens.access_token, audience=idp.audience, scopes=["something.else"]
         )
     assert caught.value.error == "insufficient_scope"
     assert caught.value.status == 403
@@ -455,3 +455,93 @@ def test_client_credentials_cache_is_keyed_on_the_secret(idp):
     with pytest.raises(ArkOAuthError) as caught:
         client.client_credentials(scopes=["reports.read"], client_secret="WRONG-SECRET")
     assert caught.value.error == "invalid_client"
+
+
+def test_extra_parameters_cannot_replace_what_the_flow_rests_on(idp):
+    client = public_client(idp, extra_authorization_params={"state": "fixed", "ui_locales": "ta"})
+    transaction = client.create_authorization_url(
+        extra={
+            "state": "attacker",
+            "code_challenge": "attacker",
+            "redirect_uri": "http://127.0.0.1:9999/elsewhere",
+            "nonce": "attacker",
+            "resource": "https://api.example.com",
+        }
+    )
+    query = {k: v[0] for k, v in parse_qs(urlparse(transaction.url).query).items()}
+
+    assert query["state"] == transaction.state
+    assert query["nonce"] == transaction.nonce
+    assert query["redirect_uri"] == transaction.redirect_uri
+    assert query["code_challenge"] != "attacker"
+    assert query["resource"] == "https://api.example.com" and query["ui_locales"] == "ta"
+
+
+def test_a_refresh_without_a_new_refresh_token_keeps_the_one_presented(idp):
+    idp.rotate_refresh_tokens = False
+    client = public_client(idp)
+    transaction = client.create_authorization_url()
+    tokens = client.handle_callback(follow(client, transaction), transaction)
+
+    first = client.refresh(tokens.refresh_token)
+    assert first.refresh_token == tokens.refresh_token
+    assert client.refresh(first.refresh_token).access_token
+
+
+def test_a_refreshed_id_token_must_be_about_the_same_user(idp):
+    client = public_client(idp)
+    transaction = client.create_authorization_url()
+    tokens = client.handle_callback(follow(client, transaction), transaction)
+
+    idp.user = {**idp.user, "sub": "mallory@example.com"}
+    with pytest.raises(ArkTokenError) as refused:
+        client.refresh(tokens.refresh_token, subject=tokens.subject)
+    assert refused.value.claim == "sub"
+
+
+def test_a_token_does_not_follow_a_redirect_to_another_origin():
+    """urllib copies every header across a redirect; a bearer token goes only where it was sent."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from ark_oauth_client.http import get_json
+
+    received = {}
+
+    def serve(handler):
+        server = HTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return server
+
+    class Elsewhere(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_GET(self):
+            received[self.path] = self.headers.get("Authorization")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b"{}")
+
+    elsewhere = serve(Elsewhere)
+
+    class Provider(Elsewhere):
+        def do_GET(self):
+            if self.path == "/same":
+                return Elsewhere.do_GET(self)
+            target = "/same" if self.path == "/within" else f"http://127.0.0.1:{elsewhere.server_port}/other"
+            self.send_response(302)
+            self.send_header("Location", target)
+            self.end_headers()
+
+    provider = serve(Provider)
+    try:
+        base = f"http://127.0.0.1:{provider.server_port}"
+        get_json(f"{base}/within", headers={"Authorization": "Bearer user-token"})
+        get_json(f"{base}/away", headers={"Authorization": "Bearer user-token"})
+    finally:
+        provider.shutdown()
+        elsewhere.shutdown()
+
+    assert received == {"/same": "Bearer user-token", "/other": None}

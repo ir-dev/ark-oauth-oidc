@@ -80,7 +80,7 @@ namespace Ark.oAuth
 
             try
             {
-                var metadata = await _probe.ReadMetadataAsync(authority, cancellationToken);
+                var metadata = await _probe.ReadTrustedMetadataAsync(authority, cancellationToken);
                 if (string.IsNullOrEmpty(metadata.TokenEndpoint))
                 {
                     result.Error = "server_error";
@@ -107,7 +107,7 @@ namespace Ark.oAuth
                         kv.Key, kv.Key == "client_secret" ? "••••••••" : kv.Value))
                     .ToList();
 
-                var client = _http.CreateClient("ark-oidc-client");
+                var client = _http.CreateClient(ArkOidcClient.HttpClientName);
                 using var response = await client.PostAsync(
                     metadata.TokenEndpoint, new FormUrlEncodedContent(form), cancellationToken);
 

@@ -168,7 +168,8 @@ endpoint's row, so with several instances one of them refreshes and the others u
 refresh token your server rotates is stored and used next; reuse detection on your side never sees
 the same refresh token twice. A 401 from your endpoint discards the token and the next attempt gets
 a new one. An `invalid_grant` on the refresh token goes straight to the dead-letter queue with a
-message to enter a new one.
+message to enter a new one. The token endpoint's answer is read as UTF-8 JSON, whatever it calls
+itself, and no more than 64 KB of it, counted after decompression: a longer one is a failed attempt.
 
 Up to 20 **custom headers** can be added as well (values stored encrypted). The signature and
 `X-Ark-*` headers cannot be overridden, nor `Authorization` unless the type is `none`.
@@ -187,7 +188,8 @@ Each endpoint has a retry policy:
 | Timeout per attempt | 15 s | 1–120 |
 | Parallel requests | 4 | per instance |
 
-Timeouts, connection failures, 408, 429 and 5xx are retried. Other 4xx answers and 3xx are not:
+Timeouts, connection failures, 408, 429 and 5xx are retried, and so is anything else that kept an
+attempt from being made; each counts as an attempt. Other 4xx answers and 3xx are not retried:
 they go to the **dead-letter queue** at once (unless "retry 4xx" is on), as does a delivery that
 runs out of attempts. A dead letter keeps the exact body, the reason (`max_attempts`,
 `non_retryable`, `endpoint_disabled`), the attempt count and the last answer.
@@ -311,7 +313,8 @@ changes apply without a restart.
 Base `/api/oauth/v1/webhooks`, behind the management policy (the operator's console session, or a
 `client.register` token of `{TenantId}_machine`). Writes are `POST` with a JSON body; answers are
 `{ error, code, msg, data }` with a real HTTP status. Secrets in a request: `null` keeps what is
-stored, `""` clears it, anything else replaces it.
+stored, `""` clears it, anything else replaces it. A `shard` in a request has to be one the registry
+lists (`GET shards`); any other answers 404 and creates nothing.
 
 | Route | |
 |---|---|
@@ -339,6 +342,9 @@ Every configuration change is written to the IdP's audit trail with who made it,
   The signing and credential secrets are encrypted with the data-protection key ring: a database
   restored elsewhere without that ring keeps its endpoints but needs their secrets entered again
   (the console says so), and the signing secret rotated.
+* **What the database refuses.** Events are written in batches. One that cannot be stored costs
+  itself: the others of its batch are written one by one, at once. A NUL or half a surrogate pair in
+  a value typed by a user, or in a receiver's answer, is stored as `U+FFFD`.
 * **Removing the module** is removing the `AddArkWebhooks()` line. The tables stay until you drop
   them (`ark_wh_*`).
 * **Security.** Only the operator can configure webhooks: an endpoint sends identity events — who

@@ -160,6 +160,24 @@ namespace Ark.oAuth.Oidc.Protocol
             return requestedList;
         }
 
+        /// <summary>
+        /// What is left of an earlier grant: the scopes the client is still registered for. One taken
+        /// off the client went on being refreshed for as long as the session lasted.
+        /// </summary>
+        public async Task<List<string>> StillAllowedAsync(List<string> granted, ArkClient client)
+        {
+            static List<string> Of(List<string> scopes, ArkClient c)
+            {
+                var allowed = new HashSet<string>(c.EffectiveScopes, StringComparer.OrdinalIgnoreCase);
+                return scopes.Where(s => allowed.Contains(s) || Mcp.ArkMcpScopes.ImpliedBy(allowed, s)).ToList();
+            }
+            var left = Of(granted, client);
+            if (left.Count == granted.Count) return left;
+            // Nothing is taken away on a copy that may be stale (ArkIdpCache.ClientIfChangedAsync).
+            var fresh = await ArkIdpCache.ClientIfChangedAsync(_ctx, client);
+            return ReferenceEquals(fresh, client) ? left : Of(granted, fresh);
+        }
+
         /// <summary>Scopes advertised in discovery.</summary>
         public async Task<List<string>> GetSupportedScopesAsync()
         {

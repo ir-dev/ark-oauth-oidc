@@ -16,6 +16,11 @@ public class AuthClientHelper
     {
         return _config.GetSection("ark_oauth_client").Get<ArkAuthConfig>() ?? throw new ApplicationException("config missing");
     }
+    /// <summary>
+    /// Creates a user in this tenant. The route is the v1 one, which reads everything from the query
+    /// string, the password included: whatever logs request lines on the way sees it.
+    /// <c>POST {AuthServerUrl}/api/oauth/v1/provision/user</c> takes a body and sends no password.
+    /// </summary>
     public async Task<dynamic> OnboardUser(string user_email, string pw, string user_claims, string full_name)
     {
         var cc = LoadConfig();

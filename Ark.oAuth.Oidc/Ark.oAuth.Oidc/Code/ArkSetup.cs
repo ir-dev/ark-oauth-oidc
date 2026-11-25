@@ -115,13 +115,35 @@ namespace Ark.oAuth.Oidc
         /// <summary>Writes a file only its owner can read, replacing any previous one in one step.</summary>
         internal static void WritePrivateFile(string path, byte[] content)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            CreatePrivateDirectory(Path.GetDirectoryName(path)!);
             EnsureIgnored(Path.GetDirectoryName(path)!);
             var temp = path + ".tmp";
-            File.WriteAllBytes(temp, content);
-            if (!OperatingSystem.IsWindows())
-                File.SetUnixFileMode(temp, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            // One left by a write that was cut short would keep whatever mode it has.
+            File.Delete(temp);
+            using (var file = CreatePrivateFile(temp)) file.Write(content);
             File.Move(temp, path, overwrite: true);
+        }
+
+        /// <summary>
+        /// A new file, its owner's alone from the moment it exists. Tightening it after writing left
+        /// it open to every account on the machine in between. A file system without modes — a
+        /// network share, say — ignores the request.
+        /// </summary>
+        internal static FileStream CreatePrivateFile(string path)
+        {
+            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
+            if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            return new FileStream(path, options);
+        }
+
+        /// <summary>
+        /// The data directory, for its owner alone when this creates it. One that is already there is
+        /// left as it is: somebody may have opened it to a backup account on purpose.
+        /// </summary>
+        internal static void CreatePrivateDirectory(string path)
+        {
+            if (OperatingSystem.IsWindows() || Directory.Exists(path)) Directory.CreateDirectory(path);
+            else Directory.CreateDirectory(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
         /// <summary>
@@ -158,12 +180,16 @@ namespace Ark.oAuth.Oidc
     /// From the next request on, the same process is the identity provider. No restart.
     ///
     /// <b>Who may run it.</b> Whoever completes setup becomes the administrator, so an
-    /// unconfigured server exposed to a network is a race. From this machine — a loopback
-    /// address, no forwarding headers — the wizard is open, because that is a developer at
-    /// <c>dotnet run</c>. From anywhere else it asks for a setup code that is printed in the
-    /// server's log and written beside the settings, which only someone who can see the server
-    /// has. <c>Setup:RequireToken</c> asks for it everywhere; <c>Setup:Enabled</c> false removes the
+    /// unconfigured server exposed to a network is a race. The wizard asks for a setup code that is
+    /// printed in the server's log and written beside the settings, which only someone who can see
+    /// the server has. The one exception is a developer at <c>dotnet run</c>: in the Development
+    /// environment, from a loopback address, with nothing to say a proxy was in between.
+    /// <c>Setup:RequireToken</c> asks for it there too; <c>Setup:Enabled</c> false removes the
     /// wizard altogether.
+    ///
+    /// <b>When it is gone.</b> A process that has run configured never offers setup again: settings
+    /// that go missing, or that a slip of the hand has made unreadable, are a fault to report and not
+    /// an invitation to whoever asks next. Nor does one whose settings file is there and cannot be read.
     ///
     /// <b>Cross-site requests.</b> Every API call is a JSON POST carrying a custom header, which a
     /// browser will not send cross-origin without a preflight this middleware never grants.
@@ -202,10 +228,82 @@ namespace Ark.oAuth.Oidc
             _log = logs.CreateLogger("Ark.oAuth.Oidc.Setup");
 
             ArkIdpSettings.Attach(config, env);
-            if (Enabled && !ArkIdpSettings.IsConfigured(config)) Announce();
+            if (Enabled && !Configured() && Withheld() == null) Announce();
         }
 
         bool Enabled => _config.GetValue("ark_oauth_server:Setup:Enabled", true);
+
+        // Odd while an install is running. Between its two steps, the settings taking effect and the
+        // database being seeded, configuration already reads as complete.
+        int _installs;
+        // This process has served as a configured server, so it never offers setup again.
+        volatile bool _wasConfigured;
+        int _lossReported;
+
+        /// <summary>
+        /// Whether the server is set up, read so that an install under way counts as not yet. A
+        /// request let through in the middle of one ran the plain bootstrap: it won the race for the
+        /// empty database and seeded it without the password, key and secret that had been collected.
+        /// </summary>
+        bool Configured()
+        {
+            while (true)
+            {
+                var before = Volatile.Read(ref _installs);
+                if ((before & 1) != 0) return false;
+                var configured = ArkIdpSettings.IsConfigured(_config);
+                // An install began or ended meanwhile: what was read may be the half of it.
+                if (Volatile.Read(ref _installs) != before) continue;
+                if (configured) _wasConfigured = true;
+                return configured;
+            }
+        }
+
+        /// <summary>
+        /// Why setup is not to be offered although there is no configuration, or null when it is. A
+        /// running server whose settings file was mistyped, half saved or on a volume that went away
+        /// used to fall back to the wizard for as long as that lasted, with a live database to attach to.
+        /// </summary>
+        string? Withheld()
+        {
+            if (_wasConfigured) return "the settings it was running with are gone or can no longer be read";
+            return SettingsUnreadable() ? "its settings file is there but cannot be read" : null;
+        }
+
+        /// <summary>Whether there is a settings file configuration cannot load, by configuration's own reading of it.</summary>
+        bool SettingsUnreadable()
+        {
+            var file = ArkIdpSettings.SettingsFile(_config, _env);
+            if (!File.Exists(file)) return false;
+            try
+            {
+                using var content = File.OpenRead(file);
+                new ConfigurationBuilder().AddJsonStream(content).Build();
+                return false;
+            }
+            catch (FileNotFoundException) { return false; } // removed since: a failed install takes its file back
+            catch (Exception ex) when (ex is InvalidDataException or FormatException or JsonException or IOException or UnauthorizedAccessException)
+            {
+                return true;
+            }
+        }
+
+        async Task AnswerWithheldAsync(HttpContext context, string why)
+        {
+            // Once per loss, or a busy server would fill its log with it.
+            if (Interlocked.Exchange(ref _lossReported, 1) == 0)
+                _log.LogError(
+                    "Ark IdP has no usable configuration: {Why}. Every request is answered with 503 and setup is not offered. " +
+                    "Put {File} right and the server carries on by itself; to set it up from the beginning, move that file away and restart.",
+                    why, ArkIdpSettings.SettingsFile(_config, _env));
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            context.Response.Headers.CacheControl = "no-store";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = "configuration_unavailable",
+                msg = "This identity provider cannot read its configuration. The reason is in its log."
+            });
+        }
 
         // What the setup tools report about this host (Mcp/Tools/SetupTools.cs).
         internal string DataDirectory => ArkIdpSettings.DataDirectory(_config, _env);
@@ -222,7 +320,14 @@ namespace Ark.oAuth.Oidc
                 return;
             }
 
-            var configured = ArkIdpSettings.IsConfigured(_config);
+            var configured = Configured();
+            if (configured) Interlocked.Exchange(ref _lossReported, 0);
+            else if (Enabled && Withheld() is { } why)
+            {
+                await AnswerWithheldAsync(context, why);
+                return;
+            }
+
             if (path.StartsWithSegments(SetupPath, out var rest))
             {
                 if (configured || !Enabled)
@@ -278,10 +383,10 @@ namespace Ark.oAuth.Oidc
         void Announce()
         {
             var code = EnsureSetupCode();
-            var where = code == null ? "" : $" From any other machine, enter the setup code {code}.";
+            var where = !LocalExempt ? $" Enter the setup code {code}."
+                : $" From this machine (localhost) no code is needed, because the environment is Development. From any other machine, enter the setup code {code}.";
             _log.LogWarning(
-                "Ark IdP is not configured yet. Open /ark-idp/setup on this server in a browser to run the setup wizard. " +
-                "From this machine (localhost) no code is needed.{Where}", where);
+                "Ark IdP is not configured yet. Open /ark-idp/setup on this server in a browser to run the setup wizard.{Where}", where);
             if (code != null && McpEnabled)
                 _log.LogWarning(
                     "An agent can set it up instead: connect it to the MCP server at {Path} with the setup code {Code} as its bearer token. " +
@@ -292,14 +397,16 @@ namespace Ark.oAuth.Oidc
         bool McpEnabled => _config.GetValue("ark_oauth_server:Mcp:Enabled", true) && _config.GetValue("ark_oauth_server:Mcp:HostLevel", true);
 
         /// <summary>
-        /// The code, created once and kept beside the settings so a restart does not change it.
-        /// Null when it cannot be stored — the log still has it for this process.
+        /// The code, created once and kept beside the settings so a restart does not change it. When
+        /// it cannot be stored, the log still has it for this process. Null once setup is over.
         /// </summary>
         string? EnsureSetupCode()
         {
             lock (CodeLock)
             {
                 if (_setupCode != null) return _setupCode;
+                // Forgotten, because setup is over: a call still under way must not bring one back.
+                if (ArkIdpSettings.IsConfigured(_config)) return null;
                 var file = Path.Combine(ArkIdpSettings.DataDirectory(_config, _env), ArkIdpSettings.TokenFileName);
                 try
                 {
@@ -336,21 +443,37 @@ namespace Ark.oAuth.Oidc
         }
 
         /// <summary>
-        /// A developer on this machine: loopback, and not relayed by a proxy that is itself on
-        /// loopback — nginx or a tunnel in front of Kestrel makes every visitor look local.
+        /// Whether anybody is spared the code at all. Only in Development, which is what
+        /// <c>dotnet run</c> is and what a deployed server is not: there, a loopback address says
+        /// nothing about who is asking. nginx's plain <c>proxy_pass</c> adds no forwarding header and
+        /// sends its own upstream name, <c>127.0.0.1:5000</c>, as the Host, so every visitor on the
+        /// internet looked like somebody at this machine; and a TCP tunnel lets them choose the Host.
+        /// </summary>
+        bool LocalExempt => _env.IsDevelopment() && !_config.GetValue("ark_oauth_server:Setup:RequireToken", false);
+
+        /// <summary>
+        /// What a proxy, or the forwarded-headers middleware behind one, leaves on a request. The
+        /// X-Original ones are the trace of a header that middleware has already used up: without
+        /// them, a caller that itself sent <c>X-Forwarded-For: 127.0.0.1</c> arrived as loopback.
+        /// </summary>
+        static readonly string[] Relayed =
+        {
+            "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "Forwarded", "X-Real-IP",
+            "X-Original-For", "X-Original-Host", "X-Original-Proto"
+        };
+
+        /// <summary>
+        /// A developer on this machine: in Development, on loopback, and not relayed by a proxy that
+        /// is itself on loopback.
         /// </summary>
         bool IsLocal(HttpContext context)
         {
-            if (_config.GetValue("ark_oauth_server:Setup:RequireToken", false)) return false;
+            if (!LocalExempt) return false;
             var remote = context.Connection.RemoteIpAddress;
             if (remote == null || !IPAddress.IsLoopback(remote)) return false;
-            var h = context.Request.Headers;
-            if (h.ContainsKey("X-Forwarded-For") || h.ContainsKey("Forwarded") || h.ContainsKey("X-Real-IP")) return false;
-            // ...and addressed to this machine by a loopback name. A same-host proxy that adds no
-            // forwarding header (a bare proxy_pass, some tunnels and sidecars) passes the checks
-            // above for every visitor, but forwards the public Host it was reached on; and a
-            // DNS-rebinding page reaches a developer's unconfigured `dotnet run` under its own
-            // name. Either way the first stranger to finish the wizard became the operator.
+            if (Relayed.Any(context.Request.Headers.ContainsKey)) return false;
+            // ...and addressed to this machine by a loopback name, which a DNS-rebinding page in the
+            // developer's own browser is not: it reaches an unconfigured `dotnet run` under its own.
             var host = context.Request.Host.Host.Trim('[', ']');
             return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
                    || (IPAddress.TryParse(host, out var named) && IPAddress.IsLoopback(named));
@@ -415,8 +538,8 @@ namespace Ark.oAuth.Oidc
 
         /// <summary>
         /// The caller of the setup tools: whoever presents the setup code, as the bearer token.
-        /// Always, from this machine too — the exemption for localhost is for a developer at a
-        /// browser, and what reaches this endpoint is a program.
+        /// Always, in Development too — the exemption there is for a developer at a browser, and
+        /// what reaches this endpoint is a program.
         /// </summary>
         Mcp.ArkMcpCaller SetupCaller(HttpContext context)
         {
@@ -653,6 +776,8 @@ namespace Ark.oAuth.Oidc
                 // An agent can do this instead, and may have started: see ServeMcpAsync.
                 mcp_url = McpEnabled ? $"{request.Scheme}://{request.Host}{pathBase}{Mcp.ArkMcpResources.HostPath}" : null,
                 mcp_draft_at = McpEnabled ? McpTools.DraftUpdatedAt : null,
+                // The agent in this server that does it by conversation, and where that stands.
+                agent = Agent(context, pathBase),
                 defaults = new
                 {
                     base_url = $"{request.Scheme}://{request.Host}{pathBase}",
@@ -661,6 +786,21 @@ namespace Ark.oAuth.Oidc
                     sqlite_file = DefaultSqliteFile(dataDir),
                     https = request.IsHttps
                 }
+            };
+        }
+
+        /// <summary>
+        /// The onboarding agent's view, for the wizard's first page to link to: where it is, and what
+        /// it is waiting for a person to do. Null when there is none (switched off, or MCP is).
+        /// </summary>
+        static object? Agent(HttpContext context, string pathBase)
+        {
+            if (context.RequestServices.GetService<Ark.Agents.TenantOnboarding.Hosting.AgentStatusReader>()?.Read() is not { } s) return null;
+            return new
+            {
+                name = s.Name, url = pathBase + s.Path, phase = s.Phase, why = s.Why, started = s.Started,
+                essentials_done = s.EssentialsDone, essentials_total = s.EssentialsTotal, ready_for_review = s.ReadyForReview,
+                waiting_for_lead = s.WaitingForLead, waiting_for_colleagues = s.WaitingForColleagues, last_message_at = s.LastMessageAt
             };
         }
 
@@ -682,7 +822,7 @@ namespace Ark.oAuth.Oidc
         {
             try
             {
-                Directory.CreateDirectory(directory);
+                ArkIdpSettings.CreatePrivateDirectory(directory);
                 var probe = Path.Combine(directory, $".write-test-{Guid.NewGuid():N}");
                 File.WriteAllText(probe, "");
                 File.Delete(probe);
@@ -833,7 +973,52 @@ namespace Ark.oAuth.Oidc
             var connection = (db?.ConnectionString ?? "").Trim();
             if (connection.Length == 0)
                 throw new SetupException("connection_required", "Enter the database connection.", "connection_string");
-            return (provider, connection);
+            return (provider, provider switch
+            {
+                "mysql" => WithoutLocalFiles(connection),
+                "postgres" => WithoutPassfile(connection),
+                _ => connection
+            });
+        }
+
+        /// <summary>
+        /// A MySQL connection on which the server cannot ask this machine for its files. With
+        /// <c>AllowLoadLocalInfile</c> on, whatever answers at the other end names a path and the client
+        /// sends what is in it, so testing a connection was a way to read any file the server's account
+        /// can. Rebuilt by the driver's own builder, which knows every spelling of an option; what comes
+        /// out is what is tested and what is saved. Files named for TLS (SslCa and its kin) stay: they
+        /// are read to verify the server and to prove this client, and their content is not sent.
+        /// </summary>
+        static string WithoutLocalFiles(string connection)
+        {
+            global::MySql.Data.MySqlClient.MySqlConnectionStringBuilder builder;
+            try { builder = new(connection); }
+            catch (Exception ex) when (ex is ArgumentException or FormatException or KeyNotFoundException or InvalidOperationException)
+            {
+                // Not the driver's message: for a password with an unquoted ';' it quotes part of it.
+                throw new SetupException("invalid_connection",
+                    "That is not a MySQL connection string this server can read: an option or a value it does not know, or a value with ';' or '=' in it that is not quoted.", "connection_string");
+            }
+            if (!string.IsNullOrWhiteSpace(builder.OciConfigFile))
+                throw new SetupException("option_not_allowed", "The connection may not name an OCI configuration file. Sign in with a username and password.", "connection_string");
+            builder.AllowLoadLocalInfile = false;
+            builder.AllowLoadLocalInfileInPath = "";
+            return builder.ConnectionString;
+        }
+
+        /// <summary>A PostgreSQL connection that does not take its password from a file of the caller's choosing.</summary>
+        static string WithoutPassfile(string connection)
+        {
+            Npgsql.NpgsqlConnectionStringBuilder builder;
+            try { builder = new(connection); }
+            catch (Exception ex) when (ex is ArgumentException or FormatException or KeyNotFoundException or InvalidOperationException)
+            {
+                throw new SetupException("invalid_connection",
+                    "That is not a PostgreSQL connection string this server can read: an option or a value it does not know, or a value with ';' or '=' in it that is not quoted.", "connection_string");
+            }
+            if (!string.IsNullOrWhiteSpace(builder.Passfile))
+                throw new SetupException("option_not_allowed", "The connection may not name a password file. Give the password itself.", "connection_string");
+            return connection;
         }
 
         /// <summary>The file a SQLite connection string names, resolved the way SQLite will.</summary>
@@ -1091,9 +1276,10 @@ namespace Ark.oAuth.Oidc
                     "This host's configuration cannot be extended at run time, so the settings cannot take effect. Use WebApplication.CreateBuilder.");
 
             await InstallLock.WaitAsync(context.RequestAborted);
+            Interlocked.Increment(ref _installs); // from here until it is even again, nothing is let past: see Configured
             try
             {
-                if (ArkIdpSettings.IsConfigured(_config))
+                if (_wasConfigured || ArkIdpSettings.IsConfigured(_config))
                     throw new SetupException("already_configured", "This server has already been set up.");
 
                 if (adminByLink && req.Admin != null) req.Admin.Password = Protocol.ArkCrypto.RandomToken(32);
@@ -1119,7 +1305,7 @@ namespace Ark.oAuth.Oidc
                 }
 
                 if (plan.Provider == "sqlite" && SqliteFile(plan.Connection) is { } sqlite)
-                    Directory.CreateDirectory(Path.GetDirectoryName(sqlite)!);
+                    ArkIdpSettings.CreatePrivateDirectory(Path.GetDirectoryName(sqlite)!);
 
                 // The file watcher would get there too, a moment later; this makes it now, and
                 // fires the change tokens that rebuild the console's sign-in options.
@@ -1127,6 +1313,7 @@ namespace Ark.oAuth.Oidc
 
                 try
                 {
+                    if (plan.Provider == "sqlite") CreatePrivateSqlite(plan.Connection);
                     using var scope = context.RequestServices.GetRequiredService<IServiceScopeFactory>().CreateScope();
                     await ArkExtn.BootstrapDatabaseAsync(scope.ServiceProvider, context, new ArkSeedOverrides
                     {
@@ -1153,7 +1340,8 @@ namespace Ark.oAuth.Oidc
 
                 ForgetSetupCode();
                 // It holds whatever an agent had collected, some of it secret, and is of no more use.
-                Mcp.ArkSetupDraft.Delete(dataDir);
+                // Closed as well as deleted: a setup call still under way would write it back.
+                McpTools.Close();
                 _log.LogInformation("Ark IdP setup complete: tenant {Tenant}, issuer {Issuer}, settings in {File}",
                     plan.TenantId, plan.Issuer, settingsFile);
 
@@ -1197,14 +1385,33 @@ namespace Ark.oAuth.Oidc
             }
             finally
             {
+                Interlocked.Increment(ref _installs);
                 InstallLock.Release();
             }
+        }
+
+        /// <summary>
+        /// A new SQLite database file, its owner's alone: it holds the signing keys. SQLite would have
+        /// made it readable by every account on the machine. Its -wal and -shm files take the mode of
+        /// the database they belong to, so they follow.
+        /// </summary>
+        static void CreatePrivateSqlite(string connection)
+        {
+            if (OperatingSystem.IsWindows() || SqliteFile(connection) is not { } file || File.Exists(file)) return;
+            ArkIdpSettings.CreatePrivateFile(file).Dispose();
+            // EF switches a database it creates itself to write-ahead logging, and leaves one it finds
+            // as it is. This one it will find.
+            using var db = new Microsoft.Data.Sqlite.SqliteConnection(connection);
+            db.Open();
+            using var command = db.CreateCommand();
+            command.CommandText = "PRAGMA journal_mode = 'wal';";
+            command.ExecuteNonQuery();
         }
 
         /// <summary>Attaches the settings file when its directory did not exist at start-up.</summary>
         bool TryCreateAndAttach()
         {
-            try { Directory.CreateDirectory(ArkIdpSettings.DataDirectory(_config, _env)); }
+            try { ArkIdpSettings.CreatePrivateDirectory(ArkIdpSettings.DataDirectory(_config, _env)); }
             catch (Exception) { return false; }
             return ArkIdpSettings.Attach(_config, _env);
         }
@@ -1585,6 +1792,10 @@ namespace Ark.oAuth.Oidc
         {
             if (app.Properties.ContainsKey(Registered)) return app;
             app.Properties[Registered] = true;
+            // Settings first: a server set up on an earlier run has no place for the agent at all.
+            ArkIdpSettings.Attach(app.ApplicationServices.GetRequiredService<IConfiguration>(), app.ApplicationServices.GetRequiredService<IHostEnvironment>());
+            // In front of the gate, which answers everything else. Behind whatever the host put first.
+            Ark.Agents.TenantOnboarding.ArkOnboardingAgentExtensions.UseBuiltIn(app);
             return app.UseMiddleware<ArkSetupMiddleware>();
         }
     }

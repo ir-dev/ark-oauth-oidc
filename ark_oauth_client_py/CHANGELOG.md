@@ -2,9 +2,46 @@
 
 ## Next release
 
-No change to this package. In this release the provider, `Ark.oAuth.Oidc`, is itself an MCP server, with
-which an agent sets it up and administers it. Nothing a client sees changes, and the two can be upgraded in
-either order.
+Security fixes. No API is removed or renamed and nothing has to be configured, but some requests that
+used to pass are now refused:
+
+- **An API that was given no `audience` now checks one.** `ark_bearer`, `add_ark_oidc_api` and
+  `verify_access_token` expect the audience the provider publishes for the tenant's access tokens
+  (`ark_access_token_audience`, published from this release of `Ark.oAuth.Oidc`). A token addressed to
+  one agent (A2A) or one MCP endpoint used to be accepted by every such API. Against an older
+  provider the audience is still not checked, but a token carrying `act` is refused. An explicit
+  `audience` works as before.
+- **The access check runs again with each token refresh.** With `require_ark_claims` or
+  `on_evaluate_access`, an account that has lost its access is signed out at the next refresh; a rule
+  that raises there signs out too. It used to be asked at the callback only.
+- **`/logout` asks before it acts on a request another site started** (`Sec-Fetch-Site: cross-site`):
+  the answer is a page with a button. Links on the same site, typed addresses and bookmarks sign out
+  straight away, as before. A cross-site POST is refused.
+- **With refresh token rotation off, the refresh token is kept.** `refresh()` returns the one it was
+  given when the provider sends none. A Flask session used to lose it at the first refresh, and with
+  it every later check of the account.
+- **A session is not written back after it was ended**, requests that share a session share one
+  refresh whatever the store, and `sign_out_locally`, `switch_user` and a refused sign-in revoke the
+  refresh token. A refreshed ID token about another user, or one that does not validate, ends the
+  session. UserInfo about another subject is not merged.
+- **A sign-in that is under way is kept for ten minutes**, not for a working day, so one that takes
+  longer has to be started again.
+- **`ArkClientCredentials`, `ArkRegistration` and `ArkDiscoveryCache` make the checks the client
+  makes**: https unless loopback (or `require_https_metadata` / `require_https` off), and an issuer
+  that is the authority asked for.
+- **`extra` and `extra_authorization_params` cannot replace** `state`, `nonce`, the PKCE challenge,
+  the redirect URI, the scope or the client id of a sign-in.
+- `verify_agent_token`, `add_ark_agent_api` and `ArkBearer(agent=True)` require `typ: at+jwt`
+  whatever `require_type_header` says: the client's own ID tokens carry the same audience.
+- `current_ark.context().ip` is the last `X-Forwarded-For` entry, the one the proxy wrote, and the
+  connection's address with `trust_proxy` off. It was the first entry, which the caller chooses.
+- A bearer token is not forwarded when a GET is redirected to another origin. Error messages and
+  `ArkOAuthError.endpoint` carry no query string. A `kid` with a line break is a 401, not a 500.
+
+New: `refresh(subject=…)`, `verify_id_token(subject=…)`, `ArkSetupProbe.read_trusted_metadata()`.
+
+In this release the provider, `Ark.oAuth.Oidc`, is itself an MCP server, with which an agent sets it up
+and administers it. The client and the provider can be upgraded in either order.
 
 ## 2.4.2
 

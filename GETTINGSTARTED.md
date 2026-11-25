@@ -38,7 +38,9 @@ makes itself the IdP. `Ark.oAuth.Oidc.QuickStart` in this repository is exactly 
 dotnet run --project Ark.oAuth.Oidc/Ark.oAuth.Oidc.QuickStart   # then open https://localhost:7300
 ```
 
-An AI agent can do the wizard's part instead, over MCP: connect it to `https://localhost:7300/ark-idp/mcp`
+The wizard's first page also links to the agent view, `/ark-agent`, where the onboarding agent collects the
+same answers in a chat and from the colleagues who have them. An AI agent of your own can do the wizard's
+part as well, over MCP: connect it to `https://localhost:7300/ark-idp/mcp`
 with the setup code from the log as its bearer token. See
 [MCP.md](Ark.oAuth.Oidc/Ark.oAuth.Oidc/MCP.md).
 
@@ -451,7 +453,7 @@ Open <https://localhost:7255> and sign in.
 | `/home/roles` | `ark_claims` → role projection, granted or not. |
 | `/home/downstream` | Calling an API with the user's access token. |
 | `/flows/spa` | The same flow run entirely by JavaScript in the browser. |
-| `/flows/machine` | The client credentials grant — a service authenticating as itself. |
+| `/flows/machine` | The client credentials grant — a service authenticating as itself. Outside local development it needs the `sample.operator` role, as does the next. |
 | `/flows/register` | Dynamic client registration (RFC 7591) and management (RFC 7592). |
 | Sign out | RP-initiated logout, which ends the session at the provider too. |
 

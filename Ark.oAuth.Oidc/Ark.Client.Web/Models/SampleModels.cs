@@ -202,6 +202,30 @@ namespace Ark.Client.Web.Models
         public System.Text.Json.Nodes.JsonNode? Data { get; set; }
     }
 
+    /// <summary>A token endpoint's answer as this app shows it: everything but the credentials.</summary>
+    public static class Redact
+    {
+        private static readonly string[] Credentials = { "access_token", "refresh_token", "id_token" };
+
+        public static string Tokens(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return "";
+            try
+            {
+                if (System.Text.Json.Nodes.JsonNode.Parse(json) is not System.Text.Json.Nodes.JsonObject answer)
+                    return "(not a token response)";
+                foreach (var name in Credentials)
+                    if (answer.ContainsKey(name)) answer[name] = "(issued, not shown)";
+                return ArkJson.Prettify(answer.ToJsonString());
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Not JSON, so nothing here knows where a token in it would be.
+                return "(not a token response)";
+            }
+        }
+    }
+
     public class ErrorViewModel
     {
         public string? RequestId { get; set; }

@@ -167,7 +167,12 @@ class ArkOAuthClient:
         wants_id_token = "openid" in chosen_scopes
         nonce = nonce or (create_nonce() if wants_id_token else None)
 
+        # Extra parameters go first so they can add to the request but never replace what the flow's
+        # security rests on: an `extra` carrying its own state or code_challenge would detach the
+        # response from the transaction this method returns.
         params: Dict[str, Any] = {
+            **config.extra_authorization_params,
+            **(extra or {}),
             "response_type": "code",
             "client_id": config.client_id,
             "redirect_uri": target,
@@ -187,8 +192,6 @@ class ArkOAuthClient:
             params["max_age"] = str(max_age)
         if acr_values or config.acr_values:
             params["acr_values"] = acr_values or config.acr_values
-        params.update(config.extra_authorization_params)
-        params.update(extra or {})
 
         authorization_endpoint = metadata.get("authorization_endpoint")
         if not authorization_endpoint:
@@ -343,7 +346,13 @@ class ArkOAuthClient:
         )
         return self._to_token_set(response, nonce=nonce, code=code, max_age=max_age)
 
-    def refresh(self, refresh_token: str, *, scopes: Optional[Sequence[str]] = None) -> TokenSet:
+    def refresh(
+        self,
+        refresh_token: str,
+        *,
+        scopes: Optional[Sequence[str]] = None,
+        subject: Optional[str] = None,
+    ) -> TokenSet:
         """
         Exchanges a refresh token for a new access token.
 
@@ -351,6 +360,10 @@ class ArkOAuthClient:
         one just presented is retired. Store what comes back. Presenting a retired token is treated
         as theft and revokes the entire family, which is the point of rotation, and also the reason
         a client that keeps re-sending its original token locks itself out on the second refresh.
+        With rotation off the server sends none, and the one presented is in the result.
+
+        ``subject`` is who the session belongs to. A new ID token about anybody else is refused
+        (OIDC Core §12.2).
         """
         if not refresh_token:
             raise ArkConfigError("refresh() needs a refresh token.")
@@ -362,7 +375,11 @@ class ArkOAuthClient:
             body["scope"] = " ".join(scopes)
 
         response = self._token_request(metadata["token_endpoint"], body)
-        return self._to_token_set(response, nonce=None)
+        # RFC 6749 §6: a response without a refresh token leaves the one just presented valid.
+        # Dropping it here left a session nothing could renew, and so one nothing ever re-checked.
+        if not response.get("refresh_token"):
+            response = {**response, "refresh_token": refresh_token}
+        return self._to_token_set(response, nonce=None, subject=subject)
 
     def client_credentials(
         self,
@@ -498,13 +515,17 @@ class ArkOAuthClient:
         Verifies a token another agent sent to this one: :meth:`verify_access_token` with the
         audience fixed to this client's own client_id, which is what makes a token minted for one
         agent useless at the next. Read who is calling with :func:`agent_actors`.
+
+        The ``at+jwt`` type is always required here, whatever ``require_type_header`` says: this
+        client's own ID tokens and logout tokens carry the same audience, and the type is the only
+        thing that tells them from an agent token.
         """
         return self.verify_access_token(
             token,
             audience=self._config.client_id,
             scopes=scopes,
             ark_claims=ark_claims,
-            require_type_header=require_type_header,
+            require_type_header=True,
         )
 
     def agent_card_security(self, *, spec: Optional[str] = None) -> Dict[str, Any]:
@@ -722,6 +743,7 @@ class ArkOAuthClient:
         access_token: Optional[str] = None,
         code: Optional[str] = None,
         max_age: Optional[int] = None,
+        subject: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Verifies an ID token against the provider's keys and the values from the sign-in transaction."""
         metadata = self.metadata()
@@ -730,6 +752,7 @@ class ArkOAuthClient:
             self.jwks(),
             issuer=metadata["issuer"],
             audience=self._config.client_id,
+            subject=subject,
             nonce=nonce,
             access_token=access_token,
             code=code,
@@ -756,17 +779,32 @@ class ArkOAuthClient:
         request. ``scopes`` and ``ark_claims`` are checked here rather than left to the caller,
         because "the token is valid" and "the token is allowed to do this" are different questions
         and only the second one is the authorization decision.
+
+        With no ``audience`` given or configured, the one the provider publishes for this tenant's
+        ordinary access tokens (``ark_access_token_audience`` in its metadata) is the one expected.
+        A token addressed to an agent (A2A) or to an MCP endpoint is for that agent or endpoint
+        alone; an API that checked no audience took it as readily as its own, so whoever was handed
+        one could replay it here as the user it names.
         """
         metadata = self.metadata()
+        expected = audience or self._config.audience or _published_audience(metadata)
         payload = verify_jwt(
             token,
             self.jwks(),
             issuer=metadata["issuer"],
-            audience=audience or self._config.audience,
+            audience=expected,
             typ="at+jwt" if require_type_header else None,
             require_iat=True,
             clock_tolerance_seconds=self._config.clock_tolerance_seconds,
         )
+        # A provider from before that member was published, or somebody else's. The audience is not
+        # known, but a token an agent carries on a user's behalf still says so itself.
+        if not expected and payload.get("act") is not None:
+            raise ArkTokenError(
+                "the token was issued to an agent (it carries `act`) and this API was given no "
+                "audience to check it against. Set `audience`, or verify it as an agent.",
+                claim="act",
+            )
 
         granted = {s for s in str(payload.get("scope") or "").split(" ") if s}
         missing_scopes = [s for s in scopes if s not in granted]
@@ -1046,6 +1084,7 @@ class ArkOAuthClient:
         nonce: Optional[str],
         code: Optional[str] = None,
         max_age: Optional[int] = None,
+        subject: Optional[str] = None,
     ) -> TokenSet:
         """Turns a token response into a TokenSet, validating the ID token when there is one."""
         claims = None
@@ -1057,6 +1096,7 @@ class ArkOAuthClient:
                 access_token=response.get("access_token"),
                 code=code,
                 max_age=max_age,
+                subject=subject,
             )
         elif nonce is not None and "openid" in str(response.get("scope") or "").split(" "):
             # openid was granted but nothing came back to prove who signed in.
@@ -1065,6 +1105,12 @@ class ArkOAuthClient:
             )
 
         return TokenSet(response, claims=claims)
+
+
+def _published_audience(metadata: Mapping[str, Any]) -> Optional[str]:
+    """What the provider says an ordinary access token of this tenant is addressed to, if it says."""
+    value = metadata.get("ark_access_token_audience")
+    return value if isinstance(value, str) and value else None
 
 
 def create_ark_client(**options: Any) -> ArkOAuthClient:

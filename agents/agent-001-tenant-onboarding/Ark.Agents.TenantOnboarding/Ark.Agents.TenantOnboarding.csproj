@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Ark Pilot: the onboarding agent for an Ark identity server.
+
+    A class library with no package dependencies: the ASP.NET Core shared framework and nothing
+    else. It does not reference Ark.oAuth.Oidc either: the reference goes the other way. It talks to
+    the identity server the way any agent does, over the server's MCP endpoint, so it can sit in the
+    same app or in another one.
+
+    It is not a package of its own. Ark.oAuth.Oidc references it and packs this assembly beside its
+    own, so the version is that package's (scripts/version.sh writes it here too).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Ark.Agents.TenantOnboarding</RootNamespace>
+    <AssemblyName>Ark.Agents.TenantOnboarding</AssemblyName>
+    <Version>2.4.2</Version>
+    <IsPackable>false</IsPackable>
+    <DebugType>portable</DebugType>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <!-- As in Ark.oAuth.Oidc.csproj, whose symbol package carries this assembly's symbols too. -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true' or '$(TF_BUILD)' == 'true'">true</ContinuousIntegrationBuild>
+    <Description>Ark Pilot: a background agent that sets an Ark identity server up by conversation, over the server's own MCP setup tools.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The page is served from the assembly, as the setup wizard's is: nothing to copy into a host. -->
+    <EmbeddedResource Include="wwwroot\**\*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ark.Agents.TenantOnboarding.Checks" />
+    <!-- Registers the agent, places its page beside the setup wizard, and reads its status. They ship together. -->
+    <InternalsVisibleTo Include="Ark.oAuth.Oidc" />
+  </ItemGroup>
+
+</Project>

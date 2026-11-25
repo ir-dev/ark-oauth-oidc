@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace Ark.oAuth.Oidc
 {
@@ -23,6 +25,7 @@ namespace Ark.oAuth.Oidc
     /// HTTP status — except export, which answers with the file itself.
     /// </summary>
     [Authorize]
+    [ArkDataToolsGate]
     [Route("api/oauth")]
     [ApiController]
     public class DataToolsController : ControllerBase
@@ -45,7 +48,6 @@ namespace Ark.oAuth.Oidc
         [Route("v1/data/summary")]
         public IActionResult Summary()
         {
-            if (Refuse() is { } refused) return refused;
             var ser = _util.ServerConfig;
             return Ok(new
             {
@@ -76,7 +78,6 @@ namespace Ark.oAuth.Oidc
         [Consumes("application/json")]
         public IActionResult Export([FromBody] ArkExportRequest? request)
         {
-            if (Refuse() is { } refused) return refused;
             return Run("export", () =>
             {
                 var (content, name) = _tools.Export(request, Who());
@@ -93,10 +94,9 @@ namespace Ark.oAuth.Oidc
         [HttpPost]  // nosemgrep: csharp.dotnet.security.mvc-missing-antiforgery.mvc-missing-antiforgery
         [Route("v1/data/import/analyze")]
         [Consumes("application/json")]
-        [RequestSizeLimit(ArkDataTools.MaxImportBytesCeiling)]
+        [ArkImportGate]
         public IActionResult Analyze([FromBody] ArkImportRequest request)
         {
-            if (Refuse(import: true) is { } refused) return refused;
             return Run("import_analyze", () =>
             {
                 var analysis = _tools.Analyze(request);
@@ -117,10 +117,9 @@ namespace Ark.oAuth.Oidc
         [HttpPost]  // nosemgrep: csharp.dotnet.security.mvc-missing-antiforgery.mvc-missing-antiforgery
         [Route("v1/data/import/apply")]
         [Consumes("application/json")]
-        [RequestSizeLimit(ArkDataTools.MaxImportBytesCeiling)]
+        [ArkImportGate]
         public IActionResult Apply([FromBody] ArkImportRequest request)
         {
-            if (Refuse(import: true) is { } refused) return refused;
             return Run("import_apply", () =>
             {
                 var result = _tools.Apply(request, Who(), Ip());
@@ -142,7 +141,6 @@ namespace Ark.oAuth.Oidc
         [Consumes("application/json")]
         public async Task<IActionResult> Reset([FromBody] ArkResetRequest request)
         {
-            if (Refuse() is { } refused) return refused;
             if (!Cfg.AllowReset)
                 return StatusCode(403, new { error = true, code = "reset_disabled", msg = "factory reset is switched off by ark_oauth_server:Admin:DataTools:AllowReset.", data = (object?)null });
             try
@@ -169,19 +167,6 @@ namespace Ark.oAuth.Oidc
 
         // ------------------------------------------------------------------ helpers
 
-        /// <summary>The 404 / 403 every route starts with, or null when the caller may proceed.</summary>
-        private IActionResult? Refuse(bool import = false)
-        {
-            if (!Cfg.Enabled) return NotFound();
-            if (!ArkOperator.IsOperator(User, _util.ServerConfig))
-                return StatusCode(403, new { error = true, code = "operator_only", msg = "export, import and reset are restricted to the administrator account.", data = (object?)null });
-            if (import && !Cfg.AllowImport)
-                return StatusCode(403, new { error = true, code = "import_disabled", msg = "import is switched off by ark_oauth_server:Admin:DataTools:AllowImport.", data = (object?)null });
-            if (import && Request.ContentLength is long length && length > (long)Math.Max(1, Cfg.MaxImportMegabytes) * 1024 * 1024)
-                return StatusCode(413, new { error = true, code = "file_too_large", msg = $"the file is larger than the {Cfg.MaxImportMegabytes} MB allowed by ark_oauth_server:Admin:DataTools:MaxImportMegabytes.", data = (object?)null });
-            return null;
-        }
-
         private IActionResult Run(string operation, Func<IActionResult> action)
         {
             try
@@ -204,5 +189,65 @@ namespace Ark.oAuth.Oidc
             ?? User.FindFirst("sub")?.Value ?? User.Identity?.Name ?? "operator";
 
         private string Ip() => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+    }
+
+    /// <summary>
+    /// The 404 / 403 every data route starts with: the tools switched on, and the operator, as of
+    /// now, on the other end.
+    ///
+    /// A filter rather than the first line of each action, because the body is bound before an
+    /// action runs: any signed-in console user could have the server read a whole import, up to
+    /// its gigabyte, only to be told afterwards that they may not import anything.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class)]
+    internal sealed class ArkDataToolsGateAttribute : Attribute, IAsyncResourceFilter
+    {
+        public async Task OnResourceExecutionAsync(ResourceExecutingContext context, ResourceExecutionDelegate next)
+        {
+            var http = context.HttpContext;
+            var ser = http.RequestServices.GetRequiredService<ArkUtil>().ServerConfig;
+            if (!(ser.Admin?.DataTools ?? new ArkDataToolsConfig()).Enabled)
+                context.Result = new NotFoundResult();
+            else if (!await ArkOperator.IsOperatorNowAsync(http, http.User, ser))
+                context.Result = Refusal(403, "operator_only", "export, import and reset are restricted to the administrator account.");
+            else
+                await next();
+        }
+
+        internal static ObjectResult Refusal(int status, string code, string msg) =>
+            new(new { error = true, code, msg, data = (object?)null }) { StatusCode = status };
+    }
+
+    /// <summary>
+    /// What the two import routes add: import switched on, and a body no larger than
+    /// <c>MaxImportMegabytes</c>. The server is told the limit as well as the length being looked
+    /// at, since a body sent in chunks does not say how long it is going to be.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method)]
+    internal sealed class ArkImportGateAttribute : Attribute, IResourceFilter
+    {
+        public void OnResourceExecuting(ResourceExecutingContext context)
+        {
+            var http = context.HttpContext;
+            var cfg = http.RequestServices.GetRequiredService<ArkUtil>().ServerConfig.Admin?.DataTools ?? new ArkDataToolsConfig();
+            if (!cfg.AllowImport)
+            {
+                context.Result = ArkDataToolsGateAttribute.Refusal(403, "import_disabled",
+                    "import is switched off by ark_oauth_server:Admin:DataTools:AllowImport.");
+                return;
+            }
+
+            var limit = Math.Min((long)Math.Max(1, cfg.MaxImportMegabytes) * 1024 * 1024, ArkDataTools.MaxImportBytesCeiling);
+            if (http.Request.ContentLength > limit)
+            {
+                context.Result = ArkDataToolsGateAttribute.Refusal(413, "file_too_large",
+                    $"the file is larger than the {cfg.MaxImportMegabytes} MB allowed by ark_oauth_server:Admin:DataTools:MaxImportMegabytes.");
+                return;
+            }
+            if (http.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } size)
+                size.MaxRequestBodySize = limit;
+        }
+
+        public void OnResourceExecuted(ResourceExecutedContext context) { }
     }
 }

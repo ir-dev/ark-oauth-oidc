@@ -107,8 +107,9 @@ namespace Ark.oAuth.Oidc.Webhooks
         public const string Main = "main";
         private const string DatabasesSection = ArkWebhookOptions.Section + ":Databases";
 
-        private static readonly Regex NameRe = new("^[a-z0-9][a-z0-9_-]{0,31}$", RegexOptions.Compiled);
-        private static readonly Regex SuffixRe = new("^[a-z0-9][a-z0-9_]{0,23}$", RegexOptions.Compiled);
+        // \z, not $: a $ also matches before a line break at the very end, and a suffix is part of a table's name.
+        private static readonly Regex NameRe = new("^[a-z0-9][a-z0-9_-]{0,31}\\z", RegexOptions.Compiled);
+        private static readonly Regex SuffixRe = new("^[a-z0-9][a-z0-9_]{0,23}\\z", RegexOptions.Compiled);
 
         private readonly IConfiguration _config;
         private readonly ConcurrentDictionary<string, DbContextOptions> _options = new();

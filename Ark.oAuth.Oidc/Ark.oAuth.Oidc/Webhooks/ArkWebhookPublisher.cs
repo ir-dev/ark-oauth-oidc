@@ -236,13 +236,20 @@ namespace Ark.oAuth.Oidc.Webhooks
                         written += group.Rows.Count;
                         break;
                     }
-                    catch (Exception ex) when (attempt < attemptsPerShard && !ct.IsCancellationRequested)
-                    {
-                        try { await Task.Delay(TimeSpan.FromSeconds(1 << attempt), ct); } catch (OperationCanceledException) { }
-                        _ = ex;
-                    }
                     catch (Exception ex)
                     {
+                        if (await WriteSinglyAsync(db, suffix, group.Rows, ct) is { } singly)
+                        {
+                            written += singly.Written;
+                            lost += group.Rows.Count - singly.Written;
+                            failure ??= singly.Failure;
+                            break;
+                        }
+                        if (attempt < attemptsPerShard && !ct.IsCancellationRequested)
+                        {
+                            try { await Task.Delay(TimeSpan.FromSeconds(1 << attempt), ct); } catch (OperationCanceledException) { }
+                            continue;
+                        }
                         lost += group.Rows.Count;
                         failure ??= ex;
                         break;
@@ -257,8 +264,46 @@ namespace Ark.oAuth.Oidc.Webhooks
 
         public static string NewDeliveryId() => "dlv_" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
 
-        internal static string? Truncate(string? value, int max) =>
-            value == null || value.Length <= max ? value : value[..max];
+        /// <summary>
+        /// Writes rows a shard refused together again, one at a time: an event that cannot be
+        /// stored costs itself, not the hundreds that happened to be waiting beside it. Null when
+        /// there is only one, or the database does not answer; then nothing is wrong with the rows
+        /// and the batch is worth trying again.
+        /// </summary>
+        private async Task<(int Written, Exception? Failure)?> WriteSinglyAsync(string db, string suffix, List<ArkWebhookDelivery> rows, CancellationToken ct)
+        {
+            if (rows.Count < 2 || ct.IsCancellationRequested) return null;
+            try
+            {
+                await using var probe = _dbs.Shard(db, suffix);
+                if (!await probe.Database.CanConnectAsync(ct)) return null;
+            }
+            catch
+            {
+                return null;
+            }
+
+            var written = 0;
+            Exception? failure = null;
+            foreach (var row in rows)
+            {
+                try
+                {
+                    // A context each: one that has failed keeps the row it failed on.
+                    await using var shard = _dbs.Shard(db, suffix);
+                    shard.deliveries.Add(row);
+                    await shard.SaveChangesAsync(ct);
+                    written++;
+                }
+                catch (Exception ex)
+                {
+                    failure ??= ex;
+                }
+            }
+            return (written, failure);
+        }
+
+        internal static string? Truncate(string? value, int max) => ArkText.Truncate(value, max);
     }
 
     /// <summary>Some shards of a fan-out could not be written; the others were.</summary>

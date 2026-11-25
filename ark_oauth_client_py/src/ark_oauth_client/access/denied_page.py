@@ -18,7 +18,7 @@ from typing import Optional
 from .endpoints import local_or_default
 from .options import ArkAccountSwitchOptions
 
-__all__ = ["ArkAccessDeniedPage"]
+__all__ = ["ArkAccessDeniedPage", "ArkSignOutPage"]
 
 _STYLE = (
     ":root{--bg:#f7f7f8;--surface:#fff;--border:#e2e2e6;--fg:#17171a;--muted:#6a6a73;"
@@ -116,3 +116,38 @@ class ArkAccessDeniedPage:
 
         parts.append("</main></body></html>")
         return "".join(parts)
+
+
+class ArkSignOutPage:
+    """
+    What a sign-out somebody else's page started gets instead of being signed out: a question, and a
+    button whose POST comes from this site.
+    """
+
+    #: No script, no frames, nothing fetched. ``form-action`` is left out on purpose: Chrome applies
+    #: it to the redirect that follows a submission, and the sign-out redirects to the provider.
+    CSP = (
+        "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'"
+    )
+
+    @staticmethod
+    def build(options: ArkAccountSwitchOptions, app: Optional[str], logout_path: str) -> str:
+        app_name = escape(app.strip() if app and app.strip() else "this application")
+        home = escape(local_or_default(options.home_path, "/"))
+        return "".join(
+            [
+                '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">',
+                '<meta name="viewport" content="width=device-width, initial-scale=1">',
+                f"<title>Sign out — {app_name}</title><style>{_STYLE}</style></head>",
+                '<body><main class="card">',
+                f"<h1>Sign out of {app_name}?</h1>",
+                '<p class="lede">This was asked for by a page on another site.</p>',
+                "<p>Signing out ends your session here and at the identity provider, so the other "
+                "applications you are signed in to may ask for your password again.</p>",
+                '<div class="actions">',
+                f'<form method="post" action="{escape(logout_path)}">',
+                '<button type="submit">Sign out</button></form></div>',
+                f'<p class="foot"><a href="{home}">Stay signed in</a></p>',
+                "</main></body></html>",
+            ]
+        )

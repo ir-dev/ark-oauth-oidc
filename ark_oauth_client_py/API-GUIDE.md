@@ -39,7 +39,7 @@ Exact public API (import root `ark_oauth_client`, Flask helpers `ark_oauth_clien
 | `fetch_user_info` | `False` | Also call `/userinfo` at sign-in, merge into `current_ark.user`. |
 | `return_to_param` | `returnTo` | |
 | `default_return_to` | `/` | |
-| `trust_proxy` | `True` | Honour `X-Forwarded-Proto`/`-Host` for this app's origin. |
+| `trust_proxy` | `True` | Honour `X-Forwarded-Proto`/`-Host` for this app's origin, and the last `X-Forwarded-For` entry as the caller's address. |
 | `service_token` | — | `auth_service_tkn` for `AuthClientHelper` onboarding calls. |
 
 ### `current_ark` (session request view; `LocalProxy`)
@@ -61,6 +61,7 @@ Account operations (mirror `ArkAccountExtensions`): `ark_switch_user(return_url=
 ### `ArkBearer` (resource server)
 
 `ArkBearer(client=None, *, scopes=(), claims=(), audience=None, optional=False, require_type_header=True, **client_options)`.
+`audience=None` expects the audience the provider publishes for the tenant (`ark_access_token_audience`).
 Methods: `protect(app, prefix="") -> ArkBearer`, `require(scopes=(), claims=()) -> decorator`,
 `__call__(view)` (decorator with construction-time scopes/claims). Request view **`g.ark`**:
 `is_authenticated`, `sub`, `client_id`, `session_id`, `scopes`, `claims`, `payload`, `token`, `user`,
@@ -128,7 +129,7 @@ authority, `private_key_jwt` with no key, `client_secret` with `token_endpoint_a
 | `create_authorization_url(*, redirect_uri=None, return_to=None, prompt=None, login_hint=None, scopes=None, max_age=None, ...)` | `AuthorizationRequest` (`.url`, `.state`, `.nonce`, `.to_dict()`/`from_dict`). |
 | `handle_callback(params, transaction, *, redirect_uri=None) -> TokenSet` | Validates `iss`, `state`, `nonce`, `at_hash`, signature; exchanges the code. |
 | `exchange_code(code, code_verifier, *, redirect_uri=None) -> TokenSet` | Lower-level exchange. |
-| `refresh(refresh_token, *, scopes=None) -> TokenSet` | Rotation-aware. **Persist the result.** |
+| `refresh(refresh_token, *, scopes=None, subject=None) -> TokenSet` | Rotation-aware. **Persist the result.** `subject`: refuse an ID token about anybody else. |
 | `client_credentials(*, scopes=None) -> TokenSet` | Cached near expiry; uses the client's configured auth method. |
 | `device_authorization(*, scopes=None) -> dict` | RFC 8628. |
 | `poll_device_token(authorization) -> TokenSet` | Handles `authorization_pending` / `slow_down`. |
@@ -137,7 +138,7 @@ authority, `private_key_jwt` with no key, `client_secret` with `token_endpoint_a
 | `revoke(token, *, token_type_hint="refresh_token") -> bool` | RFC 7009. |
 | `end_session_url(*, id_token_hint=None, post_logout_redirect_uri=None, state=None) -> str` | RP-initiated logout. |
 | `verify_id_token(id_token, *, nonce=None, ...) -> dict` | Local verification. |
-| `verify_access_token(token, *, audience=None, scopes=(), ark_claims=(), require_type_header=True) -> dict` | Enforces `typ: at+jwt`. |
+| `verify_access_token(token, *, audience=None, scopes=(), ark_claims=(), require_type_header=True) -> dict` | Enforces `typ: at+jwt`, and the published tenant audience unless one is given. |
 | `push_authorization_request(params) -> dict` | RFC 9126. |
 | `register_client(metadata, initial_access_token=None) -> dict` | RFC 7591. |
 | `read_registration(client_id, registration_access_token) -> dict` | RFC 7592. |
@@ -152,8 +153,9 @@ authority, `private_key_jwt` with no key, `client_secret` with `token_endpoint_a
 ## Non-browser helpers
 
 **`ArkSetupProbe(config, **http)`**: `probe(*, origin, is_authenticated=False, signed_in_as=None,
-auth_error=None) -> ArkSetupModel`; `read_metadata(authority=None) -> ArkProviderMetadata`; static
-`discovery_url(authority)`. **`ArkSetupModel`** signals: `discovery_ok`, `discovery_error`,
+auth_error=None) -> ArkSetupModel`; `read_metadata(authority=None) -> ArkProviderMetadata`;
+`read_trusted_metadata(authority=None)` (the same, refused unless https and the issuer asked for);
+static `discovery_url(authority)`. **`ArkSetupModel`** signals: `discovery_ok`, `discovery_error`,
 `issuer_mismatch`, `unsupported_scopes`, `redirect_uri`, `post_logout_redirect_uri`,
 `supports_dynamic_registration`, `supports_client_credentials`, `is_authenticated`, `signed_in_as`,
 `tenant_id`, `admin_console_url`, `integration_page_url`, endpoint properties, `to_dict()`.
@@ -174,6 +176,7 @@ authority=None) -> ArkTokenResult` (cached per client+scope, renewed ~60s early)
 
 **`AuthClientHelper(config, service_token=None, **http)`**: `onboard_user(...)`, `onboard_customer(...)`
 — wraps the provisioning API; treats "already exists in tenant" as success (safe to run twice).
+`onboard_user` sends the password in the query string; prefer `POST /api/oauth/v1/provision/user`.
 
 **`ArkAuthContext`**: the per-request identity shape (`client_id`, `tenant_id`, `user_id`, `ip`,
 `user_info: AUserInfo`) mirroring the .NET scoped service.

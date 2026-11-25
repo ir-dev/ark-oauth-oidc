@@ -100,8 +100,8 @@ namespace Ark.oAuth
 
             try
             {
-                var client = _http.CreateClient("ark-oidc-client");
-                var metadata = await ArkDiscoveryCache.GetAsync(client, _config.ResolveAuthority());
+                var client = _http.CreateClient(ArkOidcClient.HttpClientName);
+                var metadata = await ArkDiscoveryCache.GetAsync(client, _config);
                 if (string.IsNullOrEmpty(metadata?.TokenEndpoint))
                 {
                     result.Error = "server_error";
@@ -176,7 +176,7 @@ namespace Ark.oAuth
         {
             var url = $"{_config.ResolveAuthority()}/a2a/agent-card-security";
             if (!string.IsNullOrWhiteSpace(spec)) url += $"?spec={Uri.EscapeDataString(spec)}";
-            return await _http.CreateClient("ark-oidc-client").GetStringAsync(url, cancellationToken);
+            return await _http.CreateClient(ArkOidcClient.HttpClientName).GetStringAsync(url, cancellationToken);
         }
 
         /// <summary>Clears the cache — for a screen that wants to show a live exchange.</summary>
@@ -196,7 +196,7 @@ namespace Ark.oAuth
         {
             if (string.IsNullOrWhiteSpace(config.ClientId))
                 throw new InvalidOperationException("AddArkAgentApi needs ark_oauth_client:ClientId — it is the audience an agent accepts.");
-            builder.Services.AddHttpClient("ark-oidc-client", c => c.Timeout = TimeSpan.FromSeconds(15));
+            builder.Services.AddArkHttpClient();
             builder.Services.TryAddAgentTokens(config);
 
             builder.AddArkOidcApi(config, scheme);
@@ -204,6 +204,11 @@ namespace Ark.oAuth
             {
                 options.TokenValidationParameters.ValidateAudience = true;
                 options.TokenValidationParameters.ValidAudience = config.ClientId;
+                options.TokenValidationParameters.AudienceValidator = null;
+                // Whatever RequireAccessTokenTypeHeader says: this client's own ID tokens and logout
+                // tokens carry the same audience, and the type is the only thing that tells them
+                // from an agent token.
+                options.TokenValidationParameters.ValidTypes = new[] { "at+jwt", "application/at+jwt" };
             });
             return builder;
         }
@@ -250,6 +255,10 @@ namespace Ark.oAuth
         /// request is from: the signed-in user (their session's access token), or — inside an
         /// agent — the bearer token it was called with. Null when the request carries neither or
         /// the provider refuses.
+        ///
+        /// The session goes first. A request authenticated by its cookie is that user's, whatever
+        /// Authorization header came with it; read the other way round, an application authorized
+        /// one person and called the agent as another.
         /// </summary>
         public static async Task<string?> GetArkAgentTokenAsync(
             this HttpContext context, string audience, IEnumerable<string>? scopes = null)
@@ -257,14 +266,23 @@ namespace Ark.oAuth
             var tokens = context.RequestServices.GetService(typeof(ArkAgentTokens)) as ArkAgentTokens;
             if (tokens == null) return null;
 
+            // Which scheme spoke for this request, where the pipeline says: a bearer token that
+            // authenticated it goes first there, so a cookie that merely came along does not.
+            var scheme = context.Features.Get<IAuthenticateResultFeature>()?.AuthenticateResult?.Ticket?.AuthenticationScheme;
+            var bySession = scheme == ArkOidcClient.CookieScheme;
+            var byBearer = scheme != null && !scheme.Split(';').Contains(ArkOidcClient.CookieScheme);
+
             string? subjectToken = null;
-            var header = context.Request.Headers.Authorization.ToString();
-            if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                subjectToken = header["Bearer ".Length..].Trim();
-            if (string.IsNullOrEmpty(subjectToken))
+            if (!byBearer)
             {
                 try { subjectToken = await context.GetArkAccessTokenAsync(); }
                 catch (InvalidOperationException) { /* no cookie scheme in an API-only host */ }
+            }
+            if (string.IsNullOrEmpty(subjectToken) && !bySession)
+            {
+                var header = context.Request.Headers.Authorization.ToString();
+                if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    subjectToken = header["Bearer ".Length..].Trim();
             }
             if (string.IsNullOrEmpty(subjectToken)) return null;
 

@@ -51,7 +51,8 @@ namespace Ark.oAuth
         /// off (the default, so an upgrade changes no behaviour) the wrong account is signed in
         /// and every protected page answers 403. Turned on, the callback is stopped before the
         /// cookie is written — the wrong person never gets a session here at all — and the user is
-        /// sent to <see cref="AccessDeniedPath"/> where they can switch accounts.
+        /// sent to <see cref="AccessDeniedPath"/> where they can switch accounts. It is asked again
+        /// with each token refresh, so an account that loses its access loses its session too.
         /// </summary>
         public bool RequireArkClaims { get; set; }
 
@@ -169,8 +170,10 @@ namespace Ark.oAuth
     {
         /// <summary>
         /// Decide entitlement yourself — a group claim, a licence lookup, a row in your own
-        /// database. Return true to let the sign-in complete. Runs only when
-        /// <see cref="ArkAccountSwitchOptions.RequireArkClaims"/> is on.
+        /// database. Return true to let the sign-in complete. Replaces
+        /// <see cref="ArkAccountSwitchOptions.RequireArkClaims"/>, which it is told the answer of.
+        /// Asked at the callback and again each time the session's tokens are refreshed; there,
+        /// false — or an exception — ends the session.
         /// </summary>
         public Func<ArkAccessEvaluationContext, Task<bool>>? OnEvaluateAccess { get; set; }
 
@@ -249,6 +252,23 @@ namespace Ark.oAuth
             properties.Items[MaxAgeItem] = seconds.ToString();
             return properties;
         }
+
+        /// <summary>
+        /// Why a sign-in that asked for <c>max_age</c> may not complete, or null when it may. The
+        /// parameter travels through the browser, where it can be taken off again; the ID token's
+        /// <c>auth_time</c> is what says when the user really authenticated.
+        /// </summary>
+        internal static string? MaxAgeRefusal(AuthenticationProperties? properties, System.Security.Claims.ClaimsPrincipal? principal)
+        {
+            if (properties == null || !properties.Items.TryGetValue(MaxAgeItem, out var asked)
+                || !long.TryParse(asked, out var maxAge)) return null;
+            if (!long.TryParse(principal?.FindFirst("auth_time")?.Value, out var authTime))
+                return "max_age was requested but the ID token carries no auth_time.";
+            var age = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - authTime;
+            return age > maxAge + 60 // the clock skew allowed everywhere else
+                ? $"the user authenticated {age}s ago, beyond the requested max_age of {maxAge}s."
+                : null;
+        }
     }
 
     /// <summary>The operations the access-denied page performs, callable from your own controllers.</summary>
@@ -270,19 +290,18 @@ namespace Ark.oAuth
 
             ArkAccessDeniedState.Clear(context);
 
+            await EndSessionAsync(context);
             if (options.EndProviderSessionOnSwitch)
             {
                 // Ends the provider session as well, which signs the previous user out of every
                 // application they had open. They land back here unauthenticated, and the next
                 // protected page draws the sign-in form because there is no session left to
                 // answer it.
-                await context.SignOutAsync(ArkOidcClient.CookieScheme);
                 await context.SignOutAsync(ArkOidcClient.OidcScheme,
                     new AuthenticationProperties { RedirectUri = target });
                 return;
             }
 
-            await context.SignOutAsync(ArkOidcClient.CookieScheme);
             await context.ChallengeAsync(ArkOidcClient.OidcScheme,
                 ArkChallengeProperties.SwitchUser(target, loginHint, options.Prompt));
         }
@@ -298,9 +317,21 @@ namespace Ark.oAuth
             var target = ArkAccountEndpoints.LocalOrDefault(returnUrl, options.HomePath);
 
             ArkAccessDeniedState.Clear(context);
-            await context.SignOutAsync(ArkOidcClient.CookieScheme);
+            await EndSessionAsync(context);
             await context.SignOutAsync(ArkOidcClient.OidcScheme,
                 new AuthenticationProperties { RedirectUri = target });
+        }
+
+        /// <summary>
+        /// Drops the cookie, and what a refresh may just have produced for another request of the
+        /// same session. Read here because these endpoints run ahead of the authentication
+        /// middleware, so the sign-out event has no ticket to read it from.
+        /// </summary>
+        private static async Task EndSessionAsync(HttpContext context)
+        {
+            var session = await context.AuthenticateAsync(ArkOidcClient.CookieScheme);
+            ArkRefreshes.Forget(session.Properties?.GetTokenValue("refresh_token"));
+            await context.SignOutAsync(ArkOidcClient.CookieScheme);
         }
 
         /// <summary>Ends this application's session only, leaving the provider session intact.</summary>
@@ -310,7 +341,7 @@ namespace Ark.oAuth
             var options = config?.AccountSwitch ?? new ArkAccountSwitchOptions();
 
             ArkAccessDeniedState.Clear(context);
-            await context.SignOutAsync(ArkOidcClient.CookieScheme);
+            await EndSessionAsync(context);
             context.Response.Redirect(ArkAccountEndpoints.LocalOrDefault(returnUrl, options.HomePath));
         }
 

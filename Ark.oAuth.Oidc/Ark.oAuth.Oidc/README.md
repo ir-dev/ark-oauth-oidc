@@ -633,9 +633,21 @@ package version.
 | `ark_idp.db` | the SQLite database, when SQLite is chosen with the default path |
 | `.gitignore` | `*`: the directory ignores itself, because `dotnet run` puts it inside your project |
 
-The **Welcome** step also says how an agent can do all of this instead, over MCP; see
-[MCP.md](MCP.md). While one is at it, `setup-draft.json` appears beside the settings (0600, deleted when
-setup finishes).
+**Or by conversation.** The **Welcome** step links to the agent view, `/ark-agent`: Ark Pilot, the
+onboarding agent in this package, collects the same answers in a chat and files them for you. Sections you
+do not know go to the colleague who does, by a link that reaches only those sections. The view shows every
+value with who supplied it, who has been asked and has not answered, and what is waiting for you to
+confirm; the card on the wizard's first page says the same in short. Install is a button, and only yours.
+The same people may open it as may run the wizard, and the setup code is asked for once for both.
+The wizard and the agent do not fill each other in: whichever installs, its values are used.
+
+It uses no language model until `ark_onboarding_agent:Llm` names one (guided mode: it asks one question at
+a time). It exists only while the server is unconfigured, and `ark_onboarding_agent:Enabled=false` removes
+it. While it is at it, `agent-state.json` (the conversation) and `setup-draft.json` (the values) appear beside
+the settings, both 0600 and deleted when setup finishes. Run one instance until then. Settings and the model
+providers: [the agent's README](https://github.com/ir-dev/ark-oauth-oidc/tree/main/agents/agent-001-tenant-onboarding).
+
+An agent of your own can do all of this too, over MCP; see [MCP.md](MCP.md).
 
 The optional **Audit trail** step asks for an ARK-RAPID Watch address and key, tests them — the
 address, the key, then one real event — and writes them to `settings.json` as
@@ -656,19 +668,26 @@ sign tokens, so keep the file as safe as the database. Not offered when attachin
 database, which creates neither.
 
 **Who may run it.** Whoever finishes setup becomes the administrator, so an unconfigured server on
-a network is a race to the first visitor. From the server's own machine (a loopback address, no
-`X-Forwarded-For` / `Forwarded` / `X-Real-IP`) the wizard is open. From anywhere else it asks for a
-**setup code**, printed in the log at start-up and saved as `setup-code.txt` beside the settings:
+a network is a race to the first visitor. The wizard asks for a **setup code**, printed in the log
+at start-up and saved as `setup-code.txt` beside the settings:
 
 ```
 warn: Ark.oAuth.Oidc.Setup[0]
       Ark IdP is not configured yet. Open /ark-idp/setup on this server in a browser to run the setup
-      wizard. From this machine (localhost) no code is needed. From any other machine, enter the
-      setup code N9VL-VTVB-2T5N.
+      wizard. Enter the setup code N9VL-VTVB-2T5N.
 ```
 
+The one exception is a developer at `dotnet run`: in the **Development** environment, from a loopback
+address and under a loopback name, with no forwarding header (`X-Forwarded-*`, `Forwarded`,
+`X-Real-IP`, or the `X-Original-*` that ASP.NET Core's forwarded-headers middleware leaves), no code
+is needed and the log says so. In any other environment the code is always asked for, on the server's
+own machine too: a proxy on the same host makes every visitor look local.
+
 Every wizard call is a JSON POST with a custom header, which a browser will not send cross-site.
-Once setup is done, `/ark-idp/setup` is gone (404) and the setup code is deleted.
+Once setup is done, `/ark-idp/setup` is gone (404) and the setup code is deleted. It does not come
+back while the process runs: settings that go missing, or a `settings.json` that cannot be read, are
+answered with `503` `configuration_unavailable` and reported in the log. Put the file right and the
+server carries on; to set it up from the beginning, move the file away and restart.
 
 **An existing database.** Point the wizard at a database that already holds Ark tenants and it
 attaches instead of seeding: the tenant id must be one the database has, and no key, client or
@@ -680,7 +699,7 @@ treats as the operator.
 | Setting | Default | |
 |---|---|---|
 | `Enabled` | `true` | `false` removes the wizard; an unconfigured server then fails naming the missing setting |
-| `RequireToken` | `false` | ask for the setup code from localhost too |
+| `RequireToken` | `false` | ask for the setup code in Development on localhost too; everywhere else it always is |
 | `DataPath` | `ark-idp-data` | in a container, a mounted volume, e.g. `ark_oauth_server__Setup__DataPath=/home/data/ark-idp`. The .NET 8+ images run as a non-root user that cannot write to `/app` |
 
 **Containers.** The wizard's directory is the server's configuration, so it has to outlive the
@@ -688,9 +707,8 @@ container: mount a volume and point `DataPath` at it **before** running the wiza
 through the environment and never run the wizard at all. A container's own filesystem is replaced
 on every restart and redeploy, `settings.json` with it, and the wizard comes back.
 
-In a container no request is unproxied loopback — Docker's published port, a reverse proxy and a
-cloud front end all arrive from another address — so the wizard **always** asks for the setup code.
-Read it from the container's log (`docker logs <container> 2>&1 | grep "setup code"`), or from
+A container runs in Production unless it is told otherwise, so the wizard **always** asks for the
+setup code. Read it from the container's log (`docker logs <container> 2>&1 | grep "setup code"`), or from
 `{DataPath}/setup-code.txt` until setup is finished. The log line is written once, at start-up, and
 a restart prints it again. With `DataPath` on persistent storage the code survives a restart;
 otherwise every start makes a new one, so use the latest.

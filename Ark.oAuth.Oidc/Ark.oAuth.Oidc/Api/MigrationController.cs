@@ -39,7 +39,7 @@ namespace Ark.oAuth.Oidc
         {
             var ser = config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
             if (ser?.Management?.AllowMigrationEndpoint != true) return NotFound();
-            if (!ArkOperator.IsOperator(User, ser))
+            if (!await ArkOperator.IsOperatorNowAsync(HttpContext, User, ser))
                 return StatusCode(403, new { error = true, msg = "migrations are restricted to the administrator account." });
 
             //name: "00001_sql.sql"; //file name inside Migration/{provider}/{up|down}
@@ -80,7 +80,7 @@ namespace Ark.oAuth.Oidc
         {
             var ser = config.GetSection("ark_oauth_server").Get<ArkAuthServerConfig>();
             if (ser?.Management?.AllowMigrationEndpoint != true) return NotFound();
-            if (!ArkOperator.IsOperator(User, ser))
+            if (!await ArkOperator.IsOperatorNowAsync(HttpContext, User, ser))
                 return StatusCode(403, new { error = true, msg = "restricted to the administrator account." });
 
             return new

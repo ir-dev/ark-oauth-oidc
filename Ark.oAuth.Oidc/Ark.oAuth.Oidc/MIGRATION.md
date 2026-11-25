@@ -135,6 +135,46 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
 
 ## Behavioural changes by version (from the .csproj notes)
 
+- **Next release — security. Upgrade promptly, and read the first item before you do.**
+  - **A confidential client without a secret could be authenticated as.** Every release since 2.0 accepted one
+    particular value for a client whose secret had never been set, above all the seeded `{tenant}_machine`
+    client, which administers the server. Such a client is now always refused. On a server that has not been
+    upgraded: **Clients → `{tenant}_machine` → Regenerate secret** closes it, for every client without a secret.
+    Afterwards look in the audit trail for machine-client tokens nobody can account for; if there are any, rotate
+    the signing key and reset the administrators' passwords.
+  - The management API no longer returns a tenant's private signing key inside client and mapping rows.
+  - The lockout holds for attempts sent in parallel: they take turns per account. Login ids over 320 characters and
+    passwords over 1,024 are refused unread.
+  - `/oauth/{tenant}/v1/token` refuses a client that has a credential (it cannot show it there). Only while an
+    application registered with a secret is still on the v1 flow: `Oidc:AllowConfidentialClientsAtV1Token`. v1
+    sign-in refuses an account whose password is waiting to be replaced.
+  - A `code_verifier` for a code issued without a challenge is refused. A refresh drops scopes the client has lost.
+    An approved device code counts for nothing once its session ended or its account lost access.
+  - **Any password change ends that account's sessions and refresh tokens everywhere**, and tells the applications.
+    Changing your own signs you out of the console. A console session also ends with its IdP session and at a
+    factory reset or a replacing import. Operator authority is read from the database on every request.
+  - **The setup code is asked for outside Development, on localhost too**, and in Development whenever the request
+    carries an `X-Forwarded-*`, `X-Original-*`, `Forwarded` or `X-Real-IP` header. A server that has been configured
+    never falls back into setup: unreadable or missing settings answer 503 `configuration_unavailable`. Setting it up
+    again means moving the file away and restarting. A wizard-installed server whose database is empty does not seed
+    an administrator with `DefaultPw`.
+  - MCP: `ark.*`, `service_role` and the operator console's claims are refused for an account another tenant manages;
+    other access to one needs `confirm` with that tenant's name, and making an existing account an administrator
+    needs `confirm` with its username. Below tenant level a new account gets a one-time link, never a password.
+    `service_role` is handed out by a tenant administrator or above. Tenant ids `host`, `mcp` and `v1` are refused.
+  - Dynamic registration refuses a `client_id` found on a caller list or in `IntrospectionClients`. A deleted client
+    leaves every caller list.
+  - MySQL connections are made and saved with local file loading off; `OciConfigFile` and `Passfile` are refused.
+  - The v1 console is operator-only. Claim keys may not contain `<`, `>`, quotes or control characters; stored ones
+    stay but cannot be saved again. Console pages send security headers, the v2 pages a full content security policy.
+    The IdP's and the console's cookies are `Secure` whenever `BaseUrl` is https. A cross-site link to the sign-out
+    address asks first.
+  - Audit text is capped (4,000 characters of details, 400 of the rest). Webhooks: an unknown shard answers 404, every
+    failed attempt counts, a token endpoint's answer is read to 64 KB. Failed sign-in counters untouched for 30 days
+    are removed by the clean-up job.
+  - New data directories are 0700 and SQLite files 0600; existing ones are left as they are, so tighten those by hand.
+  - Discovery publishes `ark_access_token_audience`; the client packages use it when no audience is configured, and so
+    refuse tokens addressed to one agent or MCP endpoint.
 - **Next release — the server is an MCP server (`MCP.md`). On by default; nothing answers without a credential.**
   - New routes: `POST /ark-idp/mcp`, `/{tenant}/mcp`, `/{tenant}/mcp/{client_id}`; `GET …/server-card` and
     `…/config` beside each; `GET /.well-known/oauth-protected-resource/…`. `ark_oauth_server:Mcp:Enabled=false`
@@ -151,6 +191,12 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
     API still admits the operator's machine client alone. Before upgrading, check that nobody registered a client
     of that name in another tenant for something else.
   - Bootstrap fix: a database holding only the webhook module's tables is now given the core schema.
+  - The onboarding agent is part of the package (a second assembly in `lib/`, no new dependency). It does
+    anything only on a server that is **not** configured: there the wizard's first page links to `/ark-agent`,
+    and the host's log carries its start-up lines. A configured server registers no route for it, so a tenant
+    or page of that name is untouched. `ark_onboarding_agent:Enabled=false` removes it; so does switching off
+    the wizard, MCP or its host level. Set a server up with **one instance** running: the conversation is in
+    that process and in `agent-state.json`, not shared.
   - Console: an **MCP** page for the operator, `/{tenant}/admin/mcp`, over `GET /api/oauth/v1/mcp/endpoints`.
     A host that overrides `Views/Admin/_ConsoleHeader.cshtml` has no link to it until it adds one
     (`ViewBag.McpEnabled`, `ViewBag.McpUrl`). The public documents beside an endpoint are now indented JSON.

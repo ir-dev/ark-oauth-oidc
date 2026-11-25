@@ -150,6 +150,9 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.client_url = $"{baseurl}/oauth/{tenant_id}/v1/.well-known/{client_id}/openid-configuration";
             ViewBag.host_logo = ser.EmailConfig?.host_logo ?? $"";
             ViewBag.client_logo = ser.EmailConfig?.client_logo ?? $"";
+            // Counted, logged and shown again: not at any length. One character more than any login
+            // has, so a longer one stays one nobody has.
+            Username = ArkText.Truncate(Username, DataAccess.MaxLoginLength + 1)!;
             try
             {
                 var tt = await _da.GetTenant(tenant_id);
@@ -180,6 +183,11 @@ namespace Ark.oAuth.Oidc.Controllers
                     // Reached only after the password verified, as on the standard page.
                     throw new ApplicationException(ex.FriendlyMessage);
                 }
+                catch (Protocol.ArkAccountLockedException ex)
+                {
+                    // Locked by other attempts at this account while this one waited its turn.
+                    throw new ApplicationException(ex.Message);
+                }
                 catch (ArkBusyException ex)
                 {
                     // Nothing was checked; say so rather than "not recognised".
@@ -196,6 +204,10 @@ namespace Ark.oAuth.Oidc.Controllers
                     _da.Log("signin_failed", tenant_id, "v1 sign-in failed", $"user: {Username}, reason: {ex.Message}", "warn");
                     throw new ApplicationException("That username and password combination was not recognised.");
                 }
+
+                // As on the standard page: a password somebody has asked to replace signs nobody in.
+                if (usr.reset_mode ?? false)
+                    throw new ApplicationException("This account needs its password set. Check your email for the activation link.");
 
                 // Delegate to the standard grant store. The original code here minted the access
                 // token up front and stored it against a bare GUID, so the "code" was really a
@@ -236,6 +248,12 @@ namespace Ark.oAuth.Oidc.Controllers
                 var cc = await _da.GetClient(tenant_id, client_id);
                 if (cc == null) throw new ApplicationException("invalid_client");
                 if (cc.redirect_url.ToLower().Trim() != (redirect_uri ?? "").ToLower().Trim()) throw new ApplicationException("invalid_request");
+                if (!cc.is_active) throw OAuthException.InvalidClient("client is disabled.");
+                // Nothing here proves which client is asking, and one with a credential is only itself
+                // where it has to show it: at /{tenant}/oauth2/token. PKCE alone is not that. It says
+                // who began the sign-in, and the one who began it may be the one who stole the code.
+                if (!cc.IsPublicClient && !(ser.Oidc ?? new ArkOidcOptions()).AllowConfidentialClientsAtV1Token)
+                    throw OAuthException.InvalidClient($"this client has a credential, and this endpoint takes none: use /{tt.tenant_id}/oauth2/token.");
 
                 // The verifier is now actually checked against the stored challenge. Format
                 // validation is relaxed because the original client library generated a short,
@@ -245,6 +263,9 @@ namespace Ark.oAuth.Oidc.Controllers
                 // endpoint, and redeeming it here would skip that client's secret.
                 var entry = await _grants.ConsumeAuthCodeAsync(code, cc, redirect_uri, code_verifier,
                     enforceVerifierFormat: false, requirePkce: true);
+                // Asked for at one address; a v1 token is good at all of the tenant's.
+                if (!string.IsNullOrEmpty(entry.resource))
+                    throw OAuthException.InvalidGrant("this code was issued for a resource; redeem it at the standard token endpoint.");
 
                 var ep = V1Endpoints(ser, tt.tenant_id);
                 var scopes = (entry.scope ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
@@ -293,9 +314,14 @@ namespace Ark.oAuth.Oidc.Controllers
         public async Task<IActionResult> Manage([FromRoute] string tenant_id, [FromRoute] string client_id)
         {
             //allowed only for server app (app_server)
+            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
+            // The page is all operator's work, and everything on it answers to the operator only.
+            if (!await ArkOperator.IsOperatorNowAsync(HttpContext, User, ser))
+                return StatusCode(403, "The console is restricted to the administrator account.");
+            AdminController.ConsoleHeaders(Response);
             var tt = await _da.GetTenant(tenant_id);
             var cc = await _da.GetClient(tenant_id, client_id);
-            var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
+            if (tt == null || cc == null) return NotFound();
             ViewBag.tenant = tt;
             ViewBag.base_path = ser.BasePath.AnyNull() ? "" : $"/{ser.BasePath}";
             ViewBag.IsError = false;
@@ -312,7 +338,7 @@ namespace Ark.oAuth.Oidc.Controllers
             // Another user's record is the operator's to read, nobody else's: honouring `sub` for
             // every signed-in caller let any of them read any account's claims for any client.
             var ser = Protocol.ArkConfigSnapshot.Server(_config);
-            if (!ArkOperator.IsOperator(User, ser)) sub = null;
+            if (!await ArkOperator.IsOperatorNowAsync(HttpContext, User, ser)) sub = null;
             sub = sub ?? Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "sub" || t.Type?.ToLower() == "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier")?.Value;
             var name = Request.HttpContext.User.Claims.FirstOrDefault(t => t.Type?.ToLower() == "name");
             return await _da.GetUserInfo(sub, tenant_id, client_id);
@@ -385,7 +411,7 @@ namespace Ark.oAuth.Oidc.Controllers
         public async Task<IActionResult> Upload([FromRoute] string client_id, [FromRoute] string type, IFormFile file)
         {
             var ser = Protocol.ArkConfigSnapshot.Server(_config) ?? throw new ApplicationException("server config missing");
-            if (!ArkOperator.IsOperator(User, ser)) return StatusCode(403, "uploads are restricted to the administrator account.");
+            if (!await ArkOperator.IsOperatorNowAsync(HttpContext, User, ser)) return StatusCode(403, "uploads are restricted to the administrator account.");
             if (file == null || file.Length == 0) return BadRequest("No file uploaded or file is empty.");
             if (file.Length > MaxUploadBytes) return BadRequest("file is too large.");
             if (string.IsNullOrWhiteSpace(ser.UploadPath)) return BadRequest("uploads are not configured (ark_oauth_server:UploadPath).");

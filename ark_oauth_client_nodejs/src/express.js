@@ -1,6 +1,6 @@
 import { ArkOAuthClient } from './client.js';
 import { TokenSet, agentActors } from './tokens.js';
-import { ArkCallbackError, ArkConfigError, ArkOAuthError } from './errors.js';
+import { ArkCallbackError, ArkConfigError, ArkOAuthError, ArkTokenError } from './errors.js';
 import {
   ArkAccessDeniedReasons,
   ArkChallengeProperties,
@@ -10,12 +10,13 @@ import {
   deniedUrl,
   describeDenial,
   evaluateAccess,
+  isCrossSite,
   localOrDefault,
   normalizeAccountSwitch,
   protectState,
   unprotectState
 } from './access.js';
-import { DENIED_PAGE_CSP, renderAccessDeniedPage } from './denied-page.js';
+import { DENIED_PAGE_CSP, SIGN_OUT_PAGE_CSP, renderAccessDeniedPage, renderSignOutPage } from './denied-page.js';
 import {
   MemorySessionStore,
   appendCookie,
@@ -159,6 +160,8 @@ export function arkExpress(options = {}) {
   // process this collapses them into a single exchange; across processes, a shared store needs a
   // lock of its own.
   const refreshes = new Map();
+  // Sessions ended while a refresh for them was out. Its answer must not write them back to life.
+  const ended = new Set();
 
   // ---------------------------------------------------------------
   // request helpers
@@ -205,17 +208,28 @@ export function arkExpress(options = {}) {
   async function saveSession(res, id, data) {
     const sessionId = id ?? createSessionId();
     data.updatedAt = Math.floor(Date.now() / 1000);
-    await store.set(sessionId, data, sessionTtlSeconds);
-    if (!id) {
-      appendCookie(res, serializeCookie(cookieName, signSessionId(sessionId, secret), { ...cookieDefaults, maxAge: sessionTtlSeconds }));
+    // A session that holds nothing but sign-ins still under way is kept for as long as a sign-in
+    // may take. Kept for a signed-in session's eight hours, every visit to the login page by a
+    // caller that keeps no cookie was another entry in the store until the evening.
+    const ttlSeconds = data.tokens ? sessionTtlSeconds : TRANSACTION_TTL_SECONDS;
+    await store.set(sessionId, data, ttlSeconds);
+    // A sign-in under way moves its cookie along with it: a second one, started in another tab,
+    // has its own ten minutes.
+    if (!id || !data.tokens) {
+      appendCookie(res, serializeCookie(cookieName, signSessionId(sessionId, secret), { ...cookieDefaults, maxAge: ttlSeconds }));
     }
     return sessionId;
   }
 
   const expireCookie = (res, name) => appendCookie(res, serializeCookie(name, '', { ...cookieDefaults, maxAge: 0 }));
 
+  async function destroySession(id) {
+    if (refreshes.has(id)) ended.add(id);
+    await store.destroy(id);
+  }
+
   async function dropSession(res, id) {
-    if (id) await store.destroy(id);
+    if (id) await destroySession(id);
     expireCookie(res, cookieName);
   }
 
@@ -328,14 +342,11 @@ export function arkExpress(options = {}) {
     // The last point before a session is written. Refusing here rather than at the first guarded
     // page is the whole difference: the browser never holds a session for an account that cannot
     // use this application.
-    if (switchOptions.requireArkClaims || events.onEvaluateAccess) {
-      const allowed = await evaluateAccess(switchOptions, events, { claims: tokens.claims ?? {}, arkClaims, tokens });
-      if (!allowed) {
-        await saveSession(res, id, data);
-        await revokeQuietly(tokens);
-        const returnUrl = localOrDefault(stored.returnTo, switchOptions.homePath);
-        return deny(req, res, ArkAccessDeniedReasons.NO_APP_ACCESS, tokens.claims, arkClaims, returnUrl);
-      }
+    if (!(await isAllowed(tokens.claims, arkClaims, tokens))) {
+      await saveSession(res, id, data);
+      await revokeQuietly(tokens);
+      const returnUrl = localOrDefault(stored.returnTo, switchOptions.homePath);
+      return deny(req, res, ArkAccessDeniedReasons.NO_APP_ACCESS, tokens.claims, arkClaims, returnUrl);
     }
 
     // A fresh session id at the moment privileges change, so a session id an attacker planted
@@ -358,7 +369,9 @@ export function arkExpress(options = {}) {
 
     if (fetchUserInfo && tokens.accessToken && tokens.hasScope('openid')) {
       try {
-        session.user = { ...session.user, ...(await client.userInfo(tokens.accessToken)) };
+        const info = await client.userInfo(tokens.accessToken);
+        // OIDC Core §5.3.2: claims about anybody but the ID token's subject are not used.
+        if (info.sub === tokens.subject) session.user = { ...session.user, ...info };
       } catch {
         // UserInfo is supplementary; the ID token already carries what the scopes unlocked.
       }
@@ -367,6 +380,23 @@ export function arkExpress(options = {}) {
     clearDenied(req, res);
     await saveSession(res, null, session);
     redirect(res, localOrDefault(stored.returnTo, defaultReturnTo));
+  }
+
+  /**
+   * Signs out from a link, a typed address or a form on this site, as it always has.
+   *
+   * A request another site started is asked about first. Taken at its word it ended the session here
+   * and, with the `id_token_hint` the redirect carries, the provider's session for every other
+   * application too, because somebody followed a link.
+   */
+  async function serveLogout(req, res, path) {
+    if (!isCrossSite(req.headers, originOf(req))) return endSession(req, res);
+    if (req.method === 'POST') return send(res, 400, 'cross-site request rejected.');
+    const html = renderSignOutPage(switchOptions, { app: switchOptions.appDisplayName ?? client.config.clientId, logoutPath: path });
+    send(res, 200, html, {
+      type: 'text/html; charset=utf-8',
+      headers: { 'Content-Security-Policy': SIGN_OUT_PAGE_CSP, 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY' }
+    });
   }
 
   async function endSession(req, res, { returnTo } = {}) {
@@ -411,7 +441,7 @@ export function arkExpress(options = {}) {
 
     const { id, data } = await loadSession(req);
     await revokeQuietly(TokenSet.fromJSON(data?.tokens));
-    if (id) await store.destroy(id);
+    if (id) await destroySession(id);
 
     return startLogin(req, res, { ...ArkChallengeProperties.switchUser(target, loginHint, switchOptions.prompt), freshSession: true });
   }
@@ -429,6 +459,12 @@ export function arkExpress(options = {}) {
     await dropSession(res, id);
     clearDenied(req, res);
     redirect(res, localOrDefault(returnUrl, switchOptions.homePath));
+  }
+
+  /** Whether the account these tokens are for may use this application. */
+  async function isAllowed(claims, arkClaims, tokens) {
+    if (!switchOptions.requireArkClaims && !events.onEvaluateAccess) return true;
+    return evaluateAccess(switchOptions, events, { claims: claims ?? {}, arkClaims, tokens });
   }
 
   /** The account the last denial was about, for an application drawing its own page; else null. */
@@ -535,7 +571,10 @@ export function arkExpress(options = {}) {
 
     let pending = refreshes.get(sessionId);
     if (!pending) {
-      pending = refreshSession(sessionId, tokens).finally(() => refreshes.delete(sessionId));
+      pending = refreshSession(sessionId, tokens).finally(() => {
+        refreshes.delete(sessionId);
+        ended.delete(sessionId);
+      });
       refreshes.set(sessionId, pending);
     }
 
@@ -557,17 +596,9 @@ export function arkExpress(options = {}) {
     const current = TokenSet.fromJSON(latest.tokens) ?? tokens;
     if (!current.expired(refreshLeewaySeconds) || !current.refreshToken) return { tokens: current, session: latest };
 
+    let refreshed;
     try {
-      const refreshed = await client.refresh(current.refreshToken);
-      const session = {
-        ...latest,
-        tokens: refreshed.toJSON(),
-        // The ID token is reissued on refresh; keep the identity in step with it.
-        user: refreshed.claims ? { ...latest.user, ...refreshed.claims } : latest.user,
-        arkClaims: refreshed.arkClaims()
-      };
-      await store.set(sessionId, session, sessionTtlSeconds);
-      return { tokens: refreshed, session };
+      refreshed = await client.refresh(current.refreshToken, { subject: latest.sub ?? null });
     } catch (error) {
       // invalid_grant means the refresh token is spent, revoked, or its session ended at the
       // provider. There is nothing to retry: the user has to sign in again.
@@ -575,9 +606,39 @@ export function arkExpress(options = {}) {
         await store.destroy(sessionId);
         return { signedOut: true };
       }
+      // The provider answered and the answer cannot be trusted, which no retry changes.
+      if (error instanceof ArkTokenError) {
+        await revokeQuietly(current);
+        await store.destroy(sessionId);
+        return { signedOut: true };
+      }
       // A transient failure must not sign the user out; the next request tries again.
       return { tokens: current, session: latest };
     }
+
+    // The ID token is reissued on refresh; keep the identity in step with it.
+    const user = refreshed.claims ? { ...latest.user, ...refreshed.claims } : latest.user;
+    // Not reissued by every provider; the last one still serves as id_token_hint at sign-out.
+    refreshed.idToken ??= current.idToken;
+    const arkClaims = refreshed.arkClaims();
+
+    // Asked again with the claims just issued. Asked only at the callback, an account that lost its
+    // access kept the session it already had for as long as it could be refreshed. A rule that
+    // cannot answer has not said yes; the sign-in that follows asks it again, where the failure is
+    // seen.
+    const allowed = await isAllowed(refreshed.claims ?? user, arkClaims, refreshed).catch(() => false);
+    refreshed.claims ??= current.claims;
+
+    // Signed out while the provider was answering: writing now would undo it.
+    const stands = allowed && !ended.has(sessionId) && (await store.get(sessionId));
+    if (stands) {
+      const session = { ...stands, tokens: refreshed.toJSON(), user, arkClaims };
+      await store.set(sessionId, session, sessionTtlSeconds);
+      if (!ended.has(sessionId)) return { tokens: refreshed, session };
+    }
+    await revokeQuietly(refreshed);
+    await store.destroy(sessionId);
+    return { signedOut: true };
   }
 
   // ---------------------------------------------------------------
@@ -653,7 +714,7 @@ export function arkExpress(options = {}) {
       if (await serveAccountEndpoints(req, res, path)) return;
       if (samePath(path, loginPath)) return await startLogin(req, res);
       if (samePath(path, configuredCallbackPath)) return await completeLogin(req, res, next);
-      if (samePath(path, logoutPath)) return await endSession(req, res);
+      if (samePath(path, logoutPath)) return await serveLogout(req, res, path);
 
       await attachContext(req, res);
       next();
@@ -757,10 +818,12 @@ const headerText = (value) =>
  * 401 when the token is missing or bad, 403 when it is valid but not allowed to do this.
  */
 export function arkBearer(options = {}) {
-  const { client: providedClient, scopes = [], claims = [], audience: wantedAudience, optional = false, requireTypeHeader = true, agent = false, ...clientOptions } = options;
+  const { client: providedClient, scopes = [], claims = [], audience: wantedAudience, optional = false, requireTypeHeader: wantedTypeHeader = true, agent = false, ...clientOptions } = options;
   const client = providedClient ?? new ArkOAuthClient(clientOptions);
   // An agent (A2A) accepts only tokens addressed to it: the audience is its own client_id.
   const audience = wantedAudience ?? (agent ? client.config.clientId : undefined);
+  // Always on for an agent: its own ID tokens and logout tokens carry its audience too.
+  const requireTypeHeader = wantedTypeHeader || agent;
 
   const challenge = (res, status, error, description) => {
     const text = headerText(description);

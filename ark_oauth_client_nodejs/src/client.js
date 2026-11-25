@@ -241,9 +241,13 @@ export class ArkOAuthClient {
    * Rotation is on by default on this server: the response carries a *new* refresh token and the
    * one just presented is retired. Store what comes back. Presenting a retired token is treated as
    * theft and revokes the entire family, which is the point of rotation, and also the reason a
-   * client that keeps re-sending its original token locks itself out on the second refresh.
+   * client that keeps re-sending its original token locks itself out on the second refresh. With
+   * rotation off the server sends none, and the one presented is in the result.
+   *
+   * `subject` is who the session belongs to. A new ID token about anybody else is refused (OIDC
+   * Core §12.2).
    */
-  async refresh(refreshToken, { scopes } = {}) {
+  async refresh(refreshToken, { scopes, subject = null } = {}) {
     if (!refreshToken) throw new ArkConfigError('refresh() needs a refresh token.');
     const metadata = await this.metadata();
 
@@ -254,7 +258,10 @@ export class ArkOAuthClient {
       ...(scopes?.length ? { scope: [...scopes].join(' ') } : {})
     });
 
-    return this.#toTokenSet(response, { nonce: null });
+    // RFC 6749 §6: a response without a refresh token leaves the one just presented valid. Dropping
+    // it here left a session nothing could renew, and so one nothing ever re-checked.
+    const kept = response.refresh_token ? response : { ...response, refresh_token: refreshToken };
+    return this.#toTokenSet(kept, { nonce: null, subject });
   }
 
   /**
@@ -355,9 +362,13 @@ export class ArkOAuthClient {
    * Verifies a token another agent sent to this one: `verifyAccessToken` with the audience fixed
    * to this client's own client_id, which is what makes a token minted for one agent useless at
    * the next. Read who is calling with `agentActors(payload)`.
+   *
+   * The `at+jwt` type is always required here, whatever `requireTypeHeader` says: this client's own
+   * ID tokens and logout tokens carry the same audience, and the type is the only thing that tells
+   * them from an agent token.
    */
-  async verifyAgentToken(token, { scopes = [], arkClaims = [], requireTypeHeader = true } = {}) {
-    return this.verifyAccessToken(token, { audience: this.#config.clientId, scopes, arkClaims, requireTypeHeader });
+  async verifyAgentToken(token, { scopes = [], arkClaims = [] } = {}) {
+    return this.verifyAccessToken(token, { audience: this.#config.clientId, scopes, arkClaims, requireTypeHeader: true });
   }
 
   /**
@@ -542,12 +553,13 @@ export class ArkOAuthClient {
   }
 
   /** Verifies an ID token against the provider's keys and the values from the sign-in transaction. */
-  async verifyIdToken(idToken, { nonce = null, accessToken = null, code = null, maxAge = null } = {}) {
+  async verifyIdToken(idToken, { nonce = null, accessToken = null, code = null, maxAge = null, subject = null } = {}) {
     const metadata = await this.metadata();
     const jwks = await this.jwks();
     return verifyJwt(idToken, jwks, {
       issuer: metadata.issuer,
       audience: this.#config.clientId,
+      subject: subject ?? undefined,
       nonce,
       accessToken,
       code,
@@ -566,18 +578,34 @@ export class ArkOAuthClient {
    * request. `scopes` and `arkClaims` are checked here rather than left to the caller, because
    * "the token is valid" and "the token is allowed to do this" are different questions and only
    * the second one is the authorization decision.
+   *
+   * With no `audience` given or configured, the one the provider publishes for this tenant's
+   * ordinary access tokens (`ark_access_token_audience` in its metadata) is the one expected. A
+   * token addressed to an agent (A2A) or to an MCP endpoint is for that agent or endpoint alone; an
+   * API that checked no audience took it as readily as its own, so whoever was handed one could
+   * replay it here as the user it names.
    */
   async verifyAccessToken(token, { audience, scopes = [], arkClaims = [], requireTypeHeader = true } = {}) {
     const metadata = await this.metadata();
     const jwks = await this.jwks();
+    const expected = (audience ?? this.#config.audience) || publishedAudience(metadata);
 
     const payload = await verifyJwt(token, jwks, {
       issuer: metadata.issuer,
-      audience: audience ?? this.#config.audience ?? undefined,
+      audience: expected ?? undefined,
       typ: requireTypeHeader ? 'at+jwt' : undefined,
       requireIat: true,
       clockToleranceSeconds: this.#config.clockToleranceSeconds
     });
+    // A provider from before that member was published, or somebody else's. The audience is not
+    // known, but a token an agent carries on a user's behalf still says so itself.
+    if (!expected && payload.act !== undefined && payload.act !== null) {
+      throw new ArkTokenError(
+        'the token was issued to an agent (it carries `act`) and this API was given no audience to check it against. ' +
+          'Set `audience`, or verify it as an agent.',
+        { claim: 'act' }
+      );
+    }
 
     const granted = new Set(String(payload.scope ?? '').split(' ').filter(Boolean));
     const missingScopes = [...scopes].flat().filter((s) => !granted.has(s));
@@ -826,7 +854,7 @@ export class ArkOAuthClient {
   }
 
   /** Turns a token response into a TokenSet, validating the ID token when there is one. */
-  async #toTokenSet(response, { nonce, code = null, maxAge = null }) {
+  async #toTokenSet(response, { nonce, code = null, maxAge = null, subject = null }) {
     let claims = null;
 
     if (response.id_token) {
@@ -834,7 +862,8 @@ export class ArkOAuthClient {
         nonce,
         accessToken: response.access_token ?? null,
         code,
-        maxAge
+        maxAge,
+        subject
       });
     } else if (nonce !== null && this.#requestedOpenId(response)) {
       // openid was granted but nothing came back to prove who signed in.
@@ -849,6 +878,12 @@ export class ArkOAuthClient {
       .split(' ')
       .includes('openid');
   }
+}
+
+/** What the provider says an ordinary access token of this tenant is addressed to, if it says. */
+function publishedAudience(metadata) {
+  const value = metadata.ark_access_token_audience;
+  return typeof value === 'string' && value ? value : null;
 }
 
 /** Convenience factory, for callers who prefer not to write `new`. */

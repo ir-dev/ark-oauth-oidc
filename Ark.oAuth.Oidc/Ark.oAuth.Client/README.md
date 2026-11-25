@@ -83,6 +83,10 @@ public IActionResult Secure() => View();
 public IActionResult Billing() => View();
 ```
 
+The roles are those of the token the session holds now. They are read again each time it is refreshed,
+so a claim taken away stops being a role then, and with `AccountSwitch:RequireArkClaims` (or
+`OnEvaluateAccess`) an account that has lost its access is signed out.
+
 Reading the access token — always per call, never cached; the cookie handler refreshes it
 underneath you:
 
@@ -100,6 +104,13 @@ builder.Services
     .AddAuthentication()
     .AddArkOidcApi(arkConfig);
 ```
+
+The expected audience is the one the provider publishes for this tenant's access tokens
+(`ark_access_token_audience` in its metadata), so a token addressed to one agent or one MCP endpoint is
+refused. `ark_oauth_client:Audience` replaces it. Against a provider that publishes none the audience
+is not checked, but a token carrying `act` (one an agent holds on a user's behalf) is still refused.
+Every client of a tenant shares that audience: authorise on the `ark_claims` claims, never on "the
+token is valid".
 
 ## The flows outside interactive sign-in
 

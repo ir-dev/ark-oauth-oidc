@@ -366,7 +366,8 @@ export class ArkOAuthClient {
     maxAge?: number | null;
   }): Promise<TokenSet>;
 
-  refresh(refreshToken: string, options?: { scopes?: string[] }): Promise<TokenSet>;
+  /** `subject`: who the session belongs to; a new ID token about anybody else is refused. */
+  refresh(refreshToken: string, options?: { scopes?: string[]; subject?: string | null }): Promise<TokenSet>;
   clientCredentials(options?: {
     scopes?: string[];
     clientId?: string;
@@ -390,8 +391,9 @@ export class ArkOAuthClient {
 
   verifyIdToken(
     idToken: string,
-    options?: { nonce?: string | null; accessToken?: string | null; code?: string | null; maxAge?: number | null }
+    options?: { nonce?: string | null; accessToken?: string | null; code?: string | null; maxAge?: number | null; subject?: string | null }
   ): Promise<Record<string, any>>;
+  /** Without `audience`, here or on the client, the one the provider publishes for the tenant's access tokens. */
   verifyAccessToken(
     token: string,
     options?: { audience?: string; scopes?: string[]; arkClaims?: string[]; requireTypeHeader?: boolean }
@@ -408,7 +410,7 @@ export class ArkOAuthClient {
     force?: boolean;
     renewBeforeSeconds?: number;
   }): Promise<TokenSet>;
-  /** `verifyAccessToken` with the audience fixed to this client's own client_id. */
+  /** `verifyAccessToken` with the audience fixed to this client's own client_id, and `at+jwt` always required. */
   verifyAgentToken(
     token: string,
     options?: { scopes?: string[]; arkClaims?: string[]; requireTypeHeader?: boolean }
@@ -469,7 +471,7 @@ export type ArkAccessDeniedReason = 'no_app_access' | 'forbidden';
 export interface ArkAccountSwitchOptions {
   /** Serve the three endpoints, and send an HTML 403 to the page. Default true. */
   enabled?: boolean;
-  /** Refuse, at the callback, an account the provider issued no ark_claims for. Default false. */
+  /** Refuse an account the provider issued no ark_claims for, at the callback and with each refresh. Default false. */
   requireArkClaims?: boolean;
   /** Narrow that check to at least one of these values (case-insensitive). */
   requiredClaims?: string[];
@@ -527,7 +529,10 @@ export interface ArkDeniedAccount {
 }
 
 export interface ArkClientEvents {
-  /** Your entitlement rule. Replaces the configured one; read allowedByConfiguration to combine them. */
+  /**
+   * Your entitlement rule. Replaces the configured one; read allowedByConfiguration to combine them.
+   * Asked at the callback and with each refresh, where false or an exception ends the session.
+   */
   onEvaluateAccess?: (context: ArkAccessEvaluationContext) => boolean | Promise<boolean>;
   /** Log a denial, or write a response of your own (then set `handled` or just respond). */
   onAccessDenied?: (context: ArkAccessDeniedContext, req: any, res: any) => void | Promise<void>;
@@ -678,12 +683,13 @@ export interface ArkBearerOptions extends Partial<ArkClientOptions> {
   scopes?: string[];
   /** Required Ark authorization claims. */
   claims?: string[];
+  /** The expected `aud`. Left out, the one the provider publishes for the tenant's access tokens. */
   audience?: string;
   /** This API is an agent (A2A): accept only tokens whose audience is its own client_id. */
   agent?: boolean;
   /** Let unauthenticated requests through with `req.ark.isAuthenticated === false`. */
   optional?: boolean;
-  /** Require the RFC 9068 `at+jwt` type header. On by default. */
+  /** Require the RFC 9068 `at+jwt` type header. On by default, and always for an agent. */
   requireTypeHeader?: boolean;
 }
 

@@ -139,6 +139,10 @@ namespace Ark.oAuth.Oidc.Protocol
             {
                 if (client.require_pkce || client.IsPublicClient)
                     throw OAuthException.InvalidGrant("PKCE is required for this client but no code_challenge was sent.");
+                // A client that sends a verifier started its request with a challenge. The code in
+                // its hands is from a request without one: somebody else's (RFC 9700 §4.8.2).
+                if (!string.IsNullOrEmpty(codeVerifier))
+                    throw OAuthException.InvalidGrant("code_verifier was sent for a code that was issued without a code_challenge.");
                 return;
             }
 
@@ -715,6 +719,11 @@ namespace Ark.oAuth.Oidc.Protocol
                 .ExecuteDeleteAsync();
 
             removed += await _ctx.sessions.Where(s => s.expires_at <= now).ExecuteDeleteAsync();
+
+            // Failed sign-ins are counted for whatever was typed, so anybody can add rows here. One
+            // nobody has touched for a month locks nothing and is worth nothing.
+            var untouched = now.AddDays(-30);
+            removed += await _ctx.auth_status.Where(s => s.at < untouched).ExecuteDeleteAsync();
             return removed;
         }
     }

@@ -50,6 +50,9 @@ An agent can set it up instead: connect it to the MCP server at /ark-idp/mcp wit
     "headers": { "Authorization": "Bearer ${ARK_SETUP_CODE}" } } } }
 ```
 
+The server brings an agent that does this, with a page for the people it needs answers from: `/ark-agent`,
+linked from the wizard's first page (see the README, "The setup wizard"). The tools are the same for any other.
+
 The agent collects one section at a time, in any order, over as many conversations as it takes. Every
 section names the department that usually has the answer and the question to ask, and every value keeps
 who supplied it.
@@ -66,7 +69,12 @@ who supplied it.
 
 Only `company_name`, `base_url`, `tenant_id` and the administrator's `username` are required. The checks
 are the wizard's own. `setup_complete` needs the `review_id` of the draft as it stands and the tenant id
-repeated, so a value changed after a person agreed to the plan stops the install.
+repeated, so a value changed after a person agreed to the plan stops the install. What is checked and what is
+installed are taken from the draft in one look, so a value stored at that moment is not slipped in.
+
+A MySQL connection is tested and saved with `AllowLoadLocalInfile` off, whatever was given: with it on, the
+server at the other end can ask for any file this one can read. A connection that names an OCI configuration
+file (MySQL) or a password file (PostgreSQL) is refused.
 
 **What an agent never has to hold.** Leave the administrator's password out: the account starts on a random
 one, and `setup_complete` returns a one-time link with which the administrator sets their own. The signing
@@ -79,7 +87,11 @@ is supplied anyway stays in memory and has to be given again after a restart.
 the configuration of the tenant's own MCP server. From then on the setup code opens nothing.
 
 The setup code is always required here, also from localhost, and a browser's `Origin` is refused: the
-wizard's exemption is for a person at the machine.
+wizard's exemption is for a developer at a browser, on this machine, in the Development environment.
+
+Once a process has run configured it never offers setup again. When its settings go missing, or a settings
+file is there and cannot be read, every request including this endpoint is answered with `503` and
+`configuration_unavailable`, and the reason is in the log.
 
 ## After setup: tokens
 
@@ -122,6 +134,9 @@ and needs one more thing: an administrator claim on **their access to that clien
 | `ark.host.admin` | Operator of the server. Counts only on a mapping in the operator tenant. Only the operator grants it |
 | `ark.tenant.admin` | Administrator of the tenant. Not enough in the operator tenant, whose administrator is the operator |
 | `ark.client.admin` | Administrator of that application, at its own endpoint |
+
+`service_role` is guarded with them: dynamic registration takes a token that carries it as leave to register
+applications, so only an administrator of the tenant hands it out.
 
 An application's own `admin` claim means nothing here. Without one of these, `whoami` says what is missing.
 
@@ -178,7 +193,13 @@ and changing the server's settings. They stay with a person in the console or th
 
 * A tool that takes something away asks for the name of what it takes away again, in `confirm`.
 * New people get a one-time link rather than a password. Secrets and links are returned once, and the
-  instructions tell the agent to hand them over first.
+  instructions tell the agent to hand them over first. An application never chooses the password of somebody
+  it adds; an administrator of the tenant may.
+* Giving access to an account another tenant manages asks for that tenant's id in `confirm`, and making an
+  administrator of an account that already exists asks for its username: access belongs to whoever can sign
+  in as that account. An account another tenant manages is never made an administrator
+  (see [Tenants and accounts](#tenants-and-accounts)).
+* Arguments are answered with at most 20 problems, and a list is counted before it is read.
 * Redirect URIs are never guessed for an application; registration is refused without one.
 * A problem the agent can put right comes back as a tool result with `error`, `message` and usually the tool
   that fixes it.
@@ -196,10 +217,18 @@ off. Another tenant may give the person access to its applications and take that
 administrator is told that an account outside the tenant does not exist, except that a username which is
 taken cannot be created again. `user_set_home` hands an account over.
 
+A username goes to whoever asks for it first, so having one says nothing about who the person is: the
+administrators of the tenant that made an account can set its password. Every grant therefore answers with
+`managed_by`, and `ark.*` claims, `service_role` and the console's `admin` are refused for an account managed
+elsewhere. `ark.host.admin` goes only to an account the operator manages. An application that adds somebody
+is handed their one-time link, so for a person who is to hold more than that application, send the link by
+`email` or have the tenant's administrator issue it.
+
 `tenant_create` makes the tenant, a signing key and `{tenant_id}_machine`, and returns that client's secret
 and the tenant's MCP configuration once. An existing tenant gets one from `tenant_machine_secret_reset`.
 The machine client of a tenant other than the operator's opens that tenant's MCP endpoint and nothing else:
-the management API still answers only to the operator.
+the management API still answers only to the operator. `host`, `mcp` and `v1` are not made as tenant ids any
+more, because the audit trail uses them for the server's own lines; a tenant that has one goes on working.
 
 ## Registering an agent dynamically
 
@@ -208,6 +237,10 @@ client that carries `client.register` and has **no** `resource`. It may register
 an endpoint of its own, `{root}/{tenant}/mcp/{its client_id}`, and reaches nothing else until an administrator
 lists it as a caller or grants its people an administrator claim. `tenant_overview` shows the registration
 endpoint. `client_create` with kind `agent` does the same from the administrator's side.
+
+A `client_id` it asks for is refused when it is reserved: the server's own, one in
+`Oidc:IntrospectionClients`, or one on any caller list of the tenant. Somebody has already been given
+something under that name, perhaps a client that was deleted, and whoever registered it would inherit it.
 
 ## Settings
 

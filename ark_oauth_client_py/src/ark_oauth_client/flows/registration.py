@@ -142,7 +142,7 @@ class ArkRegistration:
         result = ArkRegistrationResult()
 
         try:
-            metadata = self._probe.read_metadata(authority)
+            metadata = self._probe.read_trusted_metadata(authority)
             if not metadata.registration_endpoint:
                 result.error = "registration_not_supported"
                 result.error_description = (

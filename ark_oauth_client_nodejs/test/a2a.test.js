@@ -4,7 +4,7 @@ import { ArkOAuthClient } from '../src/client.js';
 import { arkBearer } from '../src/express.js';
 import { agentActors } from '../src/tokens.js';
 import { decodeJwt } from '../src/jwt.js';
-import { ArkConfigError, ArkOAuthError } from '../src/errors.js';
+import { ArkConfigError, ArkOAuthError, ArkTokenError } from '../src/errors.js';
 import { StubIdp } from './stub-idp.js';
 import { app, route, serve } from './harness.js';
 
@@ -23,6 +23,7 @@ beforeEach(() => {
   idp.agents = {};
   idp.userClaimsAt = {};
   idp.grants.length = 0;
+  idp.publishAudience = true;
 });
 
 /** The web application the user signs in to; any confidential client can be an agent. */
@@ -190,6 +191,62 @@ describe('the agent card and the bearer guard', () => {
       assert.match(elsewhere.headers.get('www-authenticate'), /invalid_token/);
 
       assert.equal((await call(null)).status, 401);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+});
+
+describe('an API that is not an agent', () => {
+  const listed = () => {
+    idp.agents = { 'post-app': { 'confidential-app': { claims: ['orders.read'], delegateUsers: true } } };
+    idp.userClaimsAt = { 'post-app': ['orders.read'] };
+  };
+
+  // An API that was told no audience checks the tenant's. Without that it took a token meant for one
+  // agent as readily as its own, and whoever was handed one could replay it as the user it names.
+  test('refuses a token addressed to an agent', async () => {
+    listed();
+    const bearer = arkBearer({ authority: idp.issuer, clientId: 'payroll-api' });
+    const server = app(bearer, (req, res) => res.end('payroll'));
+    const origin = await serve(server);
+    const call = async (token) => (await fetch(origin, { headers: { authorization: `Bearer ${token}` } })).status;
+    try {
+      const client = web();
+      assert.equal(await call(await userToken(client)), 200, 'an ordinary token of this tenant');
+      assert.equal(await call((await client.agentToken({ audience: 'post-app' })).accessToken), 401);
+      assert.equal(await call((await client.agentToken({ audience: 'post-app', subjectToken: await userToken(client) })).accessToken), 401);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  test('refuses a delegated token even where an older provider publishes no audience', async () => {
+    listed();
+    idp.publishAudience = false;
+    const client = web();
+    const api = new ArkOAuthClient({ authority: idp.issuer, clientId: 'payroll-api' });
+
+    assert.equal((await api.verifyAccessToken(await userToken(client))).sub, 'alice@example.com');
+    const delegated = (await client.agentToken({ audience: 'post-app', subjectToken: await userToken(client) })).accessToken;
+    await assert.rejects(() => api.verifyAccessToken(delegated), (e) => e instanceof ArkTokenError && /issued to an agent/.test(e.message));
+    // Told which audience to expect, it is that check and nothing else.
+    assert.deepEqual((await api.verifyAccessToken(delegated, { audience: 'post-app' })).act, { sub: 'confidential-app' });
+  });
+
+  // Both carry this client's id as their audience; the type header is all that tells them apart.
+  test('an ID token is no agent token, even with the type check off', async () => {
+    const client = web();
+    const tx = await client.createAuthorizationUrl();
+    const authorize = await fetch(tx.url, { redirect: 'manual' });
+    const { idToken } = await client.handleCallback(Object.fromEntries(new URL(authorize.headers.get('location')).searchParams), tx);
+
+    await assert.rejects(() => client.verifyAgentToken(idToken, { requireTypeHeader: false }), /at\+jwt/);
+    const guard = arkBearer({ client, agent: true, requireTypeHeader: false });
+    const server = app(guard, (req, res) => res.end('in'));
+    const origin = await serve(server);
+    try {
+      assert.equal((await fetch(origin, { headers: { authorization: `Bearer ${idToken}` } })).status, 401);
     } finally {
       await new Promise((resolve) => server.close(resolve));
     }

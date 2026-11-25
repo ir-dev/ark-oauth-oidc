@@ -173,7 +173,8 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                             .Text("username", "An email address or username.", required: true, maxLength: 200)
                             .Text("name", "Full name, for a new account.", maxLength: 120)
                             .List("claims", "What they may do there.")
-                            .Text("credential", ArkMcpOps.CredentialHelp, values: ArkMcpOps.Credentials), max: 50), true),
+                            .Text("credential", ArkMcpOps.CredentialHelp, values: ArkMcpOps.Credentials)
+                            .Text("confirm", "Asked for when another tenant manages the account, or when an account that exists is made an administrator.", maxLength: 200), max: 50), true),
                     Run = OnboardAsync
                 },
 
@@ -405,8 +406,8 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                 try
                 {
                     var (user, created, credential, link) = await ArkMcpOps.PersonAsync(call, p.Required("username"), p.Text("name"), p.Text("credential"), null, create: true);
-                    var granted = await ArkMcpOps.GrantAsync(call, user, client, p.List("claims") ?? new(), replace: false);
-                    added.Add(new { username = user.email, ok = true, account = created ? "created" : "already existed", credential, password_link = link, claims = granted.Claims });
+                    var granted = await ArkMcpOps.GrantAsync(call, user, client, p.List("claims") ?? new(), replace: false, made: created, confirm: p.Text("confirm"));
+                    added.Add(new { username = user.email, ok = true, account = created ? "created" : "already existed", managed_by = ArkMcpOps.ManagedBy(user), credential, password_link = link, claims = granted.Claims });
                 }
                 catch (Exception ex) when (ex is ArkMcpToolException or ApplicationException)
                 {

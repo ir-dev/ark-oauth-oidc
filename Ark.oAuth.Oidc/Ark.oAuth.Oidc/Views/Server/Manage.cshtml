@@ -295,18 +295,31 @@
 			// ];
 			let externalTags = [];
 
+			// Names and keys on this page were written by whoever administers a tenant or an
+			// application, not only by the operator reading it: they are drawn as text. esc() is for
+			// the list editors, which draw what they are given as markup.
+			const esc = value => String(value ?? '').replace(/[&<>"'`]/g, c => `&#${c.charCodeAt(0)};`);
+			if (typeof ark_alert !== 'undefined' && ark_alert.alert) {
+				// A message from the server quotes those names.
+				const draw = ark_alert.alert.bind(ark_alert);
+				ark_alert.alert = (kind, message, ms) => draw(kind, String(message ?? '').replace(/[<>]/g, ''), ms);
+			}
+
 			function renderTags() {
 			  const container = document.getElementById("tag-list");
-			  container.innerHTML = "";
+			  container.textContent = "";
 			  externalTags.forEach((tag, index) => {
 				const el = document.createElement("div");
 				el.className = "draggable-item";
 				el.setAttribute("draggable", "true");
 				el.dataset.tag = tag;
-				el.innerHTML = `
-				  <span>${tag}</span>
-				  <button onclick="removeExternalTag(${index})">&times;</button>
-				`;
+				const label = document.createElement("span");
+				label.textContent = tag; // a claim key is data, never markup
+				const remove = document.createElement("button");
+				remove.type = "button";
+				remove.textContent = "×";
+				remove.addEventListener("click", () => removeExternalTag(index));
+				el.append(label, remove);
 				el.addEventListener("dragstart", e => {
 				  e.dataTransfer.setData("text/plain", tag);
 				});
@@ -336,9 +349,10 @@
 						})
 						.then(t => t.json())
 						.then(t => {
+							if (t.error) { ark_alert.alert('f', `${t.msg}`, 5000); return; }
 							externalTags.unshift(value);
 							renderTags();
-							ark_alert.alert('s', `saved tenant succesfully`, 3000);
+							ark_alert.alert('s', `saved claim succesfully`, 3000);
 						});
 				  e.target.value = "";
 				}
@@ -363,7 +377,7 @@
 						editorParams: {
 							//values: tbl_client.table.getData().filter(t => t.tenant_id == u_tnt).map(t => t.client_id)
 							values: tbl_client.table.getData().filter(t => t.tenant_id == u_tnt).reduce((accm, itm) => {
-								accm[itm.id] = `${itm.display} (${itm.tenant_id})`;
+								accm[itm.id] = esc(`${itm.display} (${itm.tenant_id})`);
 								return accm;
 							}, {}),
 						}
@@ -676,7 +690,7 @@
 						editor:"list",
 						editorParams:{
 							values: ten_lst.reduce((accm, itm) => {
-								accm[itm.tenant_id] = itm.name;
+								accm[itm.tenant_id] = esc(itm.name);
 								return accm;
 							}, {}),
 							clearable:false,

@@ -66,7 +66,7 @@ namespace Ark.oAuth.Oidc.Endpoints
                 };
 
                 ApplyMetadata(client, metadata, ep);
-                EnforceNotReservedClientId(client);
+                await EnforceNotReservedClientIdAsync(client);
                 await EnforceKnownScopesAsync(client);
                 await EnforceUniqueClientNameAsync(client);
                 await EnforceUniqueClientIdAsync(client);
@@ -127,8 +127,11 @@ namespace Ark.oAuth.Oidc.Endpoints
             {
                 var tenant = await ResolveTenantAsync(tenant_id);
                 var client = await AuthorizeRegistrationAccessAsync(tenant, client_id);
+                // Its id is free to be registered again, and must not come with what others let it do.
+                var forgotten = await _da.ForgetAgentCaller(client);
                 Ctx.clients.Remove(client);
                 await Ctx.SaveChangesAsync();
+                foreach (var (agent, before) in forgotten) _da.RecordAgentChanges(agent, before, agent.is_agent == true);
                 _da.Log("client_deregister", tenant.tenant_id, "client registration deleted", $"client: {client_id}");
                 Webhooks.ArkWebhookEvents.Raise(HttpContext, tenant.tenant_id, Webhooks.ArkWebhookEvents.ClientDeleted,
                     new { client_id, method = "dynamic_registration" }, client_id);
@@ -370,8 +373,12 @@ namespace Ark.oAuth.Oidc.Endpoints
         /// the operator's sign-in. Uniqueness protects them only while they exist, so a deployment
         /// that deleted its machine client would otherwise hand the name — and the API — to the
         /// first registration that asked for it.
+        ///
+        /// An id somebody has already been given something under is reserved for the same reason.
+        /// A caller list (A2A) and <c>Oidc:IntrospectionClients</c> name clients by id and may name
+        /// one that was deleted or never made; whoever registered it inherited the entry.
         /// </summary>
-        private void EnforceNotReservedClientId(ArkClient client)
+        private async Task EnforceNotReservedClientIdAsync(ArkClient client)
         {
             var ser = ServerConfig;
             var operatorTenant = (ser.TenantId ?? "").Trim();
@@ -382,6 +389,12 @@ namespace Ark.oAuth.Oidc.Endpoints
             };
             if (string.Equals(client.tenant_id, operatorTenant, StringComparison.OrdinalIgnoreCase))
                 reserved.AddRange(ser.Management?.OperatorDeviceClients ?? new List<string>());
+            reserved.AddRange(Options.IntrospectionClients ?? new List<string>());
+            // Read from the table, not the cache: few clients have a list, and registering is rare.
+            var lists = await Ctx.clients.AsNoTracking()
+                .Where(c => c.tenant_id == client.tenant_id && c.a2a_callers_ != null && c.a2a_callers_ != "" && c.a2a_callers_ != "[]")
+                .ToListAsync();
+            reserved.AddRange(lists.SelectMany(c => c.a2a_callers).Select(a => a.client_id));
 
             if (reserved.Any(r => string.Equals(r?.Trim(), client.client_id, StringComparison.OrdinalIgnoreCase)))
                 throw new OAuthException(OAuthErrorCodes.InvalidClientMetadata,

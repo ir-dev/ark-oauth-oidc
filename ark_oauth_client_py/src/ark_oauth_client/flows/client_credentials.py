@@ -151,7 +151,7 @@ class ArkClientCredentials:
             return result
 
         try:
-            metadata = self._probe.read_metadata(authority)
+            metadata = self._probe.read_trusted_metadata(authority)
             if not metadata.token_endpoint:
                 result.error = "server_error"
                 result.error_description = (

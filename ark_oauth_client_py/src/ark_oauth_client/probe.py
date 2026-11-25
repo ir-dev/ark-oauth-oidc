@@ -24,7 +24,9 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .auth_config import ArkAuthConfig
+from .config import require_https_authority
 from .diagnostics import ArkJson
+from .discovery import check_issuer
 from .errors import ArkOAuthError
 from .http import get_json
 
@@ -342,4 +344,21 @@ class ArkSetupProbe:
                 "invalid_request", "ark_oauth_client: 'authority' is not set.", endpoint=""
             )
         document = get_json(self.discovery_url(authority), **self._http)
+        return ArkProviderMetadata.parse(document)
+
+    def read_trusted_metadata(self, authority: Optional[str] = None) -> ArkProviderMetadata:
+        """
+        :meth:`read_metadata` for a caller about to send a secret to what it says: https unless
+        loopback or ``require_https_metadata`` is off, and an issuer that is the authority asked
+        for. The plain one answers either way, so that a set-up page can show the mismatch.
+        """
+        authority = authority or self._config.resolve_authority()
+        if not authority:
+            raise ArkOAuthError(
+                "invalid_request", "ark_oauth_client: 'authority' is not set.", endpoint=""
+            )
+        authority = require_https_authority(authority, self._config.require_https_metadata)
+        url = self.discovery_url(authority)
+        document = get_json(url, **self._http)
+        check_issuer(document, authority, url)
         return ArkProviderMetadata.parse(document)

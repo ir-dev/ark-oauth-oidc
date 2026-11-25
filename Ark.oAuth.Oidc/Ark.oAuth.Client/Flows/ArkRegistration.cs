@@ -73,7 +73,7 @@ namespace Ark.oAuth
 
             try
             {
-                var metadata = await _probe.ReadMetadataAsync(authority, cancellationToken);
+                var metadata = await _probe.ReadTrustedMetadataAsync(authority, cancellationToken);
                 if (string.IsNullOrEmpty(metadata.RegistrationEndpoint))
                 {
                     result.Error = "registration_not_supported";
@@ -92,7 +92,7 @@ namespace Ark.oAuth
                 if (body != null)
                     request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
 
-                var client = _http.CreateClient("ark-oidc-client");
+                var client = _http.CreateClient(ArkOidcClient.HttpClientName);
                 using var response = await client.SendAsync(request, cancellationToken);
 
                 var payload = await response.Content.ReadAsStringAsync(cancellationToken);

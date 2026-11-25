@@ -385,9 +385,12 @@
             saveButton.disabled = true;
             setStatus("Updating password…");
             save(API + "/user/pw/set", { email: current.email, password: pw1 }, "password updated")
-                .then(function () { return loadUsers(); })
-                .then(function () { close(); })
-                .catch(function () {
+                .then(function () {
+                    // Set, whatever the reload says: changing your own password ends this session too,
+                    // and the list is then refused.
+                    close();
+                    return loadUsers().catch(function () { });
+                }, function () {
                     saveButton.disabled = false;
                     setStatus("The password could not be updated. See the message above.", "error");
                 });

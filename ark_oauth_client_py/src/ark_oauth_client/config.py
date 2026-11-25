@@ -42,6 +42,24 @@ def _require_absolute_url(value: str, setting: str):
     return url
 
 
+def require_https_authority(authority: str, require_https: bool = True) -> str:
+    """
+    The authority without its trailing slash, refused when it is plain http anywhere but loopback.
+
+    Every way in asks this, not only the client's constructor: the client credentials, registration
+    and set-up helpers read the same setting and send the same secret.
+    """
+    resolved = authority.rstrip("/")
+    url = _require_absolute_url(resolved, "authority")
+    if require_https and url.scheme != "https" and not _is_loopback(url):
+        raise ArkConfigError(
+            f"ark_oauth_client: 'authority' is {resolved}, which is plain http. Tokens would cross "
+            "the network in the clear. Use https, or set require_https=False — only ever for local "
+            "development."
+        )
+    return resolved
+
+
 @dataclass(frozen=True)
 class PrivateKeyJwt:
     """The signing key for the ``private_key_jwt`` client assertion (OIDC Core §9)."""
@@ -133,14 +151,7 @@ def normalize_config(
             "{BaseUrl}/{TenantId}, e.g. https://idp.example.com/my_idp. "
             "(Or set auth_server_url + tenant_id and it will be joined for you.)"
         )
-    resolved = resolved.rstrip("/")
-    authority_url = _require_absolute_url(resolved, "authority")
-    if require_https and authority_url.scheme != "https" and not _is_loopback(authority_url):
-        raise ArkConfigError(
-            f"ark_oauth_client: 'authority' is {resolved}, which is plain http. Tokens would cross "
-            "the network in the clear. Use https, or set require_https=False — only ever for local "
-            "development."
-        )
+    resolved = require_https_authority(resolved, require_https)
 
     if not client_id or not isinstance(client_id, str):
         raise ArkConfigError(

@@ -238,6 +238,9 @@ namespace Ark.oAuth.Oidc.Protocol
         /// </summary>
         internal static bool ShouldRecheckUnknownKid(string tenantId, string kid)
         {
+            // Off a token nothing has been verified about. No key of this server has a long one, and
+            // what is remembered here is the kid itself: bounded in number, so bounded in size too.
+            if (kid.Length > 128) return false;
             var now = Environment.TickCount64;
             var key = $"{tenantId}\n{kid}";
             if (UnknownKids.TryGetValue(key, out var until) && until > now) return false;

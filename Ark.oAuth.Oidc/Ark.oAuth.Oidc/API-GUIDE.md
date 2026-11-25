@@ -57,8 +57,8 @@ Active while `ark_oauth_server:TenantId` or `ConnectionStrings:ArkAuthConnection
 | `POST /ark-idp/setup/api/complete` | the whole form → writes settings, bootstraps the DB, reloads configuration | 404 |
 | `GET /ark-idp/branding/{file}` | uploaded logos | same |
 
-Every POST must be `Content-Type: application/json` with `X-Ark-Setup: 1`; from anything but an
-unproxied loopback address (or always, with `Setup:RequireToken`) also `X-Ark-Setup-Code: <code>`,
+Every POST must be `Content-Type: application/json` with `X-Ark-Setup: 1`; from anything but a
+Development server at an unproxied loopback address (or always, with `Setup:RequireToken`) also `X-Ark-Setup-Code: <code>`,
 the code from the start-up log / `setup-code.txt`. Errors are `{ error, msg, field }`.
 
 `complete` writes `{DataPath}/settings.json` (0600): `ConnectionStrings`, and `ark_oauth_server`
@@ -432,6 +432,7 @@ duplicates the first row wins.
 | `parent_excluded` | it references a row that was itself excluded |
 | `tenant_mismatch` | a mapping names a tenant other than its client's |
 | `invalid_login_id` | a user id that is neither an email nor a 2–64 char `[a-z0-9._-]` username |
+| `unsafe_claim` | a claim key is blank or carries `<`, `>`, quotes or control characters |
 | `unsafe_uri` | a client URI carries script (`javascript:`, `data:`, `file:`, whitespace) |
 | `client_name_conflict` | another client in the same tenant already has this name |
 | `kid_conflict` | the key id exists here under a different tenant |

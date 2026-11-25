@@ -90,7 +90,8 @@ namespace Ark.Client.Web.Controllers
         /// onto the configured role claim type, so ordinary role checks work against them.
         ///
         /// Grant the claim through Admin console -> Access mapping for this user and this client;
-        /// it takes effect on the next sign-in.
+        /// it takes effect on the next sign-in, or when the access token is next refreshed. Taking
+        /// it away does too.
         /// </summary>
         [Authorize]
         public IActionResult Roles()

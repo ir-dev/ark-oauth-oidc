@@ -29,7 +29,8 @@ Diagnose against the actual behaviour of this package. The fastest general diagn
 | Downstream API returns 401 after a while | The access token was cached and went stale | Are you storing the token anywhere? | Read it per request: `await HttpContext.GetArkAccessTokenAsync()` / `WithArkTokenAsync` | Caching the token in a field/`static` |
 | User is bounced to the IdP mid-session | No refresh token, so the session dies with the first access token | Is `offline_access` in `Scopes` and whitelisted? | Add `offline_access`; the cookie handler then refreshes silently | Extending cookie lifetime instead of enabling refresh |
 | Refresh silently signs the user out | Refresh token revoked, expired, or replayed (family revoked) | Server logs; token replay revokes the family | Expected — the user re-signs-in. Investigate replay if frequent | Retrying refresh in a loop |
-| API rejects the token (audience) | `AddArkOidcApi` validating an audience you never set | Check `ArkAuthConfig.Audience` | Audience is validated **only** if `Audience` is set — leave it null or set it correctly | Setting `Audience` to a value the token does not carry |
+| API rejects the token (audience) | `Audience` is set to something else, or the token is addressed to an agent or an MCP endpoint | Compare the token's `aud` with `ArkAuthConfig.Audience`, or with `ark_access_token_audience` in the provider's metadata when that is empty | Leave `Audience` empty for the tenant's ordinary tokens; use `AddArkAgentApi` for tokens addressed to this client | Setting `ValidateAudience = false` |
+| The secret is not sent: "is plain http" / "identifies itself as" | `Authority` is http on a host that is not loopback, or is not the provider's issuer | The message names both values | Use https and exactly the issuer, `{BaseUrl}/{TenantId}` | `RequireHttpsMetadata=false` outside local development |
 
 ## Sign-out
 

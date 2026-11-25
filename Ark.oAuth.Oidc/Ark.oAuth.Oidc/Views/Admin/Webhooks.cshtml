@@ -13,6 +13,7 @@
 *@
 @{
     Layout = null;
+    Ark.oAuth.Oidc.Controllers.AdminController.ConsolePolicy(Context.Response);
     var tenant = ViewBag.Tenant as Ark.oAuth.ArkTenant;
     var title = tenant?.display ?? tenant?.name ?? (ViewBag.TenantId as string);
 }

@@ -9,6 +9,8 @@ server once the keys are loaded.
     curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3001/api/me
 """
 
+import os
+
 from flask import Flask, g, jsonify
 
 from ark_oauth_client.flask import add_ark_oidc_api
@@ -22,8 +24,9 @@ bearer = add_ark_oidc_api(
     "/api",
     authority=AUTHORITY,
     client_id=CLIENT_ID,
-    # The `aud` this API expects. Omit to skip the audience check.
-    audience=CLIENT_ID,
+    # The `aud` expected is the one the provider publishes for this tenant's access tokens, which is
+    # never a client id. Set it only when the tenant issues another one for this API.
+    audience=os.environ.get("ARK_API_AUDIENCE"),
     require_https=REQUIRE_HTTPS,
 )
 

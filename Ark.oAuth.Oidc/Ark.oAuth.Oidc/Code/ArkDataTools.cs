@@ -277,18 +277,23 @@ namespace Ark.oAuth.Oidc
         static readonly string[] SettingSections = { "ark_oauth_server", "ark_oauth_client", "ConnectionStrings" };
         const string Redacted = "<<redacted>>";
         /// <summary>
-        /// Setting names that hold a secret, matched on how the name ends — "UserPasswordMode" and
-        /// "RequireRegistrationAccessToken" are switches, not secrets. A value that is a plain
-        /// true/false or number is never treated as one either (see <see cref="IsSecret"/>).
+        /// Setting names that hold a secret, matched on how the name ends, so that
+        /// "UserPasswordMode" is not one. Whatever the value looks like: a password made of digits
+        /// was taken for a number and written into the export meant to leave secrets out.
         /// </summary>
         static readonly Regex SecretKey = new(@"(password|passwd|secret|token|apikey|api_key|privatekey|private_key|pw|connectionstring)$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+        /// <summary>The switches whose names end like a secret's.</summary>
+        static readonly HashSet<string> Switches = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "RequireRegistrationAccessToken", "AllowClientSecret", "RequireToken", "AllowConfidentialClientsAtV1Token"
+        };
+
         static bool IsSecret(string key, string? value, bool allSecret) =>
             !string.IsNullOrEmpty(value)
-            && !bool.TryParse(value, out _)
-            && !double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _)
-            && (allSecret || SecretKey.IsMatch(key));
+            && (allSecret || SecretKey.IsMatch(key))
+            && !(Switches.Contains(key) && bool.TryParse(value, out _));
 
         const int KdfIterations = 210_000;
         static readonly byte[] AssociatedData = Encoding.UTF8.GetBytes($"{Format}/{FormatVersion}");
@@ -1060,6 +1065,11 @@ namespace Ark.oAuth.Oidc
                         Exclude("invalid_login_id", $"'{vu.email}' is neither an email address nor a 2-64 character username of letters, digits, dot, dash or underscore.");
                         continue;
                     }
+                    if (entity is ArkClaim vl && ArkText.ClaimKeyProblem(vl.key) is { } unsafeKey)
+                    {
+                        Exclude("unsafe_claim", unsafeKey);
+                        continue;
+                    }
                     if (entity is ArkClient vc)
                     {
                         var unsafeUri = vc.redirect_uris.Concat(vc.post_logout_redirect_uris)
@@ -1207,7 +1217,7 @@ namespace Ark.oAuth.Oidc
                         .Where(k => !string.IsNullOrWhiteSpace(k))
                         .Select(k => k.Trim())
                         .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .Where(k => !claims.Contains(L(k)))
+                        .Where(k => !claims.Contains(L(k)) && ArkText.ClaimKeyProblem(k) == null)
                         .OrderBy(k => k, StringComparer.Ordinal)
                         .ToList();
                     foreach (var key in needed)

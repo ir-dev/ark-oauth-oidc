@@ -31,11 +31,27 @@ export class StubIdp {
     this.sessions = new Map();
     this.requests = [];
     this.grants = [];
+    this.revoked = [];
     this.user = { sub: 'alice@example.com', name: 'Alice Example', email: 'alice@example.com', email_verified: true };
     this.arkClaims = ['billing.admin', 'reports.read'];
     /** Every authorization request's parameters, in order — where a test reads `prompt`. */
     this.authorizeRequests = [];
     this.requirePar = false;
+    /**
+     * What an ordinary access token is addressed to: the tenant's audience, whichever client it was
+     * issued to. Published in the metadata, as the server does; turn that off for an older one.
+     */
+    this.audience = `${tenant}_api`;
+    this.publishAudience = true;
+    /**
+     * A client registered with refresh_token_rotation off: a refresh answers with no refresh token,
+     * and the one presented stays good.
+     */
+    this.rotateRefreshTokens = true;
+    /** Runs between a refresh being accepted and its answer being sent. */
+    this.onRefresh = null;
+    /** A provider that answers a refresh about another user. No real one does. */
+    this.refreshSubject = null;
     /**
      * A2A: target client_id -> { caller client_id: { claims, delegateUsers } }. Empty, as on a real
      * server until an operator lists a caller, so every agent-to-agent request is refused.
@@ -148,7 +164,7 @@ export class StubIdp {
     return signJwt(
       {
         iss: this.issuer,
-        aud: `${this.tenant}_api`,
+        aud: this.audience,
         sub: subject,
         client_id: clientId,
         jti: randomUUID(),
@@ -216,7 +232,7 @@ export class StubIdp {
     }
     const actor = auth.clientId;
     const addressed = subject.aud === actor;
-    const issued = subject.client_id === actor && subject.aud === `${this.tenant}_api`;
+    const issued = subject.client_id === actor && subject.aud === this.audience;
     if (!addressed && !issued) return this.#fail(res, 400, 'invalid_grant', 'subject_token was neither issued to this client nor addressed to it.');
     if (!subject.act && subject.sub === subject.client_id) return this.#fail(res, 400, 'invalid_grant', 'subject_token carries no user: it is a client\'s own token.');
     if (subject.sid && !this.sessions.has(subject.sid)) return this.#fail(res, 400, 'invalid_grant', 'the session behind subject_token has ended.');
@@ -274,7 +290,7 @@ export class StubIdp {
     const body = { access_token: accessToken, token_type: 'Bearer', expires_in: 3600 };
     if (scopes.length) body.scope = scopes.join(' ');
 
-    if (scopes.includes('offline_access')) {
+    if (scopes.includes('offline_access') && (this.rotateRefreshTokens || !familyId)) {
       const refreshToken = base64UrlEncode(randomUUID() + randomUUID());
       const family = familyId ?? randomUUID();
       this.refreshTokens.set(refreshToken, { clientId, subject, scopes, sessionId, family, used: false });
@@ -319,6 +335,7 @@ export class StubIdp {
         token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'private_key_jwt', 'none'],
         code_challenge_methods_supported: ['S256'],
         authorization_response_iss_parameter_supported: true,
+        ...(this.publishAudience ? { ark_access_token_audience: this.audience } : {}),
         require_pushed_authorization_requests: this.requirePar
       });
     }
@@ -427,8 +444,9 @@ export class StubIdp {
           if (widened.length) return this.#fail(res, 400, 'invalid_scope', `scope cannot be widened on refresh: ${widened.join(', ')}.`);
           scopes = wanted;
         }
-        entry.used = true;
-        return this.#issue(res, { ...entry, scopes, familyId: entry.family });
+        entry.used = this.rotateRefreshTokens;
+        await this.onRefresh?.();
+        return this.#issue(res, { ...entry, subject: this.refreshSubject ?? entry.subject, scopes, familyId: entry.family });
       }
 
       if (grant === 'client_credentials') {
@@ -436,7 +454,7 @@ export class StubIdp {
         const scopes = (form.scope ?? '').split(' ').filter((s) => s && s !== 'openid' && s !== 'offline_access');
         // A2A: an audience other than the tenant's own asks for a token addressed to one agent.
         const audience = form.audience ?? form.resource;
-        if (audience && audience !== `${this.tenant}_api`) {
+        if (audience && audience !== this.audience) {
           const entry = this.#agentEntry(audience, auth.clientId, false);
           if (entry.failure) return this.#fail(res, 400, 'invalid_target', entry.failure);
           return this.#agentToken(res, { clientId: auth.clientId, subject: auth.clientId, audience, scopes, arkClaims: entry.claims });
@@ -528,6 +546,7 @@ export class StubIdp {
       }
       const entry = this.refreshTokens.get(form.token);
       if (entry) for (const token of this.families.get(entry.family) ?? []) this.refreshTokens.delete(token);
+      this.revoked.push(form.token);
       res.writeHead(200, { 'Cache-Control': 'no-store' });
       return res.end();
     }

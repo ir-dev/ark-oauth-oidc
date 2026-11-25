@@ -47,6 +47,10 @@ else if (!Model.SupportsClientCredentials)
 
 <h2>Configuration</h2>
 <div class="card">
+    <p style="margin-top:0">
+        This page acts with the client's own authority, so outside local development it asks for the
+        <code>sample.operator</code> role (<code>sample:OperatorRole</code>).
+    </p>
     <div class="kv">
         <div>client_id</div><div><code>@Model.ClientId</code></div>
         <div>client_secret</div>
@@ -167,7 +171,7 @@ else if (!Model.SupportsClientCredentials)
                 }
             </div>
         }
-        <pre>@result.RawResponse</pre>
+        <pre>@Redact.Tokens(result.RawResponse)</pre>
     </div>
 
     @if (result.Succeeded && result.AccessTokenPayload != null)

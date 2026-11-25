@@ -115,7 +115,8 @@ public class ThingsController(IHttpClientFactory factory) : Controller
 ## Recipe 4 — Protect an API (resource server)
 
 > **PROMPT:** "Protect a Web API with bearer JWTs from the Ark provider. Take signing keys from the
-> provider's JWKS, not a configured key. Validate audience only if one is configured."
+> provider's JWKS, not a configured key. Leave `Audience` out, so that the tenant's published one is
+> expected."
 
 ```csharp
 using Ark.oAuth;
@@ -131,8 +132,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 ```
 
-- **Config:** `Authority` (issuer) required; `Audience` optional — audience is validated **only** if set.
-- **Expected:** requests with a valid `at+jwt` access token authenticate; `ark_claims` map to roles.
+- **Config:** `Authority` (issuer) required; `Audience` optional — left out, the audience expected is the
+  one the provider publishes for the tenant's access tokens, so a token meant for one agent or MCP
+  endpoint is refused.
+- **Expected:** requests with a valid `at+jwt` access token authenticate; authorise on its claims, e.g.
+  `RequireClaim("ark_claims", "reports.read")`.
 - **Mistake:** setting a static signing key — `AddArkOidcApi` uses the JWKS and rotates automatically.
 
 ---

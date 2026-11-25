@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Ark.Agents.TenantOnboarding.Sample": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "https://localhost:7310;http://localhost:5310",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

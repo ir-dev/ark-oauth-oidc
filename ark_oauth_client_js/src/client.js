@@ -489,14 +489,7 @@ export class ArkBrowserClient {
     });
 
     if (!allowed) {
-      // No token is stored for an account that cannot use the app. The refused identity is kept
-      // briefly, tab-local, so the dead end can say whose session it is and offer the way out.
-      const denial = describeDenial(ArkAccessDeniedReasons.NO_APP_ACCESS, tokens.claims, arkClaims, returnTo);
-      this.#setDenial({ ...denial, idTokenHint: tokens.idToken, createdAt: now() });
-      this.#setTokens(null);
-      if (tokens.refreshToken) this.#revokeQuietly(tokens.refreshToken);
-      this.#publish({ error: null });
-      this.#emit('accessDenied', this.#store.get().denial);
+      this.#refuse(tokens, arkClaims, returnTo);
       return { returnTo: this.#config.accountSwitch.accessDeniedPath ?? returnTo, user: tokens.claims, denied: true };
     }
 
@@ -507,6 +500,22 @@ export class ArkBrowserClient {
     this.#emit('signedIn', { user: tokens.claims, returnTo });
     this.#broadcast('signed-in');
     return { returnTo, user: tokens.claims, denied: false };
+  }
+
+  /**
+   * No token is kept for an account that cannot use the app. The refused identity is kept briefly,
+   * tab-local, so the dead end can say whose session it is and offer the way out.
+   */
+  #refuse(tokens, arkClaims, returnTo) {
+    const denial = describeDenial(ArkAccessDeniedReasons.NO_APP_ACCESS, tokens.claims, arkClaims, returnTo);
+    clearTimeout(this.#timer);
+    this.#timer = null;
+    this.#setDenial({ ...denial, idTokenHint: tokens.idToken, createdAt: now() });
+    this.#setTokens(null);
+    if (tokens.refreshToken) this.#revokeQuietly(tokens.refreshToken);
+    if (this.#destroyed) return;
+    this.#publish({ error: null });
+    this.#emit('accessDenied', this.#store.get().denial);
   }
 
   // =================================================================
@@ -596,6 +605,7 @@ export class ArkBrowserClient {
       }
 
       let tokens;
+      let allowed;
       try {
         const metadata = await this.metadata();
         const response = await this.#tokenRequest(metadata.token_endpoint, {
@@ -611,9 +621,25 @@ export class ArkBrowserClient {
           this.#setTokens(current);
         }
         tokens = await this.#toTokenSet(response, { nonce: null, subject: current.claims?.sub ?? null, previous: current });
+        // Asked again with the claims just issued. Asked only at the callback, an account that lost
+        // its access kept the session it already had for as long as it could be refreshed. A rule
+        // that throws has not said yes: the new access token is not taken up, and it is asked again.
+        allowed = await evaluateAccess(this.#config.accountSwitch, this.#config.onEvaluateAccess, {
+          claims: tokens.claims ?? {},
+          arkClaims: tokens.arkClaims(),
+          tokens
+        });
       } catch (error) {
         this.#onRefreshFailure(error);
         throw error;
+      }
+
+      if (!allowed) {
+        const { location } = this.#requireWindow();
+        const here = this.#classify(location.href) ? '/' : `${location.pathname}${location.search}${location.hash}`;
+        this.#refuse(tokens, tokens.arkClaims(), localOrDefault(here, '/'));
+        if (this.#sharedStorage()) this.#broadcast('signed-out');
+        throw new ArkLoginRequiredError('this account no longer has access to this app.');
       }
 
       // Stored even by a client destroyed mid-request: the server has already rotated, so the old

@@ -110,8 +110,8 @@ export const ArkChallengeProperties = Object.freeze({
 });
 
 /**
- * The entitlement decision, made once per sign-in at the callback: not "may this user open that
- * view" but "may this user use this app at all". Refusing there means no token is ever stored.
+ * The entitlement decision, made at the callback and again with each refresh: not "may this user open
+ * that view" but "may this user use this app at all". Refusing there means no token is ever stored.
  *
  * `onEvaluateAccess` replaces the configured rule rather than being ANDed with it; a handler that
  * wants both reads `allowedByConfiguration` and says so.

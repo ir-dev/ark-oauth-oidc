@@ -67,6 +67,13 @@ class StubIdp:
         self.ark_claims: List[str] = ["billing.admin", "reports.read"]
         #: Shortened by tests that need to drive the silent-refresh path.
         self.access_token_lifetime = 3600
+        #: What an ordinary access token is addressed to: the tenant's audience, whichever client it
+        #: was issued to. Published in the metadata, as the server does; turn that off for an older one.
+        self.audience = f"{tenant}_api"
+        self.publish_audience = True
+        #: A client registered with refresh_token_rotation off: a refresh answers with no refresh
+        #: token, and the one presented stays good.
+        self.rotate_refresh_tokens = True
         #: A2A: target client_id -> {caller client_id: {"claims": [...], "delegate_users": bool}}.
         #: Empty, as on a real server until an operator lists a caller, so every request is refused.
         self.agents: Dict[str, Dict[str, Dict[str, Any]]] = {}
@@ -249,6 +256,7 @@ class StubIdp:
             "id_token_signing_alg_values_supported": ["RS256"],
             "claims_supported": ["sub", "name", "email", "ark_claims"],
             "authorization_response_iss_parameter_supported": True,
+            **({"ark_access_token_audience": self.audience} if self.publish_audience else {}),
         }
 
     # -- endpoints -----------------------------------------------------
@@ -314,17 +322,17 @@ class StubIdp:
                         if self.refresh_tokens[token]["family"] == family:
                             del self.refresh_tokens[token]
                 raise _OAuthFailure("invalid_grant", "the refresh token is unknown or retired", 400)
-            del self.refresh_tokens[presented]
-            self.families[presented] = record["family"]
-            return self._json(
-                handler,
-                200,
-                self._issue(client_id, record["scope"], family=record["family"]),
-            )
+            if self.rotate_refresh_tokens:
+                del self.refresh_tokens[presented]
+                self.families[presented] = record["family"]
+            response = self._issue(client_id, record["scope"], family=record["family"])
+            if not self.rotate_refresh_tokens:
+                self.refresh_tokens.pop(response.pop("refresh_token", ""), None)
+            return self._json(handler, 200, response)
 
         if grant == "client_credentials":
             audience = form.get("audience") or form.get("resource")
-            if audience:
+            if audience and audience != self.audience:
                 entry = self._agent_entry(audience, client_id, for_user=False)
                 return self._json(
                     handler,
@@ -334,7 +342,9 @@ class StubIdp:
                     ),
                 )
             return self._json(
-                handler, 200, self._issue(client_id, form.get("scope", ""), with_id_token=False)
+                handler,
+                200,
+                self._issue(client_id, form.get("scope", ""), with_id_token=False, as_itself=True),
             )
 
         if grant == "urn:ietf:params:oauth:grant-type:token-exchange":
@@ -378,10 +388,10 @@ class StubIdp:
         except Exception:
             raise _OAuthFailure("invalid_grant", "subject_token is not a live access token", 400)
 
-        # Addressed to the actor, or issued to it in the first place. (This stub puts the
-        # client_id in aud on every token, so both read the same claim pair.)
+        # Addressed to the actor, or issued to it in the first place: an ordinary token, whose
+        # audience is the tenant's.
         addressed = subject.get("aud") == actor
-        issued = subject.get("client_id") == actor and "act" not in subject
+        issued = subject.get("client_id") == actor and subject.get("aud") == self.audience
         if not addressed and not issued:
             raise _OAuthFailure(
                 "invalid_grant", "subject_token was neither issued to this client nor addressed to it.", 400
@@ -536,25 +546,29 @@ class StubIdp:
         code: Optional[str] = None,
         with_id_token: bool = True,
         family: Optional[str] = None,
+        as_itself: bool = False,
     ) -> Dict[str, Any]:
         now = int(time.time())
         key = self.active_key
         scopes = [s for s in scope.split(" ") if s]
 
         lifetime = self.access_token_lifetime
+        payload: Dict[str, Any] = {
+            "iss": self.issuer,
+            "sub": client_id if as_itself else self.user["sub"],
+            "aud": self.audience,
+            "client_id": client_id,
+            "scope": scope,
+            "iat": now,
+            "nbf": now,
+            "exp": now + lifetime,
+            "jti": uuid.uuid4().hex,
+        }
+        # A client acting as itself holds no access mapping, so it carries no ark_claims.
+        if self.ark_claims and not as_itself:
+            payload["ark_claims"] = list(self.ark_claims)
         access_token = sign_jwt(
-            {
-                "iss": self.issuer,
-                "sub": self.user["sub"],
-                "aud": client_id,
-                "client_id": client_id,
-                "scope": scope,
-                "ark_claims": list(self.ark_claims),
-                "iat": now,
-                "nbf": now,
-                "exp": now + lifetime,
-                "jti": uuid.uuid4().hex,
-            },
+            payload,
             key=key["private_key"],
             kid=key["kid"],
             typ="at+jwt",

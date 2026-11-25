@@ -50,9 +50,35 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<DevelopmentDependency>false</DevelopmentDependency>
 		<PackageReleaseNotes>
-Next release — no change to this package. The provider, Ark.oAuth.Oidc, is itself an MCP server in this
-release, with which an agent sets it up and administers it. Nothing a client sees changes, and the two
-can be upgraded in either order.
+Next release — security fixes. No API is removed or renamed and nothing has to be configured, but some
+requests that used to pass are now refused:
+
+* **An API that was given no Audience now checks one.** AddArkOidcApi expects the audience the provider
+  publishes for the tenant's access tokens (ark_access_token_audience, published from this release of
+  Ark.oAuth.Oidc). A token addressed to one agent (A2A) or one MCP endpoint used to be accepted by every
+  such API. Against an older provider the audience is still not checked, but a token carrying `act` is
+  refused. ark_oauth_client:Audience works as before. JwtBearerOptions.Audience set afterwards now
+  decides (it had no effect without it), and so does TokenValidationParameters.ValidateAudience = false.
+* **Roles follow the token.** ark_claims are read again each time the session's tokens are refreshed, so
+  a claim taken away stops being a role then. It used to last as long as the session.
+* **The access check runs again with each refresh.** With AccountSwitch:RequireArkClaims or
+  OnEvaluateAccess, an account that has lost its access is signed out; a handler that throws there signs
+  out too. OnEvaluateAccess is therefore called more often than once per sign-in.
+* **One refresh per refresh token.** Requests that arrive together near expiry share one, where all but
+  the first used to sign the user out and revoke the family. Signing out drops what it produced.
+* **The flows beside the sign-in make its checks.** ArkClientCredentials, ArkRegistration and
+  ArkAgentTokens need https unless the authority is loopback or RequireHttpsMetadata is off, and an
+  issuer that is the authority (compared without case). An Authority that only reaches the provider, and
+  is not its issuer, still signs in but is refused here. The client's HttpClient follows no redirects.
+* **WithArkMaxAge is enforced.** A sign-in whose ID token says the user authenticated longer ago fails at
+  the callback (AuthErrorPath), as it does in the Node and Python clients.
+* **GetArkAgentTokenAsync uses the session first.** A request authenticated by its cookie acts for that
+  user whatever Authorization header came with it; one a bearer token authenticated, for the bearer.
+* AddArkAgentApi requires typ at+jwt whatever RequireAccessTokenTypeHeader says: the client's own ID
+  tokens carry the same audience. Request.ArkUser() reads no cookie outside UseLegacyFlow.
+
+The provider, Ark.oAuth.Oidc, is itself an MCP server in this release, with which an agent sets it up and
+administers it. The client and the provider can be upgraded in either order.
 
 2.4.2 — agent-to-agent (A2A). Additive; nothing existing changes.
 

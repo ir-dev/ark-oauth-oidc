@@ -133,8 +133,8 @@ STEPS
       logos, public URL, tenant, database (with a connection test), RSA signing key, administrator,
       SMTP, protocol options, CORS origins and the machine-client secret. It then writes
       ark-idp-data/settings.json (mode 0600, git-ignores itself), seeds the database and reloads
-      configuration. The same process becomes the IdP with no restart. From localhost no code is
-      needed; from another machine it asks for the setup code printed in the startup log.
+      configuration. The same process becomes the IdP with no restart. In Development, from
+      localhost, no code is needed; otherwise it asks for the setup code printed in the startup log.
       For containers: set ark_oauth_server__Setup__DataPath to a mounted volume BEFORE the first
       start, or a restart loses settings.json and the wizard comes back (App Service: under /home,
       with WEBSITES_ENABLE_APP_SERVICE_STORAGE=true and ASPNETCORE_FORWARDEDHEADERS_ENABLED=true).

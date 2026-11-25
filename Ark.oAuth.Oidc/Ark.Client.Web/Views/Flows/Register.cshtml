@@ -814,7 +814,7 @@ else if (!Model.SupportsDynamicRegistration)
         <div class="note">
             Identity claims (<code>name</code>, <code>email</code>, …) shape the ID token; any other
             claim is an authorization claim, delivered as <code>ark_claims</code> in the access token.
-            Changes take effect at the next sign-in.
+            Changes take effect at the next sign-in, or when the access token is next refreshed.
         </div>
     }
 </div>

@@ -1,0 +1,14 @@
+@{
+    ViewData["Title"] = "Sign out";
+}
+
+<div class="ark-hero">
+    <h1>Sign out?</h1>
+    <p>This was asked for by a page on another site. Signing out ends your session here and at the
+       identity provider, so the other applications you are signed in to may ask for your password again.</p>
+
+    <form asp-action="SignOutAll" method="post">
+        <button class="ark-btn" type="submit">Sign out</button>
+        <a class="ark-btn" href="/">Stay signed in</a>
+    </form>
+</div>

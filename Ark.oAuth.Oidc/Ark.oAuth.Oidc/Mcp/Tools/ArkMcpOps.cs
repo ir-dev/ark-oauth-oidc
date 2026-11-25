@@ -464,6 +464,11 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
             var login = username.ToLowerInvariant().Trim();
             call.Touches("user", login);
             credential ??= "activation_link";
+            // An account is good at every application of the tenant it is later given access to, so one
+            // application does not choose the password of somebody it adds.
+            if (call.Endpoint.Level == ArkMcpLevel.Client && !call.Caller.TenantAdmin && credential is "password" or "default_password")
+                throw new ArkMcpToolException("link_only",
+                    "an application adds people with activation_link or email, so that each sets their own password. An administrator of the tenant may choose one.");
             if (!DataAccess.IsValidLoginId(login))
                 throw new ArkMcpToolException("invalid_username", "use an email address, or 2-64 characters of letters, digits, dot, dash or underscore.");
             if (await FindUserAsync(call, login) is { } existing)
@@ -550,10 +555,11 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                 case "password":
                     var password = call.Args.Text("password") ?? "";
                     if (password.Length < 10) throw new ArkMcpToolException("weak_password", "a password needs at least 10 characters.");
-                    await call.Da.SetUserPassword(user.email, password);
+                    // Sessions are ended below, where they are counted and end_sessions is asked.
+                    await call.Da.SetUserPassword(user.email, password, endAccess: false);
                     break;
                 case "email":
-                    var saved = await call.Da.UserResetPw(new ArkUser { email = user.email });
+                    var saved = await call.Da.UserResetPw(new ArkUser { email = user.email }, endAccess: false);
                     if (saved.emailed != true) throw new ArkMcpToolException("email_not_sent", "the email could not be sent; the reason is in the audit trail. Use activation_link instead.");
                     break;
                 default:
@@ -594,8 +600,9 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
         // ---------------------------------------------------------------- access
 
         /// <summary>
-        /// Claims a caller may put on an access mapping. The <c>ark.</c> names make administrators,
-        /// so each may be handed out only by somebody at that level or above.
+        /// Claims a caller may put on an access mapping. The <c>ark.</c> names make administrators and
+        /// <c>service_role</c> registers applications in the tenant, so each may be handed out only by
+        /// somebody at that level or above.
         /// </summary>
         public static void CheckClaims(ArkMcpCall call, IEnumerable<string> claims)
         {
@@ -603,15 +610,17 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
             {
                 if (claim.Length > 200 || claim.Any(char.IsControl))
                     throw new ArkMcpToolException("invalid_claim", "a claim has at most 200 characters and no control characters.");
+                // Here as well as at the save, so that no account is made for a claim that is refused after it.
+                if (ArkText.ClaimKeyProblem(claim) is { } problem) throw new ArkMcpToolException("invalid_claim", problem);
                 if (!ArkMcpClaims.IsReserved(claim)) continue;
                 var allowed = claim.ToLowerInvariant() switch
                 {
                     ArkMcpClaims.HostAdmin => call.Caller.Operator,
-                    ArkMcpClaims.TenantAdmin or ArkMcpClaims.ClientAdmin => call.Caller.TenantAdmin,
+                    ArkMcpClaims.TenantAdmin or ArkMcpClaims.ClientAdmin or ArkMcpClaims.ServiceRole => call.Caller.TenantAdmin,
                     _ => call.Caller.Operator
                 };
                 if (!allowed)
-                    throw new ArkMcpToolException("reserved_claim", $"'{claim}' makes somebody an administrator, and you may not hand it out from here.");
+                    throw new ArkMcpToolException("reserved_claim", $"'{claim}' is an administrator's authority, and you may not hand it out from here.");
             }
             // The console reads these two on its own mapping as "is the operator".
             if (!call.Caller.Operator && call.Endpoint.IsOperatorTenant && claims.Any(c => c is "admin" or "ark_admin"))
@@ -627,11 +636,52 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
             return rows.Select(r => (clients.FirstOrDefault(c => c.id == r.client_id)!, r)).Where(x => x.Item1 != null).ToList();
         }
 
+        /// <summary>Who can set the password of an account: a tenant, or the operator.</summary>
+        public static string ManagedBy(ArkUser user) => string.IsNullOrWhiteSpace(user.home_tenant_id) ? "operator" : user.home_tenant_id!;
+
+        /// <summary>
+        /// Access is given to a person, and held by whoever can sign in as them. A username exists once
+        /// per server and the first to ask for it gets it, so an administrator of one tenant could make
+        /// the account of somebody expected at another, know its password, and receive whatever that
+        /// tenant, or the operator, later gave the name. So an account another tenant manages is never
+        /// made an administrator, is given anything else only by somebody who has been told whose it is,
+        /// and one that was there already (not <paramref name="made"/> by this very call) becomes an
+        /// administrator only on a second, explicit word.
+        /// </summary>
+        static void CheckOwner(ArkMcpCall call, ArkUser user, ArkClient client, ArkUserClientClaim? existing, IReadOnlyCollection<string> claims, bool made, string? confirm)
+        {
+            var atOperator = Same(client.tenant_id, call.Endpoint.OperatorTenantId);
+            var home = Same(user.home_tenant_id, call.Endpoint.OperatorTenantId) ? null : Blank(user.home_tenant_id);
+            var elsewhere = home != null && !Same(home, client.tenant_id);
+            // What is new to them: repeating what they hold hands out nothing.
+            var authority = claims.Where(c => ArkMcpClaims.IsReserved(c) || (atOperator && c is "admin" or "ark_admin"))
+                .Where(c => existing?.claims.Contains(c, StringComparer.OrdinalIgnoreCase) != true).ToList();
+
+            if (home != null && authority.FirstOrDefault(c => elsewhere || c.Equals(ArkMcpClaims.HostAdmin, StringComparison.OrdinalIgnoreCase)) is { } refused)
+                throw new ArkMcpToolException("not_your_account",
+                    $"'{refused}' is not given to '{user.email}': the account is managed by tenant '{home}', whose administrators can set its password and would hold it too. " +
+                    "The operator can take the account over with user_set_home.", new { username = user.email, managed_by = home });
+
+            void Confirm(string expected, string why)
+            {
+                if (!string.Equals(confirm, expected, StringComparison.OrdinalIgnoreCase))
+                    throw new ArkMcpToolException("confirmation_required", $"{why} To go ahead, call again with confirm set to \"{expected}\".",
+                        new { confirm = expected, managed_by = ManagedBy(user) });
+            }
+            if (elsewhere)
+                Confirm(home!, $"'{user.email}' is managed by tenant '{home}': whoever administers that tenant can set its password, and so can use any access given here.");
+            else if (authority.Count > 0 && !made)
+                Confirm(user.email, $"'{user.email}' already has an account, and whoever knows its password becomes an administrator here. " +
+                                    "Make sure it is the person's own; when in doubt, reset it first with user_reset_password.");
+        }
+
         /// <summary>Gives somebody access to an application, or changes what they may do there.</summary>
-        public static async Task<(bool Created, List<string> Claims)> GrantAsync(ArkMcpCall call, ArkUser user, ArkClient client, List<string> claims, bool replace)
+        public static async Task<(bool Created, List<string> Claims)> GrantAsync(ArkMcpCall call, ArkUser user, ArkClient client, List<string> claims, bool replace,
+            bool made = false, string? confirm = null)
         {
             CheckClaims(call, claims);
             var existing = await ArkLookup.MappingAsync(call.Db, user.email, client.tenant_id, client.id);
+            CheckOwner(call, user, client, existing, claims, made, confirm);
             var kept = replace ? Enumerable.Empty<string>() : existing?.claims ?? new List<string>();
             // Administrator claims the caller could not have given stay as they are when the rest
             // is replaced: taking one away is as much a decision as giving it.
@@ -806,6 +856,20 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
             .Int("limit", $"How many to return (default 50, at most {max}).", min: 1, max: max)
             .Text("cursor", "next_cursor of the previous answer, for the rest.", maxLength: 500);
 
+        /// <summary>
+        /// Lines whose reference is something other than a tenant: a client, an account, a scope, or the
+        /// word for where the change was made (<c>mcp</c>, <c>v1/user/upsert</c>). A tenant that happens to
+        /// have that name is not who they are about.
+        /// </summary>
+        static readonly List<string> NotByTenant = new()
+        {
+            "client_upsert", "client_activation", "client_secret_reset", "client_delete",
+            "user_upsert", "user_activation", "user_unlock", "user_password_set", "user_cl_cl_upsert", "user_cl_cl_delete",
+            "scope_upsert", "scope_delete", "claim_upsert", "claim_delete",
+            "migration", "migration_rollback", "schema_update", "schema_sync", "schema_index", "schema_index_skipped", "schema_baseline",
+            "data_import", "data_export"
+        };
+
         public static async Task<object> AuditAsync(ArkMcpCall call)
         {
             var limit = call.Args.Int("limit") ?? 50;
@@ -818,11 +882,18 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                 // carry stack traces, and other tenants' details.
                 var tenant = call.Tenant.tenant_id;
                 var prefix = tenant + "/";
-                query = query.Where(a => a.log_type != "error" && (a.ref_val == tenant || a.ref_val.StartsWith(prefix)));
+                query = query.Where(a => a.log_type != "error" && !NotByTenant.Contains(a.ref_key) && (a.ref_val == tenant || a.ref_val.StartsWith(prefix)));
+                // What the host level was called in the trail until it was renamed, and what a tenant
+                // of this name still is. Nothing tells the two apart, so neither is shown.
+                if (Same(tenant, "host")) query = query.Where(a => a.ref_val != "host/mcp");
                 if (call.Endpoint.Level == ArkMcpLevel.Client)
                 {
+                    // A line names its client first, or last after the person: the whole name, or
+                    // an application would read the lines of every other that begins like it.
                     var mine = $"client: {call.Client.client_id}";
-                    query = query.Where(a => a.details.Contains(mine));
+                    var first = mine + ", ";
+                    var last = ", " + mine;
+                    query = query.Where(a => a.details == mine || a.details.StartsWith(first) || a.details.EndsWith(last));
                 }
             }
             if (call.Args.Text("event") is { } key) query = query.Where(a => a.ref_key == key);

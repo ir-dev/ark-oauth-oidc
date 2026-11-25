@@ -52,7 +52,7 @@ namespace Ark.oAuth.Oidc.Controllers
         {
             var tenant = await _da.GetTenant(tenant_id);
             if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
-            BuildConsoleView(tenant, "console");
+            await BuildConsoleViewAsync(tenant, "console");
             return View();
         }
 
@@ -64,7 +64,7 @@ namespace Ark.oAuth.Oidc.Controllers
         /// user in one call, and they revoke sessions and refresh tokens. Both are worth reaching
         /// deliberately rather than scrolling past on the way to the scope catalogue.
         ///
-        /// Restricted to the operator account (see <see cref="IsOperator"/>). That is a narrowing
+        /// Restricted to the operator account (see <see cref="IsOperatorAsync"/>). That is a narrowing
         /// of the console's own model, where every signed-in user is a global operator over every
         /// tenant — the link is hidden for everybody else and the route refuses them, so this page
         /// does not become the way an ordinary console user discovers it.
@@ -74,10 +74,10 @@ namespace Ark.oAuth.Oidc.Controllers
         {
             var tenant = await _da.GetTenant(tenant_id);
             if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
-            if (!IsOperator())
+            if (!await IsOperatorAsync())
                 return StatusCode(403, "Provisioning and activation are restricted to the administrator account.");
 
-            BuildConsoleView(tenant, "provisioning");
+            await BuildConsoleViewAsync(tenant, "provisioning");
 
             // The machine-to-machine client seeded beside the console. It is what the generated
             // curl authenticates as, so the page needs its client_id and whether it can hold a
@@ -113,10 +113,10 @@ namespace Ark.oAuth.Oidc.Controllers
             var tenant = await _da.GetTenant(tenant_id);
             if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
             if (!DataToolsEnabled) return NotFound();
-            if (!IsOperator())
+            if (!await IsOperatorAsync())
                 return StatusCode(403, "Export, import and reset are restricted to the administrator account.");
 
-            BuildConsoleView(tenant, "data");
+            await BuildConsoleViewAsync(tenant, "data");
             var tools = ServerConfig.Admin?.DataTools ?? new ArkDataToolsConfig();
             ViewBag.OperatorTenant = ServerConfig.TenantId;
             ViewBag.AllowReset = tools.AllowReset;
@@ -141,10 +141,10 @@ namespace Ark.oAuth.Oidc.Controllers
             var tenant = await _da.GetTenant(tenant_id);
             if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
             if (!WebhooksEnabled) return NotFound();
-            if (!IsOperator())
+            if (!await IsOperatorAsync())
                 return StatusCode(403, "Webhooks are restricted to the administrator account.");
 
-            BuildConsoleView(tenant, "webhooks");
+            await BuildConsoleViewAsync(tenant, "webhooks");
             ViewBag.WebhooksCss = AssetUrl((string)ViewBag.AppRoot, WebhooksCssAsset);
             ViewBag.WebhooksJs = AssetUrl((string)ViewBag.AppRoot, WebhooksJsAsset);
             return View();
@@ -163,10 +163,10 @@ namespace Ark.oAuth.Oidc.Controllers
             var tenant = await _da.GetTenant(tenant_id);
             if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
             if (!McpEnabled) return NotFound();
-            if (!IsOperator())
+            if (!await IsOperatorAsync())
                 return StatusCode(403, "The list of MCP endpoints is restricted to the administrator account.");
 
-            BuildConsoleView(tenant, "mcp");
+            await BuildConsoleViewAsync(tenant, "mcp");
             return View();
         }
 
@@ -179,8 +179,9 @@ namespace Ark.oAuth.Oidc.Controllers
         /// <summary>
         /// The view data both console pages share: branding, endpoints, asset URLs and identity.
         /// </summary>
-        private void BuildConsoleView(ArkTenant tenant, string page)
+        private async Task BuildConsoleViewAsync(ArkTenant tenant, string page)
         {
+            ConsoleHeaders(Response);
             var ser = ServerConfig;
 
             var endpoints = ArkOidcEndpoints.For(Request, ser, tenant.tenant_id);
@@ -234,7 +235,7 @@ namespace Ark.oAuth.Oidc.Controllers
             // Which page is being drawn, and what the nav should offer. The provisioning link is
             // drawn only for the operator: a link that answers 403 is worse than no link.
             ViewBag.Page = page;
-            ViewBag.IsOperator = IsOperator();
+            ViewBag.IsOperator = await IsOperatorAsync();
             ViewBag.ConsoleUrl = $"{appRoot}/{tenant.tenant_id}/admin";
             ViewBag.ProvisioningUrl = $"{appRoot}/{tenant.tenant_id}/admin/provisioning";
             ViewBag.DataUrl = $"{appRoot}/{tenant.tenant_id}/admin/data";
@@ -245,8 +246,46 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.McpEnabled = McpEnabled;
         }
 
-        /// <summary>Whether the signed-in principal is the operator account — see <see cref="ArkOperator"/>.</summary>
-        private bool IsOperator() => ArkOperator.IsOperator(User, ServerConfig);
+        /// <summary>Whether the signed-in principal is the operator account, as of now — see <see cref="ArkOperator"/>.</summary>
+        private Task<bool> IsOperatorAsync() => ArkOperator.IsOperatorNowAsync(HttpContext, User, ServerConfig);
+
+        // ------------------------------------------------------------------ response headers
+
+        /// <summary>
+        /// What every console page is served with: framed by nobody but this origin, read as the
+        /// type it is, kept in no cache, and its address given away to nobody.
+        ///
+        /// SameSite keeps the console's cookie out of a frame on another site, but not on another
+        /// name under the same domain, which is where the applications usually are.
+        /// </summary>
+        internal static void ConsoleHeaders(HttpResponse response)
+        {
+            response.Headers["Content-Security-Policy"] = "frame-ancestors 'self'";
+            response.Headers["X-Content-Type-Options"] = "nosniff";
+            response.Headers["Referrer-Policy"] = "same-origin";
+            response.Headers["Cache-Control"] = "no-store";
+        }
+
+        /// <summary>
+        /// The policy the package's own console pages add: script from this server, and Tabulator
+        /// from where the page loads it, and nothing written into the page. Set by each view
+        /// rather than by the action, so a host that replaces a view with its own is not held to a
+        /// policy written for this one.
+        /// </summary>
+        public static void ConsolePolicy(HttpResponse response)
+        {
+            if (response.HasStarted) return;
+            response.Headers["Content-Security-Policy"] =
+                "default-src 'self'; " +
+                $"script-src 'self' {TabulatorSource}; " +
+                // A few style attributes in the markup; a stylesheet cannot act for the operator.
+                $"style-src 'self' 'unsafe-inline' {TabulatorSource}; " +
+                // Logos are addresses an operator or a registration gave, or images written out.
+                "img-src 'self' data: blob: https: http:; " +
+                "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'";
+        }
+
+        private const string TabulatorSource = "https://unpkg.com/tabulator-tables@5.5.2/";
 
         // ------------------------------------------------------------------ static assets
 
