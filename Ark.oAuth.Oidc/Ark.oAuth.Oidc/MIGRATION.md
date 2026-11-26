@@ -198,6 +198,10 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
     the wizard, MCP or its host level. Set a server up with **one instance** running: the conversation is in
     that process and in `agent-state.json`, not shared.
   - Console: an **MCP** page for the operator, `/{tenant}/admin/mcp`, over `GET /api/oauth/v1/mcp/endpoints`.
+  - Setup link: `ark_oauth_server:Setup:AccessKey` (16+ characters) adds `POST /ark-idp/setup/api/code` and makes
+    `/ark-idp/setup#key=<key>` open the wizard with the setup code filled in. With a key set, the setup code is
+    derived from it instead of being random, and `setup-code.txt` is rewritten to match. `GET /ark-idp/setup/api/state`
+    carries `setup_link`. A configured server, or one without the setting, behaves exactly as before.
     A host that overrides `Views/Admin/_ConsoleHeader.cshtml` has no link to it until it adds one
     (`ViewBag.McpEnabled`, `ViewBag.McpUrl`). The public documents beside an endpoint are now indented JSON.
   - No new dependency. **Upgrade action:** none.

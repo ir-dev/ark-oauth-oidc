@@ -310,6 +310,15 @@
         /// point it at a persistent volume — the settings are the server's configuration.
         /// </summary>
         public string? DataPath { get; set; }
+
+        /// <summary>
+        /// Opens the setup link, <c>{BaseUrl}/ark-idp/setup#key={AccessKey}</c>, for someone who cannot
+        /// read the server's log: the wizard trades the key for the setup code and carries on. At least
+        /// 16 characters, from the platform's settings or a secret store and never from a committed file.
+        /// With a key, the setup code is derived from it, so it is the same on every instance and after
+        /// every restart. Setup finished, the link answers 404 and the key can be removed.
+        /// </summary>
+        public string? AccessKey { get; set; }
     }
 
     /// <summary>Behaviour of the admin console shipped inside this package.</summary>

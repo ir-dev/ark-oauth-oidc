@@ -129,11 +129,12 @@ Run it and open the site. Every page leads to the **setup wizard** at `/ark-idp/
 | Review & install | one page, then **Install**. The same process is the IdP, with no restart |
 
 The wizard asks for a **setup code** printed in the start-up log, so an unconfigured server is not a
-race to the first visitor; only `dotnet run` in Development, from localhost, is spared it. In a
-container (Docker, Azure App Service) read the code from the container log, and point
-`ark_oauth_server:Setup:DataPath` at persistent storage before the first start, or the next restart
-brings the wizard back
-([details](Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md#the-setup-wizard)). Secrets go only into the database, hashed
+race to the first visitor; only `dotnet run` in Development, from localhost, is spared it. On a
+hosted server (Docker, Azure App Service, Azure Container Apps, AWS Elastic Beanstalk) read the code
+from the log or from `{DataPath}/setup-code.txt`, or set `ark_oauth_server:Setup:AccessKey` and send
+whoever sets it up the link `/ark-idp/setup#key=<key>`, which needs no log at all. Point `ark_oauth_server:Setup:DataPath` at
+persistent storage before the first start, or the next restart brings the wizard back
+([where to find the code on each host](Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md#running-the-wizard-on-a-hosted-server)). Secrets go only into the database, hashed
 where they can be, and never into the settings file. A host that already has `TenantId` and a
 connection string never sees the wizard: that is the pipeline route, [S8](#s8--stand-up-the-identity-provider).
 

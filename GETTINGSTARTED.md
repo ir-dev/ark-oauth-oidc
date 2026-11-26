@@ -15,6 +15,8 @@ Two applications are involved and they are deliberately kept apart:
 ## Contents
 
 - [1. The short version](#1-the-short-version)
+  - [On a hosted server: the setup code](#on-a-hosted-server-the-setup-code)
+  - [The configured sample pair](#the-configured-sample-pair)
 - [2. What you are actually running](#2-what-you-are-actually-running)
 - [3. Prerequisites](#3-prerequisites)
 - [4. First run](#4-first-run)
@@ -43,6 +45,64 @@ same answers in a chat and from the colleagues who have them. An AI agent of you
 part as well, over MCP: connect it to `https://localhost:7300/ark-idp/mcp`
 with the setup code from the log as its bearer token. See
 [MCP.md](Ark.oAuth.Oidc/Ark.oAuth.Oidc/MCP.md).
+
+### On a hosted server: the setup code
+
+Anywhere but your own `dotnet run` on localhost, the wizard first asks for a **setup code**. Whoever
+finishes setup becomes the administrator, so the code proves you can see the server.
+
+**Easiest: a setup link, no log needed.** Whoever deploys the server adds one setting, beside
+`DataPath` in the platform's settings page (App Service → Environment variables, Container Apps →
+Environment variables, Elastic Beanstalk → Environment properties):
+
+```
+ark_oauth_server__Setup__AccessKey = <a random value, 16+ letters and digits: openssl rand -hex 16>
+```
+
+and sends this link to whoever will set the server up. That person does not need to be technical:
+
+```
+https://<public address>/ark-idp/setup#key=<the same value>
+```
+
+The link opens the wizard with the setup code already filled in. When setup is finished the link stops
+working (404), the code file is deleted, and the log asks for the setting to be removed. Never put the
+key in a committed `appsettings.json`.
+
+**Without a key**, the code is written to the log once at start-up, and kept in
+`{DataPath}/setup-code.txt` until setup is finished:
+
+```
+warn: Ark.oAuth.Oidc.Setup[0]
+      Ark IdP is not configured yet. Open /ark-idp/setup on this server in a browser to run the setup
+      wizard. Enter the setup code N9VL-VTVB-2T5N.
+```
+
+| Host | Where to read it |
+|---|---|
+| Docker | `docker logs <container> 2>&1 \| grep "setup code"` |
+| Azure App Service, Linux (custom container or code) | `az webapp log config -g <rg> -n <app> --docker-container-logging filesystem`, then `az webapp log tail -g <rg> -n <app>`. Or Portal → **Log stream**, or Kudu → **Bash** → `cat /home/data/ark-idp/setup-code.txt` |
+| Azure App Service, Windows (code) | Not in the log: IIS discards console output. Open the site once, then Kudu → **Debug console** → `type %HOME%\data\ark-idp\setup-code.txt` |
+| Azure Container Apps | `az containerapp logs show -g <rg> -n <app> --tail 300 \| grep -i "setup code"`, or Portal → **Log stream** |
+| AWS Elastic Beanstalk (Linux) | `eb logs \| grep -i "setup code"`, or `eb ssh` → `sudo grep "setup code" /var/log/web.stdout.log` (Docker platform: `/var/log/eb-docker/containers/eb-current-app/`) |
+
+Add `--slot <slot>` to the `az webapp` commands for a deployment slot. A restart prints the line
+again if it has scrolled past.
+
+Three things to set **before the first start**, on every host:
+
+* **`ark_oauth_server__Setup__DataPath` on persistent storage**: under `/home` on App Service, an
+  Azure Files mount on Container Apps, EFS on Elastic Beanstalk. The wizard writes the server's
+  configuration there. On the container's or instance's own disk, the next restart or redeploy brings
+  the wizard back, with a new code. The file paths in the table assume `/home/data/ark-idp`.
+* **One instance** until setup is finished. Without an access key, each instance has its own code.
+* **`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`**, because these hosts end TLS in front of the app.
+  Then enter the `https://` address users will use as the wizard's public URL.
+
+Step-by-step for each host, and how to keep the wizard's result on a host with no persistent volume:
+[server README → Running the wizard on a hosted server](Ark.oAuth.Oidc/Ark.oAuth.Oidc/README.md#running-the-wizard-on-a-hosted-server).
+
+### The configured sample pair
 
 The rest of this guide runs the *configured* sample pair, the host and a client application wired
 together through appsettings, which is how the end-to-end flows are demonstrated.
@@ -481,6 +541,9 @@ for the Ark client package, the raw ASP.NET Core handler, `oidc-client-ts`, Auth
 | `/flows/spa` fails in the browser console with no server-side trace | The origin is missing from `Oidc:CorsOrigins`. |
 | Signed out locally but signing in again asks nothing | Only the cookie scheme was signed out. Sign out of both schemes to end the provider session too. |
 | A port is already in use | Something from a previous run survived. `./run.sh --check-only` tests what is there. |
+| A deployed wizard asks for a setup code | Expected everywhere but `dotnet run` on localhost. Set `ark_oauth_server__Setup__AccessKey` and open the setup link, or read the code on each host: §1, [On a hosted server](#on-a-hosted-server-the-setup-code). |
+| The setup link says it is not valid, or that the server does not accept setup links | The key in the link differs from the setting, or the setting is shorter than 16 characters (the log says so), or the platform has not restarted since it was set. |
+| The wizard comes back after a restart or redeploy, with a new code | `DataPath` is on the container's or instance's own disk: §1, [On a hosted server](#on-a-hosted-server-the-setup-code). |
 
 ---
 

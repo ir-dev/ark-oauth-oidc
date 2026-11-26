@@ -683,6 +683,32 @@ address and under a loopback name, with no forwarding header (`X-Forwarded-*`, `
 is needed and the log says so. In any other environment the code is always asked for, on the server's
 own machine too: a proxy on the same host makes every visitor look local.
 
+**The setup link: no log access needed.** Whoever deploys the server can let someone else set it up
+without reading any log. Set `ark_oauth_server:Setup:AccessKey` to a random value of at least 16
+characters, in the platform's settings or a secret store, never in a committed file. Then send them
+the link:
+
+```
+https://id.example.com/ark-idp/setup#key=<AccessKey>
+```
+
+Opening it, the wizard trades the key for the setup code, shows the code (with **Copy**, for an agent
+that connects over MCP) and carries on as if it had been typed. The key travels after the `#`, so
+it is never part of a request address and no server or proxy log records it. The wizard also
+removes it from the address bar at once.
+
+* With a key, the setup code is **derived from it** rather than random. It is the same on every
+  instance and after every restart, even without persistent storage, and `setup-code.txt` and the
+  log carry that code as before.
+* A wrong key is answered after a second, one at a time for the whole server, and past 20 waiting
+  the rest get `429`. The right key is never slowed. Each code handed out is logged with the
+  caller's address.
+* Once setup is finished the link answers `404`, `setup-code.txt` is deleted, and the log asks for
+  the key to be removed. A key shorter than 16 characters is ignored, with an error in the log, and
+  the setup code still works.
+* Use letters and digits, so the link survives being pasted anywhere: `openssl rand -hex 16`, or
+  `[guid]::NewGuid().ToString("N")` in PowerShell.
+
 Every wizard call is a JSON POST with a custom header, which a browser will not send cross-site.
 Once setup is done, `/ark-idp/setup` is gone (404) and the setup code is deleted. It does not come
 back while the process runs: settings that go missing, or a `settings.json` that cannot be read, are
@@ -701,25 +727,61 @@ treats as the operator.
 | `Enabled` | `true` | `false` removes the wizard; an unconfigured server then fails naming the missing setting |
 | `RequireToken` | `false` | ask for the setup code in Development on localhost too; everywhere else it always is |
 | `DataPath` | `ark-idp-data` | in a container, a mounted volume, e.g. `ark_oauth_server__Setup__DataPath=/home/data/ark-idp`. The .NET 8+ images run as a non-root user that cannot write to `/app` |
+| `AccessKey` | — | opens the setup link `/ark-idp/setup#key=…` for someone without log access; at least 16 characters; the setup code is then derived from it. Platform settings or a secret store only |
 
-**Containers.** The wizard's directory is the server's configuration, so it has to outlive the
-container: mount a volume and point `DataPath` at it **before** running the wizard, or configure
-through the environment and never run the wizard at all. A container's own filesystem is replaced
-on every restart and redeploy, `settings.json` with it, and the wizard comes back.
+### Running the wizard on a hosted server
 
-A container runs in Production unless it is told otherwise, so the wizard **always** asks for the
-setup code. Read it from the container's log (`docker logs <container> 2>&1 | grep "setup code"`), or from
-`{DataPath}/setup-code.txt` until setup is finished. The log line is written once, at start-up, and
-a restart prints it again. With `DataPath` on persistent storage the code survives a restart;
-otherwise every start makes a new one, so use the latest.
+A hosted server runs in Production unless it is told otherwise, so the wizard **always** asks for the
+setup code.
 
-**Azure App Service (custom container).** The same rules, in App Service's terms:
+**Easiest, on every host: the setup link.** Set `ark_oauth_server__Setup__AccessKey` in the same
+settings page as `DataPath` below, then open (or send) `https://<public address>/ark-idp/setup#key=<AccessKey>`.
+Nobody needs the log, and the code is the same on every instance and after every restart. See
+*The setup link* above.
 
-1. Before the first start, give the slot persistent storage and point `DataPath` into it. `/home` is
-   the only path App Service keeps, and Linux app setting names take `__` where configuration has
-   `:`. App Service also ends TLS in front of the container, so let ASP.NET Core read the forwarded
-   scheme: without it the app sees `http`, the wizard pre-fills an `http://` public URL, and the
-   console's sign-in sends an `http://` callback that does not match the registered one.
+Without a key, the code is kept in two places, and every host lets you reach at least one of them:
+
+* **the log**: the `Ark.oAuth.Oidc.Setup` warning shown above, written once at start-up. A restart
+  prints it again;
+* **`{DataPath}/setup-code.txt`**, until setup is finished.
+
+| Host | From the log | From the file |
+|---|---|---|
+| Docker | `docker logs <container> 2>&1 \| grep "setup code"` | `docker exec <container> cat <DataPath>/setup-code.txt` |
+| Azure App Service, Linux (custom container or code) | `az webapp log tail`, once container logging is on; Portal → **Log stream** | Kudu → **Bash**, or **SSH**: `cat /home/data/ark-idp/setup-code.txt` |
+| Azure App Service, Windows (code) | not there: IIS discards console output | Kudu → **Debug console**: `type %HOME%\data\ark-idp\setup-code.txt` |
+| Azure Container Apps | `az containerapp logs show`; Portal → **Log stream**; Log Analytics | `az containerapp exec`, or the Azure Files share itself |
+| AWS Elastic Beanstalk, Linux (.NET or Docker platform) | `eb logs`; Console → **Logs** | `eb ssh`, then `sudo cat <DataPath>/setup-code.txt` |
+| AWS Elastic Beanstalk, Windows | not there: IIS discards console output | RDP to the instance |
+
+`exec` needs a shell or `cat` in the image. The chiseled .NET images have neither, so with those use
+the log or read the volume from outside.
+
+**Before the first start, on every host:**
+
+1. **Put `DataPath` on storage that outlives the process.** The wizard's directory *is* the server's
+   configuration. If it is on the container's or instance's own disk, a restart, redeploy or
+   replaced instance loses `settings.json`, the wizard comes back, and every start makes a new code.
+   Where the host has no such storage, see *Without a persistent volume* below.
+2. **Run one instance until setup is finished**, then restart before scaling out. The install and
+   Ark Pilot's conversation happen in one process, and other instances may not notice the new
+   settings on a network share until they restart. Without an access key each instance also holds its own code, so with two the code
+   is refused whenever a request lands on the other one.
+3. **Let the app see the forwarded scheme.** All of these hosts end TLS in front of the app. Set
+   `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`. Without it the app sees `http`, the wizard pre-fills an
+   `http://` public URL, and the console's sign-in sends an `http://` callback that does not match
+   the registered one. In the wizard, enter the `https://` address users will use (the custom domain,
+   if there is one).
+
+Setting names take `__` where configuration has `:`, on every host: `ark_oauth_server__Setup__DataPath`.
+
+**Docker.** Mount a volume the container's user can write (the .NET 8+ images do not run as root),
+set `ark_oauth_server__Setup__DataPath` to it, and read the code with
+`docker logs <container> 2>&1 | grep "setup code"`.
+
+**Azure App Service, custom container (Linux).**
+
+1. `/home` is the only path App Service keeps, so point `DataPath` into it:
 
    ```bash
    az webapp config appsettings set -g <rg> -n <app> --slot <slot> --settings \
@@ -737,21 +799,155 @@ otherwise every start makes a new one, so use the latest.
 
    Or Portal → the slot → **Monitoring → Log stream**; or **Advanced Tools** (Kudu) → **Bash** →
    `cat /home/data/ark-idp/setup-code.txt`. Kudu sees only `/home`, so it cannot find the file under
-   the default `DataPath`; `az webapp ssh` reaches the container only if the image runs sshd on port
+   the default `DataPath`. `az webapp ssh` reaches the container only if the image runs sshd on port
    2222.
 
-3. Keep the slot at **one instance** until setup is finished. Each instance holds its own code, so
-   on a scaled-out plan the code is refused whenever a request lands on another instance.
+3. Keep the slot at **one instance**, and run the wizard at the slot's `https://` address +
+   `/ark-idp/setup`.
 
-4. In the wizard, enter the `https://` address users will use (the custom domain, if there is one)
-   as the public URL.
+**Azure App Service, code deploy (no container), Linux or Windows.** The app runs from `site/wwwroot`
+under the slot's home directory, and the default `DataPath` (`ark-idp-data` under the content root)
+lands inside it. That directory survives a restart but not a redeploy. `az webapp deploy --type zip`
+cleans the target by default. An app that runs from a package (`WEBSITE_RUN_FROM_PACKAGE=1`) cannot
+write there at all and gets `cannot_write`. So put `DataPath` beside `site` instead:
 
-SQLite under `/home` sits on a network share, where its file locking is not reliable: fine for a
-trial, but use PostgreSQL or MySQL for a server people depend on. A slot deployed by a pipeline can
-skip the wizard, the setup code and `DataPath` altogether: set `ark_oauth_server__TenantId`,
-`ark_oauth_server__BaseUrl`, `ConnectionStrings__ArkAuthConnection` and
-`ark_oauth_server__AdminUser__Password` as slot app settings (Key Vault references for the secrets).
-The forwarded-headers setting still applies.
+```bash
+# Linux
+az webapp config appsettings set -g <rg> -n <app> --slot <slot> --settings \
+  ark_oauth_server__Setup__DataPath=/home/data/ark-idp \
+  ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+
+# Windows: the home directory is D:\home on most plans; `echo %HOME%` in the Kudu console says which
+az webapp config appsettings set -g <rg> -n <app> --slot <slot> --settings \
+  'ark_oauth_server__Setup__DataPath=D:\home\data\ark-idp' \
+  ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+```
+
+* **Linux:** read the code as for a custom container. Turn on container logging, then use
+  `az webapp log tail` or **Log stream**. Or use **SSH** (Portal → Development Tools; the built-in
+  images run sshd, so `az webapp ssh` works) or Kudu → **Bash**, then
+  `cat /home/data/ark-idp/setup-code.txt`.
+* **Windows:** IIS discards the app's console output, so the log stream never shows the code. The
+  file does. The code is made when the app starts, which on Windows is usually its first request, so
+  open the site once. Then go to **Advanced Tools** (Kudu) → **Debug console → CMD** and run
+  `type %HOME%\data\ark-idp\setup-code.txt`.
+
+**Azure Container Apps.** A replica's filesystem lasts only as long as the replica. Every change to
+the template creates a new revision, which means a new replica, an empty directory and a new code.
+Scaling to zero has the same effect.
+
+1. Give the app an Azure Files share. Register it with the environment, then mount it through the
+   app's YAML. The CLI has no flag for volume mounts; the Portal does it under **Volumes** when you
+   create a new revision.
+
+   ```bash
+   az containerapp env storage set -g <rg> -n <environment> --storage-name arkidp \
+     --azure-file-account-name <account> --azure-file-account-key <key> \
+     --azure-file-share-name <share> --access-mode ReadWrite
+   az containerapp show -g <rg> -n <app> -o yaml > app.yaml
+   ```
+
+   In `app.yaml`, under `properties.template`, add the volume, and add `volumeMounts` to the existing
+   container entry (keep its image and everything else):
+
+   ```yaml
+       volumes:
+         - name: ark-idp
+           storageType: AzureFile
+           storageName: arkidp
+       containers:
+         - name: <container>
+           volumeMounts:
+             - volumeName: ark-idp
+               mountPath: /mnt/ark-idp
+   ```
+
+   ```bash
+   az containerapp update -g <rg> -n <app> --yaml app.yaml
+   az containerapp update -g <rg> -n <app> --min-replicas 1 --max-replicas 1 \
+     --set-env-vars ark_oauth_server__Setup__DataPath=/mnt/ark-idp ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+   ```
+
+   If the wizard then says it cannot write to `/mnt/ark-idp`, the share is mounted for root only.
+   Add `mountOptions: uid=1654,gid=1654` (the .NET images' `app` user) to the volume.
+
+2. Read the code from the replica's console log:
+
+   ```bash
+   az containerapp logs show -g <rg> -n <app> --tail 300 | grep -i "setup code"
+   ```
+
+   Or Portal → the app → **Monitoring → Log stream**. With Log Analytics, run
+   `ContainerAppConsoleLogs_CL | where Log_s has "setup code"` (the table is `ContainerAppConsoleLogs`,
+   column `Log`, when logs go through diagnostic settings). From the file:
+   `az containerapp exec -g <rg> -n <app>` opens a shell in the replica (not in chiseled images), then
+   `cat /mnt/ark-idp/setup-code.txt`. Or download `setup-code.txt` from the share (Portal → the
+   storage account → **File shares**).
+
+3. Run the wizard at the app's ingress address + `/ark-idp/setup`. Scale out again once setup is
+   finished.
+
+**AWS Elastic Beanstalk.** Each deploy replaces `/var/app/current`, the content root, which takes the
+default `DataPath` with it. Elastic Beanstalk also replaces instances, with their disks, when it
+scales, heals or updates the platform.
+
+1. Either mount an EFS file system on the instances (AWS's `storage-efs-mountfilesystem.config`
+   sample does it in `.ebextensions`), writable by the user the app runs as (`webapp` on the .NET
+   platform), and point `DataPath` into it. Or run the wizard on the instance's disk and then move
+   its result into environment properties (*Without a persistent volume*, below). Either way, run a
+   single instance while you set it up (`eb create --single`, or `eb scale 1`):
+
+   ```bash
+   eb setenv ark_oauth_server__Setup__DataPath=/mnt/efs/ark-idp ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+   ```
+
+2. Read the code. On the Linux platforms the app's console output is kept on the instance:
+
+   ```bash
+   eb logs | grep -i "setup code"        # last 100 lines of every log, from every instance
+   eb ssh
+   sudo grep -h  "setup code" /var/log/web.stdout.log                          # .NET platform
+   sudo grep -rh "setup code" /var/log/eb-docker/containers/eb-current-app/    # Docker platform
+   sudo cat /mnt/efs/ark-idp/setup-code.txt                                     # the file
+   ```
+
+   Or Console → the environment → **Logs → Request logs → Last 100 lines**. With log streaming on,
+   the .NET platform's log is in CloudWatch under `/aws/elasticbeanstalk/<environment>/var/log/web.stdout.log`.
+   On the Windows Server platforms IIS discards console output, so the code is only in
+   `{DataPath}/setup-code.txt` on the instance (RDP).
+
+3. Run the wizard at the environment's `https://` address + `/ark-idp/setup`.
+
+**Without a persistent volume.** The wizard's result can survive without one, because everything it
+collected apart from `settings.json` is in the database: the administrator, the signing key and the
+machine secret. With a server database (PostgreSQL or MySQL, not SQLite on the instance), after
+**Install**:
+
+1. Read `{DataPath}/settings.json` the same way as the setup code, and turn it into settings:
+
+   ```bash
+   jq -r '{ConnectionStrings, ark_oauth_server}
+     | paths(type | IN("object","array","null") | not) as $p
+     | "\($p | map(tostring) | join("__"))=\(getpath($p))"' settings.json
+   # ConnectionStrings__ArkAuthConnection=Host=…
+   # ark_oauth_server__TenantId=ark_idp
+   # ark_oauth_server__Oidc__CorsOrigins__0=https://app.example.com
+   ```
+
+2. Set those as the host's environment properties, app settings or environment variables. Put the
+   connection string and `ark_oauth_server__EmailConfig__pw` in its secret store (Container Apps
+   `secretref:`, App Service Key Vault references).
+
+3. From then on the server starts configured on any instance and never shows the wizard. `DataPath`
+   no longer matters, except for uploaded logos: they are files in `{DataPath}/branding/`. Host them
+   anywhere on `https` and set `ark_oauth_server__EmailConfig__host_logo` / `client_logo` to their URLs.
+
+SQLite under `/home` (App Service) or on an Azure Files share (Container Apps) sits on a network
+share, where its file locking is not reliable: fine for a trial, but use PostgreSQL or MySQL for a
+server people depend on. A deployment driven by a pipeline can skip the wizard, the setup code and
+`DataPath` altogether: set `ark_oauth_server__TenantId`, `ark_oauth_server__BaseUrl`,
+`ConnectionStrings__ArkAuthConnection` and `ark_oauth_server__AdminUser__Password` as app settings
+(Key Vault references for the secrets). The forwarded-headers setting still applies.
 
 ## Upgrading an existing database
 

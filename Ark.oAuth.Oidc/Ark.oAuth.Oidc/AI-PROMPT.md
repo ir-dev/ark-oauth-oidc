@@ -149,7 +149,8 @@ Migration API
 
 ```text
 Standing up a new IdP?                     -> builder.AddArkIdp(); app.UseArkIdp(); run it; finish the wizard at /ark-idp/setup
-Wizard in a container / App Service?       -> persistent Setup:DataPath FIRST; setup code from the container log (AI-RECIPES Recipe 14)
+Wizard on a hosted server?                 -> persistent Setup:DataPath FIRST; setup code from the log or setup-code.txt (AI-RECIPES Recipe 14: Docker, App Service, Container Apps, Elastic Beanstalk)
+Wizard run by someone without log access?  -> Setup:AccessKey (16+ chars, platform settings) and send {host}/ark-idp/setup#key=<key>; the code is derived from the key
 Standing up an IdP from a pipeline?        -> AddArkOidcServer(env) + AddArkOidcClient(cfg); set TenantId+BaseUrl+AdminUser:Password
 Onboarding a new application?              -> POST /api/oauth/v1/provision/client (one call, includes the access mapping)
 Turning an app or account off temporarily? -> POST /api/oauth/v1/activation/client | /activation/user (is_active=false; revokes tokens)

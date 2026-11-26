@@ -84,6 +84,10 @@ These apply in every language and are the source of most "it just says the passw
   source below user secrets / env). A host with `TenantId` + a connection string never sees it.
   In a container, point `Setup:DataPath` at persistent storage before the first start (App Service:
   under `/home`), and read the setup code from the container log: nothing there is loopback.
+  For someone without log access: `Setup:AccessKey` (16+ chars, never committed) and the link
+  `/ark-idp/setup#key=<key>`; with a key the code is derived from it (`CodeFromAccessKey`), so it is
+  stable across instances and restarts. Never log a property named `Code` in `Ark.oAuth.Oidc.Setup`:
+  Ark Pilot takes it to be the setup code. Per-host steps: server README → *Running the wizard on a hosted server*.
   Wizard code: `Code/ArkSetup.cs`, `Code/ArkIdpHosting.cs`, `wwwroot/setup/`.
 * **A second IdP instance needs PostgreSQL or MySQL and nothing else.** The data-protection key
   ring (sign-in form anti-forgery token, console cookie) is kept in the IdP's own database unless the

@@ -385,8 +385,17 @@ namespace Ark.oAuth.Oidc
             var code = EnsureSetupCode();
             var where = !LocalExempt ? $" Enter the setup code {code}."
                 : $" From this machine (localhost) no code is needed, because the environment is Development. From any other machine, enter the setup code {code}.";
+            var (key, keyProblem) = ReadAccessKey();
+            if (key != null)
+                where += $" Or open {SetupPath}#key=<the value of ark_oauth_server:Setup:AccessKey> on this server, which shows the code.";
             _log.LogWarning(
                 "Ark IdP is not configured yet. Open /ark-idp/setup on this server in a browser to run the setup wizard.{Where}", where);
+            if (keyProblem != null)
+                _log.LogError(
+                    "ark_oauth_server:Setup:AccessKey is ignored: {Why}. The setup link does not work until it is put right; the setup code still does.",
+                    keyProblem);
+            // Never a property named Code here, nor in any line of this category: the onboarding agent
+            // takes a value of that name, at Warning and above, to be the setup code.
             if (code != null && McpEnabled)
                 _log.LogWarning(
                     "An agent can set it up instead: connect it to the MCP server at {Path} with the setup code {Code} as its bearer token. " +
@@ -396,9 +405,108 @@ namespace Ark.oAuth.Oidc
         /// <summary>Whether an agent may run setup over MCP. Read from configuration directly: there may be no section to bind yet.</summary>
         bool McpEnabled => _config.GetValue("ark_oauth_server:Mcp:Enabled", true) && _config.GetValue("ark_oauth_server:Mcp:HostLevel", true);
 
+        // ---------------------------------------------------------------- the setup link
+
+        /// <summary>Shorter than this, a configured access key is ignored: it would be easier to guess than the code it unlocks.</summary>
+        internal const int MinAccessKeyLength = 16;
+        const string AccessKeySetting = "ark_oauth_server:Setup:AccessKey";
+
+        /// <summary>
+        /// The key that opens the setup link, <c>/ark-idp/setup#key=…</c>, which hands out the setup code
+        /// to someone who cannot read the server's log: whoever deploys the server puts it in the
+        /// platform's settings and sends the link to whoever sets it up. Null with the reason when it
+        /// is set but not usable; null and null when it is not set, or holds a <c>&lt;&lt;placeholder&gt;&gt;</c>.
+        /// </summary>
+        (string? Key, string? Problem) ReadAccessKey()
+        {
+            var value = (_config[AccessKeySetting] ?? "").Trim();
+            if (value.Length == 0 || (value.StartsWith("<<") && value.EndsWith(">>"))) return (null, null);
+            if (value.Length < MinAccessKeyLength)
+                return (null, $"it is {value.Length} characters long, and needs at least {MinAccessKeyLength}");
+            return (value, null);
+        }
+
+        /// <summary>
+        /// The setup code an access key stands for: twelve characters of HMAC-SHA256 under the key, from
+        /// the same alphabet as a random code, five bits each. The same on every instance and after every
+        /// restart, with or without a data directory that survives, so a link opened on one instance is a
+        /// code that every other instance accepts.
+        /// </summary>
+        static string CodeFromAccessKey(string key)
+        {
+            const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+            var mac = HMACSHA256.HashData(Encoding.UTF8.GetBytes(key), Encoding.UTF8.GetBytes("ark-idp/setup-code/v1"));
+            var bits = System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(mac);
+            var chars = new char[12];
+            for (var i = 0; i < chars.Length; i++) chars[i] = alphabet[(int)((bits >> (59 - 5 * i)) & 31)];
+            return $"{new string(chars, 0, 4)}-{new string(chars, 4, 4)}-{new string(chars, 8, 4)}";
+        }
+
+        // Wrong keys are answered one at a time, a second apart, for the whole process: a person with
+        // the right link is not slowed, and a guesser gets one try a second however many requests it
+        // sends. Past a short queue the rest are turned away at once rather than held open.
+        static readonly SemaphoreSlim WrongKeyGate = new(1, 1);
+        static int _wrongKeyQueue;
+        static int _wrongKeys;
+        const int WrongKeyQueueLimit = 20;
+
+        async Task RevealCodeAsync(HttpContext context)
+        {
+            var (key, _) = ReadAccessKey();
+            if (key == null)
+            {
+                await Fail(context, 404, "setup_link_disabled",
+                    "This server does not accept setup links. Ask whoever runs it for the setup code from its log.");
+                return;
+            }
+
+            AccessKeyRequest? body;
+            try { body = await Read<AccessKeyRequest>(context); }
+            catch (JsonException) { body = null; }
+            var given = (body?.Key ?? "").Trim();
+
+            if (given.Length == 0 || !Protocol.ArkCrypto.FixedTimeEquals(given, key))
+            {
+                var count = Interlocked.Increment(ref _wrongKeys);
+                if (count == 1 || count % 100 == 0)
+                    _log.LogWarning("Ark IdP setup link: {Count} wrong key(s) so far, the latest from {Remote}.",
+                        count, context.Connection.RemoteIpAddress?.ToString());
+                if (Interlocked.Increment(ref _wrongKeyQueue) > WrongKeyQueueLimit)
+                {
+                    Interlocked.Decrement(ref _wrongKeyQueue);
+                    context.Response.Headers.RetryAfter = "5";
+                    await Fail(context, 429, "slow_down", "Too many attempts with a wrong setup link. Wait a moment and try again.");
+                    return;
+                }
+                try
+                {
+                    await WrongKeyGate.WaitAsync(context.RequestAborted);
+                    try { await Task.Delay(TimeSpan.FromSeconds(1), context.RequestAborted); }
+                    finally { WrongKeyGate.Release(); }
+                }
+                catch (OperationCanceledException) { return; } // the caller has gone
+                finally { Interlocked.Decrement(ref _wrongKeyQueue); }
+                await Fail(context, 403, "invalid_setup_key", "This setup link is not valid for this server. Ask for a new one.");
+                return;
+            }
+
+            var code = EnsureSetupCode();
+            if (code == null)
+            {
+                // Setup finished between the gate and here.
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+            _log.LogWarning("Ark IdP setup link opened from {Remote}: the setup code was handed out.",
+                context.Connection.RemoteIpAddress?.ToString());
+            await context.Response.WriteAsJsonAsync(new { code }, Json);
+        }
+
         /// <summary>
         /// The code, created once and kept beside the settings so a restart does not change it. When
-        /// it cannot be stored, the log still has it for this process. Null once setup is over.
+        /// it cannot be stored, the log still has it for this process. With an access key it is the
+        /// key's code instead (<see cref="CodeFromAccessKey"/>), and the file is kept in step with it.
+        /// Null once setup is over.
         /// </summary>
         string? EnsureSetupCode()
         {
@@ -408,6 +516,18 @@ namespace Ark.oAuth.Oidc
                 // Forgotten, because setup is over: a call still under way must not bring one back.
                 if (ArkIdpSettings.IsConfigured(_config)) return null;
                 var file = Path.Combine(ArkIdpSettings.DataDirectory(_config, _env), ArkIdpSettings.TokenFileName);
+                if (ReadAccessKey().Key is { } accessKey)
+                {
+                    var derived = CodeFromAccessKey(accessKey);
+                    try
+                    {
+                        if (!File.Exists(file) || File.ReadAllText(file).Trim() != derived)
+                            ArkIdpSettings.WritePrivateFile(file, Encoding.UTF8.GetBytes(derived + "\n"));
+                    }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                    return _setupCode = derived;
+                }
                 try
                 {
                     if (File.Exists(file))
@@ -596,6 +716,12 @@ namespace Ark.oAuth.Oidc
                 return;
             }
 
+            // The setup link: the access key in, the setup code out. Before the gate, like the next one.
+            if (action == "code")
+            {
+                await RevealCodeAsync(context);
+                return;
+            }
             if (action == "verify-code")
             {
                 var body = await Read<CodeRequest>(context);
@@ -755,8 +881,10 @@ namespace Ark.oAuth.Oidc
         object State(HttpContext context)
         {
             // Paths and environment are nobody's business until the code is in.
+            // Whether a setup link can work here, so the page can say so to someone who has none.
+            var setupLink = ReadAccessKey().Key != null;
             if (!CodeAccepted(context))
-                return new { configured = false, code_required = true, version = PackageVersion };
+                return new { configured = false, code_required = true, setup_link = setupLink, version = PackageVersion };
 
             var request = context.Request;
             var dataDir = ArkIdpSettings.DataDirectory(_config, _env);
@@ -766,6 +894,7 @@ namespace Ark.oAuth.Oidc
             {
                 configured = false,
                 code_required = !IsLocal(context),
+                setup_link = setupLink,
                 version = PackageVersion,
                 environment = _env.EnvironmentName,
                 data_directory = dataDir,
@@ -1344,6 +1473,9 @@ namespace Ark.oAuth.Oidc
                 McpTools.Close();
                 _log.LogInformation("Ark IdP setup complete: tenant {Tenant}, issuer {Issuer}, settings in {File}",
                     plan.TenantId, plan.Issuer, settingsFile);
+                if (!string.IsNullOrWhiteSpace(_config[AccessKeySetting]))
+                    _log.LogInformation("{Setting} is no longer used: setup is finished and the setup link no longer works. Remove it from the configuration.",
+                        AccessKeySetting);
 
                 // The first line of the audit trail, when there is one: who set this server up,
                 // and from where. Whoever completes setup becomes its administrator.
@@ -1692,6 +1824,7 @@ namespace Ark.oAuth.Oidc
         }
 
         sealed class CodeRequest { public string? Code { get; set; } }
+        sealed class AccessKeyRequest { public string? Key { get; set; } }
         internal sealed class KeyRequest { public int? KeySize { get; set; } public string? PrivateKey { get; set; } }
         internal sealed class EmailTestRequest { public EmailSection? Email { get; set; } public string? To { get; set; } }
 

@@ -49,6 +49,7 @@ Active while `ark_oauth_server:TenantId` or `ConnectionStrings:ArkAuthConnection
 | `GET /ark-idp/setup` | the wizard page | 302 → `/` |
 | `GET /ark-idp/setup/api/state` | environment, defaults, whether a setup code is needed | 404 |
 | `POST /ark-idp/setup/api/verify-code` | `{ code }` → 200 / 403 | 404 |
+| `POST /ark-idp/setup/api/code` | `{ key }` (the `Setup:AccessKey`) → `{ code }`; 403 `invalid_setup_key` after about a second; 429 `slow_down` past 20 waiting; 404 `setup_link_disabled` with no usable key. Needs no setup code: this is how the setup link gets one | 404 |
 | `POST /ark-idp/setup/api/keys/generate` | `{ key_size: 2048\|3072\|4096 }` → `{ kid, public_key, private_key, public_pem, private_pem }` | 404 |
 | `POST /ark-idp/setup/api/keys/import` | `{ private_key }` (PEM PKCS#8/PKCS#1, or base64 PKCS#8) → same | 404 |
 | `POST /ark-idp/setup/api/database/test` | `{ provider, connection_string }` → `{ ok, exists, tenants[], msg }` | 404 |
@@ -59,7 +60,9 @@ Active while `ark_oauth_server:TenantId` or `ConnectionStrings:ArkAuthConnection
 
 Every POST must be `Content-Type: application/json` with `X-Ark-Setup: 1`; from anything but a
 Development server at an unproxied loopback address (or always, with `Setup:RequireToken`) also `X-Ark-Setup-Code: <code>`,
-the code from the start-up log / `setup-code.txt`. Errors are `{ error, msg, field }`.
+the code from the start-up log / `setup-code.txt`, or from `api/code` with the access key. Errors are `{ error, msg, field }`.
+`GET api/state` without the code answers `{ configured, code_required, setup_link, version }`; `setup_link`
+says whether `api/code` can work here.
 
 `complete` writes `{DataPath}/settings.json` (0600): `ConnectionStrings`, and `ark_oauth_server`
 with `TenantId, BaseUrl, BasePath, Provider, UserPasswordMode, DefaultPw?, AdminUser{Username,Name},

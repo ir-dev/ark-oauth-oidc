@@ -87,7 +87,8 @@ namespace Ark.oAuth.Oidc.Mcp
                 {
                     ["type"] = "setup_code",
                     ["header"] = "Authorization: Bearer <setup code>",
-                    ["where"] = "The setup code is printed in the server's start-up log and kept in setup-code.txt in its data directory. It stops working when setup finishes."
+                    ["where"] = "The setup code is printed in the server's start-up log and kept in setup-code.txt in its data directory. " +
+                                "When ark_oauth_server:Setup:AccessKey is set, the setup link (/ark-idp/setup#key=<key>) shows it too. It stops working when setup finishes."
                 };
 
             var issuer = e.OidcFor(e.Tenant?.tenant_id ?? e.OperatorTenantId);

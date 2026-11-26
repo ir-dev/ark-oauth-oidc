@@ -26,7 +26,7 @@ dotnet add package Ark.oAuth.Oidc
 # Zero-config alternative, preferred for a new IdP with a person at the keyboard:
 #   Program.cs = builder.AddArkIdp(); var app = builder.Build(); app.UseArkIdp(); app.Run();
 #   dotnet run, open the app, finish the wizard at /ark-idp/setup. Skip everything below.
-#   In a container (Docker, Azure App Service), do Recipe 14 before the first start.
+#   On a hosted server (Docker, App Service, Container Apps, Elastic Beanstalk), do Recipe 14 before the first start.
 # The configured route, for pipelines:
 dotnet add package Ark.oAuth.Client
 dotnet user-secrets set "ark_oauth_server:AdminUser:Password" "<strong-password>"
@@ -353,7 +353,7 @@ public async Task SignOutAll()
 
 ---
 
-## Recipe 14 — Run the setup wizard in a container (Docker, Azure App Service)
+## Recipe 14 — Run the setup wizard on a hosted server (Docker, Azure App Service, Azure Container Apps, AWS Elastic Beanstalk)
 
 > **PROMPT:** "The zero-config IdP runs as a container on Azure App Service. Make the wizard's
 > settings survive restarts, and tell me where to find the setup code."
@@ -370,7 +370,19 @@ az webapp config appsettings set -g <rg> -n <app> --slot <slot> --settings \
   ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
 ```
 
-**2. The setup code**, written to the log once per start:
+**2a. Easiest: the setup link**, when the person running the wizard cannot read the log:
+```bash
+az webapp config appsettings set -g <rg> -n <app> --slot <slot> --settings \
+  ark_oauth_server__Setup__AccessKey="$(openssl rand -hex 16)"
+# then send: https://<public address>/ark-idp/setup#key=<that value>
+```
+The wizard trades the key for the code (`POST /ark-idp/setup/api/code`) and continues. With a key the code
+is derived from it, so it is the same on every instance and restart. The key is after `#`, so it never reaches a
+request log. Once setup is finished the link answers 404; remove the setting then. 16 characters minimum: a
+shorter key is ignored, with `fail: Ark.oAuth.Oidc.Setup` in the log. The same setting works on every host
+(`eb setenv …`, `az containerapp update --set-env-vars …`).
+
+**2b. Or the setup code**, written to the log once per start:
 ```bash
 az webapp log config -g <rg> -n <app> --slot <slot> --docker-container-logging filesystem
 az webapp log tail   -g <rg> -n <app> --slot <slot>
@@ -403,3 +415,31 @@ instance. Enter the `https://` address users will use as the public URL.
 - **Plain Docker:** the same rules. Mount a volume the container's user can write, set
   `ark_oauth_server__Setup__DataPath` to it, and read the code with
   `docker logs <container> 2>&1 | grep "setup code"`.
+- **App Service, code deploy (no container):** `DataPath` defaults into `site/wwwroot`, which
+  `az webapp deploy --type zip` cleans and `WEBSITE_RUN_FROM_PACKAGE=1` makes read-only. Set it to
+  `/home/data/ark-idp` (Linux) or `D:\home\data\ark-idp` (Windows; check `echo %HOME%` in Kudu).
+  On Linux, read the code as above. On Windows, IIS discards console output, so the log never has
+  it: open the site once, then Kudu → **Debug console** → `type %HOME%\data\ark-idp\setup-code.txt`.
+- **Azure Container Apps:** mount an Azure Files share (`az containerapp env storage set`, then a
+  volume in the app's YAML), set `DataPath` to the mount, and use `--min-replicas 1 --max-replicas 1`.
+  A new revision or scale-to-zero otherwise means a new replica, an empty directory and a new code.
+  Read it with `az containerapp logs show -g <rg> -n <app> --tail 300 | grep -i "setup code"` or
+  Portal → **Log stream**.
+- **AWS Elastic Beanstalk:** every deploy replaces `/var/app/current`, and instances are replaced
+  with their disks. Use EFS for `DataPath`, or move the result into environment properties after
+  install (below), on a single instance (`eb scale 1`). Read the code with
+  `eb logs | grep -i "setup code"`, or `eb ssh` → `/var/log/web.stdout.log` (Docker platform:
+  `/var/log/eb-docker/containers/eb-current-app/`). Windows platforms: IIS discards console output,
+  so read the file over RDP.
+- **No persistent volume:** on a PostgreSQL/MySQL database, after install, flatten
+  `{DataPath}/settings.json` into settings with
+  `jq -r '{ConnectionStrings, ark_oauth_server} | paths(type | IN("object","array","null") | not) as $p | "\($p | map(tostring) | join("__"))=\(getpath($p))"' settings.json`
+  and set them in the host's environment (secrets in its secret store). The administrator, key and
+  machine secret are already in the database. Uploaded logos (`{DataPath}/branding/`) must then be
+  hosted elsewhere, with `EmailConfig__host_logo` / `client_logo` set to their URLs.
+- **Mistake:** putting `Setup:AccessKey` in a committed `appsettings.json`. It is as good as the setup code
+  until setup is finished: platform settings or a secret store only. Nor print it: the server never does.
+- **Mistake:** `paths(scalars)` in that `jq` line. It skips `false` values, so a switched-off option
+  such as `ShowPoweredBy` silently returns to its default.
+
+Step-by-step for each host: README → *Running the wizard on a hosted server*.

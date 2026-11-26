@@ -71,6 +71,12 @@ configuration are as in 2.4.2.
   as tools, with the setup code as the bearer token. Values are collected section by section, in any
   order and over several conversations, each with who supplied it; tested; reviewed; and installed
   only as reviewed. The administrator sets their own password through a one-time link.
+* **A setup link, for whoever cannot read the server log.** With ark_oauth_server:Setup:AccessKey set
+  (16 characters or more), {address}/ark-idp/setup#key={AccessKey} opens the wizard with the setup code
+  filled in, through POST /ark-idp/setup/api/code. The setup code is then derived from the key: the same
+  on every instance and after every restart. Wrong keys are answered one a second, past 20 waiting with
+  429, and each code handed out is logged. Once setup is finished the link answers 404 like the rest of
+  the wizard. Without the setting nothing changes.
 * **Three levels after that**, each its own endpoint: /ark-idp/mcp for the operator, /{tenant}/mcp
   for a tenant's administrator (applications, people, access, agents, sessions, keys, audit), and
   /{tenant}/mcp/{client_id} for one application, its people and the agents it lists. The machine

@@ -289,6 +289,7 @@
         const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
         $('#codeCard').hidden = !env.code_required;
+        $('#linkHint').hidden = !env.setup_link || codeOk;
         // Until the code is accepted the server says nothing about itself.
         if (!env.defaults) {
             add('warn', 'This server is not configured yet. Enter the setup code to begin.');
@@ -1108,14 +1109,51 @@
         renderRail();
     }
 
-    async function start() {
+    // The setup link, /ark-idp/setup#key=…: the access key whoever deployed the server set, traded here
+    // for the setup code, so whoever sets it up needs no access to the log. After the #, the key never
+    // reaches the server in the address, so no access log holds it.
+    async function redeemLink() {
+        const m = /^#(?:.*&)?key=([^&]*)/.exec(location.hash);
+        if (!m) return null;
+        // Off the address bar at once: out of history, bookmarks and anything copied from there.
+        history.replaceState(null, '', location.pathname + location.search);
+        let given;
+        try { given = decodeURIComponent(m[1]); } catch { given = m[1]; }
         try {
+            const data = await call('code', { key: given });
+            setupCode = data.code;
+            return { code: data.code };
+        } catch (err) {
+            return { error: err.message };
+        }
+    }
+
+    function showRedeemed(link) {
+        if (!link || !env.code_required) return;
+        if (link.code && env.defaults) {
+            codeOk = true;
+            setVal('setup_code', link.code);
+            $('#linkCode').textContent = link.code;
+            $('#linkCodeRow').hidden = false;
+            $('#linkHint').hidden = true;
+            unlockAgent();
+        } else {
+            setupCode = '';
+            showResult($('#codeResult'), 'error', `${link.error || 'The setup link did not work.'} You can still enter the setup code from the server log.`);
+        }
+    }
+
+    async function start() {
+        let link = null;
+        try {
+            link = await redeemLink();
             if (!await loadState()) return;
         } catch {
             document.querySelector('.lead').textContent = 'The server did not answer. Reload the page to try again.';
             return;
         }
         initialize();
+        showRedeemed(link);
         go(0);
     }
 
