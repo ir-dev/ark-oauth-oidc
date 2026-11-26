@@ -1215,11 +1215,20 @@ namespace Ark.oAuth.Oidc
 
         internal sealed record WatchPlan(string Endpoint, string ApiKey, string Application, string Environment);
 
+        /// <summary>What a test of the audit trail found. Serialized as <c>{ ok, msg }</c>.</summary>
+        internal sealed record WatchTestResult(bool ok, string msg);
+
         /// <summary>
         /// The audit trail's settings, checked, or null when it is not wanted. The step is
         /// optional: switched off, nothing about it is validated or written.
         /// </summary>
-        internal WatchPlan? NormalizeWatch(WatchSection? watch)
+        internal WatchPlan? NormalizeWatch(WatchSection? watch) => NormalizeWatch(watch, _env.EnvironmentName);
+
+        /// <summary>
+        /// The same check, for whoever has no wizard to hand: the admin console's Audit trail page
+        /// uses it, so a destination is held to one rule wherever it is entered.
+        /// </summary>
+        internal static WatchPlan? NormalizeWatch(WatchSection? watch, string defaultEnvironment)
         {
             if (watch?.Enabled != true) return null;
 
@@ -1247,7 +1256,7 @@ namespace Ark.oAuth.Oidc
                 throw new SetupException("invalid_watch_application", "Application name: up to 100 characters.", "watch_application");
 
             var environment = (watch.Environment ?? "").Trim();
-            if (environment.Length == 0) environment = _env.EnvironmentName;
+            if (environment.Length == 0) environment = defaultEnvironment;
             if (environment.Length > 60 || environment.Any(char.IsControl))
                 throw new SetupException("invalid_watch_environment", "Environment: up to 60 characters.", "watch_environment");
 
@@ -1267,7 +1276,18 @@ namespace Ark.oAuth.Oidc
         {
             if (watch != null) watch.Enabled = true;
             var plan = NormalizeWatch(watch) ?? throw new SetupException("bad_request", "Nothing to test.");
+            return await TestWatchAsync(plan, "setup");
+        }
+
+        /// <summary>
+        /// The test itself, for a destination already checked by <see cref="NormalizeWatch(WatchSection?, string)"/>.
+        /// <paramref name="from"/> is <c>setup</c> or <c>console</c>: it names, on the test event,
+        /// which screen sent it.
+        /// </summary>
+        internal static async Task<WatchTestResult> TestWatchAsync(WatchPlan plan, string from)
+        {
             var node = new Uri(plan.Endpoint).GetLeftPart(UriPartial.Path);
+            var screen = from == "console" ? "admin console" : "setup wizard";
 
             string name;
             try
@@ -1280,11 +1300,11 @@ namespace Ark.oAuth.Oidc
                 using var response = await http.SendAsync(request);
                 var status = (int)response.StatusCode;
                 if (status is 401 or 403)
-                    return new { ok = false, msg = $"The node at {node} refused the key ({status}). Check that it is a secret key of this node and has not been revoked." };
+                    return new WatchTestResult(false, $"The node at {node} refused the key ({status}). Check that it is a secret key of this node and has not been revoked.");
                 if (status == 503)
-                    return new { ok = false, msg = $"The node at {node} answered 503: it has not finished its own setup, or its storage is unavailable." };
+                    return new WatchTestResult(false, $"The node at {node} answered 503: it has not finished its own setup, or its storage is unavailable.");
                 if (!response.IsSuccessStatusCode)
-                    return new { ok = false, msg = $"{node} answered {status} to /api/whoami, so it does not look like an ARK-RAPID Watch node. Check the address." };
+                    return new WatchTestResult(false, $"{node} answered {status} to /api/whoami, so it does not look like an ARK-RAPID Watch node. Check the address.");
 
                 var body = await response.Content.ReadAsStringAsync();
                 try
@@ -1292,20 +1312,20 @@ namespace Ark.oAuth.Oidc
                     using var doc = JsonDocument.Parse(body);
                     name = doc.RootElement.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? "" : "";
                     if (!doc.RootElement.TryGetProperty("id", out _))
-                        return new { ok = false, msg = $"{node} answered, but not as an ARK-RAPID Watch node does. Check the address." };
+                        return new WatchTestResult(false, $"{node} answered, but not as an ARK-RAPID Watch node does. Check the address.");
                 }
                 catch (JsonException)
                 {
-                    return new { ok = false, msg = $"{node} answered, but not as an ARK-RAPID Watch node does. Check the address." };
+                    return new WatchTestResult(false, $"{node} answered, but not as an ARK-RAPID Watch node does. Check the address.");
                 }
             }
             catch (TaskCanceledException)
             {
-                return new { ok = false, msg = $"No answer from {node} within 10 seconds. Check the address and any firewall between this server and it." };
+                return new WatchTestResult(false, $"No answer from {node} within 10 seconds. Check the address and any firewall between this server and it.");
             }
             catch (HttpRequestException ex)
             {
-                return new { ok = false, msg = $"{node} could not be reached: {Innermost(ex)}" };
+                return new WatchTestResult(false, $"{node} could not be reached: {Innermost(ex)}");
             }
 
             // The key is good. Now one event, through the client itself and with no spool, so
@@ -1328,22 +1348,22 @@ namespace Ark.oAuth.Oidc
                     Outcome = Ark.Watch.Core.Outcome.Success,
                     Action = "audit_trail.test",
                     Domain = ArkWatchDomains.System,
-                    System = "setup",
-                    Message = "Test event from the Ark IdP setup wizard: this server can write to the audit trail."
+                    System = from == "console" ? "console" : "setup",
+                    Message = $"Test event from the Ark IdP {screen}: this server can write to the audit trail."
                 };
                 client.Log(in entry);
                 await client.FlushAsync(TimeSpan.FromSeconds(10));
                 var stats = client.GetStats();
                 var who = name.Length > 0 ? $" as “{name}”" : "";
                 if (stats.Rejected > 0)
-                    return new { ok = false, msg = $"The key is valid{who}, but the node refused the test event. A key can be bound to one application: set the application name below to the one the key was created for." };
+                    return new WatchTestResult(false, $"The key is valid{who}, but the node refused the test event. A key can be bound to one application: set the application name below to the one the key was created for.");
                 if (stats.Sent + stats.Duplicates < 1)
-                    return new { ok = false, msg = $"The key is valid{who}, but the test event was not delivered to {node} (the node answered ingestion with an error, or is under backpressure). Try again in a moment." };
-                return new { ok = true, msg = $"Connected to {node}{who}. A test event was accepted for application “{plan.Application}”." };
+                    return new WatchTestResult(false, $"The key is valid{who}, but the test event was not delivered to {node} (the node answered ingestion with an error, or is under backpressure). Try again in a moment.");
+                return new WatchTestResult(true, $"Connected to {node}{who}. A test event was accepted for application “{plan.Application}”.");
             }
             catch (Exception ex)
             {
-                return new { ok = false, msg = $"The key is valid, but the test event could not be sent: {Innermost(ex)}" };
+                return new WatchTestResult(false, $"The key is valid, but the test event could not be sent: {Innermost(ex)}");
             }
         }
 

@@ -25,17 +25,32 @@
         The audit trail (ark_oauth_server:Watch), drawn only when one is configured: where it goes
         and whether events are arriving. "Waiting" means the node is away and events are held;
         "losing" means some were dropped or refused, which the counters in the tooltip break down.
-        Live figures: GET /api/oauth/v1/watch/status.
+        Live figures: GET /api/oauth/v1/watch/status. For the operator it links to the Audit trail page,
+        where the destination can be changed.
     *@
     @if (ViewBag.AuditTrail is Ark.oAuth.Oidc.ArkWatchStatus audit && audit.enabled)
     {
         var auditHost = Uri.TryCreate(audit.endpoint, UriKind.Absolute, out var auditUri) ? auditUri.Authority : audit.endpoint;
         var auditText = audit.health == "ok" ? "sending" : audit.health == "waiting" ? "waiting for the node" : "losing events";
+        var auditTitle = $"Audit trail to ARK-RAPID Watch at {audit.endpoint} as {audit.application} ({audit.environment})" +
+                         (audit.source == "console" ? ", set in the admin console" : "") +
+                         $". Logged {audit.logged}, sent {audit.sent}, held on disk {audit.spooled}, replayed {audit.replayed}, refused {audit.rejected}, dropped {audit.dropped}, send failures {audit.send_failures}." +
+                         (audit.spool ? "" : " No spool folder: events are held in memory only while the node is away.");
+        var footAuditUrl = ViewBag.IsOperator == true ? ViewBag.AuditUrl as string : null;
         <span class="ark-console-foot-sep" aria-hidden="true"></span>
-        <span class="ark-audit-state" data-health="@audit.health"
-              title="Audit trail to ARK-RAPID Watch at @audit.endpoint as @audit.application (@audit.environment). Logged @audit.logged, sent @audit.sent, held on disk @audit.spooled, replayed @audit.replayed, refused @audit.rejected, dropped @audit.dropped, send failures @audit.send_failures.@(audit.spool ? "" : " No spool folder: events are held in memory only while the node is away.")">
-            <span class="ark-audit-dot" aria-hidden="true"></span>
-            <span>Audit trail: <code>@auditHost</code>, @auditText</span>
-        </span>
+        @if (!string.IsNullOrEmpty(footAuditUrl))
+        {
+            <a class="ark-audit-state" data-health="@audit.health" href="@footAuditUrl" title="@auditTitle">
+                <span class="ark-audit-dot" aria-hidden="true"></span>
+                <span>Audit trail: <code>@auditHost</code>, @auditText</span>
+            </a>
+        }
+        else
+        {
+            <span class="ark-audit-state" data-health="@audit.health" title="@auditTitle">
+                <span class="ark-audit-dot" aria-hidden="true"></span>
+                <span>Audit trail: <code>@auditHost</code>, @auditText</span>
+            </span>
+        }
     }
 </footer>

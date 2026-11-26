@@ -556,17 +556,48 @@ and the key from the environment or a vault, never a file: `ark_oauth_server__Wa
 | `Environment` | the host's environment name | |
 | `SpoolDirectory` | `watch-spool/{machine}` in the setup data directory | Where events wait while the node is away. `none` keeps them in memory only. Each instance needs a folder of its own, which the default gives it. |
 | `IncludeProtocolTrace` | `true` | `false` leaves out the high-volume lines (each authorization request, pushed request, device code and ordinary token) and keeps who-did-what: sign-ins, refusals, agent tokens, revocations, changes. |
+| `AllowConsoleChanges` | `true` | `false` pins the trail to configuration: the console's **Audit trail** page only shows it, and a destination saved there is ignored. Set it where the operator cannot, such as the environment, when the audit destination is a compliance control. |
 
 **It never slows a request or fails one.** An event is written to an in-memory ring and the request
 goes on; a background worker sends it. While the node cannot be reached, events are kept on disk
 and sent in order when it is back, including across a restart of this server. A change to these
 settings takes effect without a restart.
 
+**Changing it while the server runs.** The operator account has an **Audit trail** page in the
+console (`/{tenant_id}/admin/audit`) that shows where events go, where that setting comes from and
+this instance's counters, and changes the destination: turn it on or off, and set the address, key,
+application, environment and protocol trace. Saving tests the destination first (the wizard's test)
+and refuses one that fails, unless you choose to save it anyway for a node that is down for now.
+
+- **No restart, on every instance.** What the page saves is kept in the server's database (table
+  `server_settings`), applies on the instance that saved it at once and on every other instance
+  within the reference-cache window (`Oidc:ReferenceCacheSeconds`, 30 s). It survives a restart and
+  a redeploy, and an instance that starts reads it before it records its own start.
+- **It replaces configuration** (`ark_oauth_server:Watch`, from the settings file, appsettings or
+  the environment) as a whole, apart from `SpoolDirectory`, which stays each instance's own, until
+  **Use the configuration instead** removes it. The page shows both.
+- **The change is itself on the record**, in the trail that stops (before its client is flushed and
+  closed), as the first event of the trail that starts, and in this server's `audit_trace`, with who
+  made it: `audit_trail.update`, `audit_trail.disable` or `audit_trail.revert`, with `from_*`
+  and `to_*` attributes. Turning the trail off is the last thing the old destination receives.
+- **A key is only sent to its own server.** Left blank, the key in use is kept, but only for an
+  address on the same scheme, host and port as the one it was saved for; pointing the trail
+  anywhere else needs the key entered again. No page or response carries a key, only a hint
+  (`arkw_sk_…9f2c`). A key saved here is stored in the database, like the signing keys.
+- Events still waiting to be sent when the destination changes are sent to the new one, under the
+  application name they were recorded with.
+- Export, import and factory reset leave `server_settings` alone: it belongs to the deployment, and
+  an export of production loaded into a test server must not send the test server's trail to
+  production.
+- Scripts use the same API with the machine client's `client.register` token:
+  `GET /api/oauth/v1/watch/settings`, `POST …/watch/test`, `POST …/watch/settings`,
+  `POST …/watch/settings/remove` (see API-GUIDE.md).
+
 **Is it working?** The console's footer shows *Audit trail: host, sending* (or *waiting for the
-node*, or *losing events*), with the counters in its tooltip, and
-`GET /api/oauth/v1/watch/status` returns them: `logged`, `sent`, `spooled`, `replayed`, `rejected`,
-`dropped`, `send_failures`, `health`. `rejected` above zero usually means the key belongs to
-another application name. The key is never returned.
+node*, or *losing events*), with the counters in its tooltip and, for the operator, a link to the
+page; `GET /api/oauth/v1/watch/status` returns them: `logged`, `sent`, `spooled`, `replayed`, `rejected`,
+`dropped`, `send_failures`, `health`, and `source` (`console`, `configuration` or `none`). `rejected`
+above zero usually means the key belongs to another application name. The key is never returned.
 
 It is independent of `EnableLogTrace`, which is about the trace this server keeps in its own
 database: either can be on without the other.
@@ -652,7 +683,8 @@ An agent of your own can do all of this too, over MCP; see [MCP.md](MCP.md).
 The optional **Audit trail** step asks for an ARK-RAPID Watch address and key, tests them — the
 address, the key, then one real event — and writes them to `settings.json` as
 `ark_oauth_server:Watch`. Skipped, the section is not written and nothing is sent. A folder
-`watch-spool/` appears beside the settings once it is on.
+`watch-spool/` appears beside the settings once it is on. Either way it can be set or changed later
+on the console's **Audit trail** page, with no restart.
 
 `settings.json` is read as configuration on every start. It is inserted **after appsettings.json and
 before user secrets, environment variables and the command line**, so any value it holds can still

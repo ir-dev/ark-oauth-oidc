@@ -520,6 +520,34 @@ legend {
 .ark-audit-state[data-health="ok"] .ark-audit-dot { background: var(--ark-success); }
 .ark-audit-state[data-health="waiting"] .ark-audit-dot { background: var(--ark-warn); }
 .ark-audit-state[data-health="losing"] .ark-audit-dot { background: var(--ark-danger); }
+a.ark-audit-state { color: inherit; text-decoration: none; }
+a.ark-audit-state:hover span:last-child { text-decoration: underline; }
+/* The Audit trail page (/{tenant}/admin/audit). */
+.ark-audit-headline { margin: 0 0 14px; font-size: calc(14px * var(--ark-text-scale, 1)); display: grid; gap: 6px; }
+.ark-audit-headline .ark-audit-dot { width: 10px; height: 10px; flex: none; }
+.ark-audit-why { color: var(--ark-fg-muted); font-size: calc(13px * var(--ark-text-scale, 1)); }
+.ark-audit-counters { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+.ark-audit-counter {
+    padding: 4px 10px; border: 1px solid var(--ark-border); border-radius: 999px;
+    background: var(--ark-surface-2); font-size: calc(12.5px * var(--ark-text-scale, 1));
+    color: var(--ark-fg-muted); font-variant-numeric: tabular-nums;
+}
+.ark-audit-counter strong { color: var(--ark-fg); }
+.ark-audit-counter[data-bad="true"] { background: var(--ark-danger-soft); color: var(--ark-danger); border-color: color-mix(in srgb, var(--ark-danger) 35%, transparent); }
+.ark-audit-counter[data-bad="true"] strong { color: var(--ark-danger); }
+.ark-audit-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.ark-audit-fieldset:disabled { opacity: .6; }
+.ark-audit-keyrow { display: flex; gap: 8px; align-items: center; }
+.ark-audit-keyrow input { flex: 1; min-width: 0; }
+#au-key-note code { white-space: nowrap; }
+.ark-audit-result {
+    margin: 12px 0 4px; padding: 8px 12px; border-radius: var(--ark-radius-sm);
+    font-size: calc(13px * var(--ark-text-scale, 1)); border: 1px solid var(--ark-border); background: var(--ark-surface-2);
+}
+.ark-audit-result[data-ok="true"] { border-color: color-mix(in srgb, var(--ark-success) 40%, transparent); color: var(--ark-success); background: var(--ark-success-soft); }
+.ark-audit-result[data-ok="false"] { border-color: color-mix(in srgb, var(--ark-danger) 40%, transparent); color: var(--ark-danger); background: var(--ark-danger-soft); }
+/* These set display, which would otherwise win over the hidden attribute the page toggles. */
+.ark-audit-result[hidden], .ark-audit-counters[hidden], .ark-provision-actions[hidden] { display: none; }
 
 /* ---------- drawer ---------- */
 .ark-drawer-backdrop {

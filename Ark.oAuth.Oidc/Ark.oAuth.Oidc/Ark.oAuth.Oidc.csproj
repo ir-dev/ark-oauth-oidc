@@ -100,6 +100,13 @@ configuration are as in 2.4.2.
 * **The console lists every MCP endpoint**, for the operator, at /{tenant}/admin/mcp: search, filter by
   tenant and level, and open the documents of each in a new tab. GET /api/oauth/v1/mcp/endpoints
   returns the same list.
+* **The audit trail's destination can be changed while the server runs**, for the operator, at
+  /{tenant}/admin/audit (and /api/oauth/v1/watch/settings): on or off, address, key, application,
+  environment, protocol trace. Tested before it is saved; kept in the database, so it reaches every
+  instance within Oidc:ReferenceCacheSeconds and survives a restart; replaces ark_oauth_server:Watch
+  until removed. The change is recorded in the trail that stops and the one that starts. A key is
+  only ever sent to its own server. Watch:AllowConsoleChanges=false pins the trail to configuration.
+  Schema: one table, server_settings, added on the first start.
 * Settings under ark_oauth_server:Mcp (Enabled, HostLevel, TenantLevel, ClientLevel, ReadOnly,
   AllowClientSecret, MaxRequestKilobytes). See MCP.md.
 * Discovery is also served at /.well-known/oauth-authorization-server/{tenant} and

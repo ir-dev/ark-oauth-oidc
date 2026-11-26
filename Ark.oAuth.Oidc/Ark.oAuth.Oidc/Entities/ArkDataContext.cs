@@ -27,6 +27,8 @@ namespace Ark.oAuth.Oidc
         public virtual DbSet<ArkScope> scopes { get; set; }
         /// <summary>The ASP.NET Core data-protection key ring, when it is kept here — see <see cref="ArkDataProtectionKey"/>.</summary>
         public virtual DbSet<ArkDataProtectionKey> data_protection_keys { get; set; }
+        /// <summary>Settings an operator changed in the console, for every instance — see <see cref="ArkServerSetting"/>.</summary>
+        public virtual DbSet<ArkServerSetting> server_settings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

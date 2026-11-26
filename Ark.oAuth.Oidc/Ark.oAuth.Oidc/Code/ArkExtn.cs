@@ -158,6 +158,9 @@ namespace Ark.oAuth.Oidc
         /// above — the setup wizard, which runs the same <see cref="BootstrapDatabaseAsync"/> with
         /// the values it collected and must not have the first request after it do it again.
         /// </summary>
+        /// <summary>Whether this process has bootstrapped the database: its schema is complete from here on.</summary>
+        internal static bool DataInitialized => Volatile.Read(ref _dataInitialized) != 0;
+
         internal static void MarkDataInitialized()
         {
             Interlocked.Exchange(ref _dataInitialized, 1);
@@ -789,6 +792,9 @@ namespace Ark.oAuth.Oidc
             // names one. Until then this is an object that answers "no" (see ArkWatchAudit). The
             // accessor is how an event learns the caller's address and who is signed in.
             services.AddHttpContextAccessor();
+            // Where the operator can move it to at run time: the console's Audit trail page,
+            // kept in the database so that every instance follows (see ArkWatchConsoleSettings).
+            services.AddSingleton<ArkWatchConsoleSettings>();
             services.AddSingleton<ArkWatchAudit>();
             services.AddHostedService<ArkWatchLifetime>();
             services.AddScoped<DataAccess>();

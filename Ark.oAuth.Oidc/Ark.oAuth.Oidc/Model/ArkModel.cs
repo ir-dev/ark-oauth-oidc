@@ -227,6 +227,15 @@
         /// through the console or the management API. Default true.
         /// </summary>
         public bool IncludeProtocolTrace { get; set; } = true;
+        /// <summary>
+        /// Whether the operator may change the destination in the admin console (the <b>Audit
+        /// trail</b> page). Settings saved there are kept in the database, reach every instance
+        /// without a restart and take precedence over this section until they are removed. False
+        /// pins the trail to configuration: the page only shows it, the API refuses changes, and a
+        /// destination saved there earlier is ignored. Default true. Set it where the operator
+        /// cannot, such as the environment, when the audit destination is a compliance control.
+        /// </summary>
+        public bool AllowConsoleChanges { get; set; } = true;
 
         /// <summary>The application name events are filed under when none is configured.</summary>
         public const string DefaultApplication = "ark-idp";

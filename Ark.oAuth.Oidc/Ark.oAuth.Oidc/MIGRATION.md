@@ -204,6 +204,25 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
     carries `setup_link`. A configured server, or one without the setting, behaves exactly as before.
     A host that overrides `Views/Admin/_ConsoleHeader.cshtml` has no link to it until it adds one
     (`ViewBag.McpEnabled`, `ViewBag.McpUrl`). The public documents beside an endpoint are now indented JSON.
+  - Console: an **Audit trail** page for the operator, `/{tenant}/admin/audit`, that changes the audit trail's
+    destination at run time, over `GET /api/oauth/v1/watch/settings`, `POST …/watch/test`, `POST …/watch/settings`
+    and `POST …/watch/settings/remove`. Nothing changes until somebody saves there: configuration applies as before.
+    - **Schema:** one table, `server_settings` (`name` key, `value`, `updated_at`, `updated_by`), added by the
+      start-up sync on every provider; empty until a save. A database managed by hand needs it created
+      (the model's DDL). 2.4.2 opens the upgraded database and ignores the table.
+    - **Precedence:** a destination saved there replaces `ark_oauth_server:Watch` (settings file, appsettings,
+      environment), apart from `SpoolDirectory`, on every instance, until it is removed on the page. Before this,
+      an environment variable always won. **`ark_oauth_server:Watch:AllowConsoleChanges = false`** restores that:
+      the page is read-only, the routes answer 403 and a saved destination is ignored. Set it on a deployment
+      where the audit destination is a compliance control the operator must not change.
+    - **Cost:** the instance that saves applies it at once; every instance reads one row at start-up and, while
+      it records events, at most once per `Oidc:ReferenceCacheSeconds` (30 s, minimum 5), off the request path.
+      `AllowConsoleChanges = false` removes those reads.
+    - Every change is recorded (`audit_trail.update`, `.disable`, `.revert`) in the trail that stops, the one
+      that starts and `audit_trace`, whatever `EnableLogTrace` says. `GET v1/watch/status` carries `source`.
+    - Export, import and factory reset skip `server_settings`.
+    - A host that overrides `Views/Admin/_ConsoleHeader.cshtml` has no link to the page until it adds one
+      (`ViewBag.AuditUrl`, operator only).
   - No new dependency. **Upgrade action:** none.
 
 - **2.4.2 — agent-to-agent (A2A) tokens; inert until an operator lists a caller.**

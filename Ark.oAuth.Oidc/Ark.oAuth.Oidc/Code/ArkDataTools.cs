@@ -356,6 +356,11 @@ namespace Ark.oAuth.Oidc
                 // exporting it would put the keys behind every console cookie into a file, and a
                 // reset or a replace-import that emptied it would sign every operator out mid-way.
                 if (et.ClrType == typeof(ArkDataProtectionKey)) continue;
+                // So do the settings changed in the console. One is the audit trail's destination
+                // and its key: an export of production loaded into a test server would have the
+                // test server write into production's audit trail, and a reset would quietly send
+                // the record of the reset itself back to whatever the configuration says.
+                if (et.ClrType == typeof(ArkServerSetting)) continue;
                 var name = et.GetTableName()!;
                 var pk = et.FindPrimaryKey();
                 if (pk == null) continue;

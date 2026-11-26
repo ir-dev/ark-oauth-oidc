@@ -17,9 +17,10 @@
      * No third-party helper libraries. Tabulator is the single external
        dependency, pinned; the toast and DOM helpers below are ~20 lines.
 
-   One script, four pages. The console (/{tenant}/admin), the provisioning page
-   (/{tenant}/admin/provisioning), the MCP page (/{tenant}/admin/mcp) and the data
-   page (/{tenant}/admin/data) share it, and none of them draws all of it, so every
+   One script, five pages. The console (/{tenant}/admin), the provisioning page
+   (/{tenant}/admin/provisioning), the MCP page (/{tenant}/admin/mcp), the audit
+   trail page (/{tenant}/admin/audit) and the data page (/{tenant}/admin/data)
+   share it, and none of them draws all of it, so every
    section here is wired only when the elements it drives are actually present —
    see byId/on/fillSelect below. A section that binds blindly throws on the page
    that does not have it, which stops the script before the sections that page
@@ -2331,6 +2332,282 @@
     on("mcp-tenant", "change", renderMcp);
     on("mcp-level", "change", renderMcp);
 
+    // ----------------------------------------------------------- audit trail
+
+    /*
+     * The Audit trail page (/{tenant}/admin/audit), over /api/oauth/v1/watch/settings. Addresses,
+     * names and who saved what come from configuration and from other operators, so they reach the
+     * page through textContent only. No response carries a key, only a hint such as arkw_sk_…9f2c.
+     */
+    var auditData = null;
+    // The wizard's field names, which the server's refusals use, to this page's inputs.
+    var AUDIT_FIELDS = {
+        watch_endpoint: "au-endpoint", watch_api_key: "au-key",
+        watch_application: "au-application", watch_environment: "au-environment"
+    };
+    var AUDIT_HEALTH = {
+        waiting: "Holding events: the audit server is not answering. They are sent, in order, when it is back.",
+        losing: "Losing events: some were refused or dropped. The counters below say which."
+    };
+
+    /** The settings in effect: the console's when it saved some, else configuration's, else null. */
+    function auditInEffect(d) {
+        if (d.source === "console" && d.console) return d.console.settings;
+        if (d.source === "configuration") return d.configuration;
+        return null;
+    }
+
+    function kvRow(list, term, value, asCode) {
+        list.appendChild(node("dt", null, term));
+        var dd = list.appendChild(node("dd"));
+        if (value === null || value === undefined || value === "") dd.appendChild(node("span", "ark-hint", "—"));
+        else if (asCode) dd.appendChild(node("code", null, String(value)));
+        else dd.textContent = String(value);
+        return dd;
+    }
+
+    function auditWhen(iso) {
+        var date = new Date(iso);
+        return isNaN(date.getTime()) ? String(iso || "") : date.toLocaleString();
+    }
+
+    function auditHost(url) {
+        try { return new URL(url).host; } catch (e) { return url || ""; }
+    }
+
+    function loadAudit(fillForm) {
+        return getJson(API + "/watch/settings").then(function (res) {
+            if (res.error) throw new Error(res.msg);
+            auditData = res.data;
+            renderAudit();
+            if (fillForm) fillAuditForm();
+        });
+    }
+
+    function renderAudit() {
+        var d = auditData;
+        var s = d.status || {};
+        var effect = auditInEffect(d);
+
+        var head = byId("au-headline");
+        head.textContent = "";
+        var health = s.enabled ? (s.health || "ok") : "off";
+        var state = head.appendChild(node("span", "ark-audit-state"));
+        state.dataset.health = health;
+        state.appendChild(node("span", "ark-audit-dot")).setAttribute("aria-hidden", "true");
+        if (s.enabled) {
+            var line = state.appendChild(node("span"));
+            line.appendChild(node("strong", null, health === "ok" ? "Sending" : health === "waiting" ? "Holding events" : "Losing events"));
+            line.appendChild(document.createTextNode(" to "));
+            line.appendChild(node("code", null, auditHost(s.endpoint)));
+            line.appendChild(document.createTextNode(" as "));
+            line.appendChild(node("code", null, s.application || ""));
+            line.appendChild(document.createTextNode(" (" + (s.environment || "") + ")."));
+            if (health !== "ok") head.appendChild(node("span", "ark-audit-why", AUDIT_HEALTH[health] || ""));
+        } else {
+            var off = state.appendChild(node("span"));
+            off.appendChild(node("strong", null, "Not sending"));
+            off.appendChild(document.createTextNode(s.reason ? ": " + s.reason + "." : "."));
+        }
+
+        var list = byId("au-effective");
+        list.textContent = "";
+        list.appendChild(node("dt", null, "Settings from"));
+        var from = list.appendChild(node("dd"));
+        if (d.source === "console" && d.console) {
+            from.appendChild(node("span", "ark-badge ark-badge-agent", "console"));
+            from.appendChild(document.createTextNode(" saved " + auditWhen(d.console.updated_at) +
+                (d.console.updated_by ? " by " + d.console.updated_by : "")));
+        } else if (d.source === "configuration") {
+            from.appendChild(node("span", "ark-badge ark-badge-off", "configuration"));
+            from.appendChild(document.createTextNode(" ark_oauth_server:Watch"));
+        } else {
+            from.appendChild(node("span", "ark-badge ark-badge-off", "nothing"));
+            from.appendChild(document.createTextNode(" no destination is set anywhere"));
+        }
+        if (effect) {
+            kvRow(list, "Address", effect.endpoint, true);
+            kvRow(list, "Application", effect.application || d.defaults.application, true);
+            kvRow(list, "Environment", effect.environment || d.defaults.environment);
+            kvRow(list, "API key", effect.key, true);
+            kvRow(list, "Protocol trace", effect.include_protocol_trace ? "included" : "left out (who-did-what only)");
+        }
+        if (s.enabled) kvRow(list, "Spool", s.spool
+            ? "on disk on this instance: events wait there while the audit server is away"
+            : "none: events are held in memory only while the audit server is away");
+
+        var counters = byId("au-counters");
+        counters.textContent = "";
+        counters.hidden = !s.enabled;
+        if (s.enabled) {
+            [["logged", s.logged], ["sent", s.sent], ["held on disk", s.spooled], ["replayed", s.replayed],
+             ["refused", s.rejected], ["dropped", s.dropped], ["send failures", s.send_failures]].forEach(function (c) {
+                var chip = counters.appendChild(node("span", "ark-audit-counter"));
+                if ((c[0] === "refused" || c[0] === "dropped") && c[1] > 0) chip.dataset.bad = "true";
+                chip.appendChild(node("strong", null, String(c[1] || 0)));
+                chip.appendChild(document.createTextNode(" " + c[0]));
+            });
+        }
+        byId("au-instance").textContent = "Figures and state are this instance's (" + d.instance +
+            "): each instance sends its own events. The counters start again when the destination changes.";
+        byId("au-window").textContent = String(d.refresh_seconds);
+
+        // Configuration, and whether it is the one in effect.
+        var allowed = d.allow_console_changes;
+        byId("au-precedence").textContent = !allowed
+            ? "Configuration is in effect, and the console cannot change it."
+            : d.source === "console"
+            ? "Not in effect: the destination saved in this console replaces it, on every instance, until you remove that."
+            : d.source === "configuration"
+            ? "In effect. A destination saved in this console would replace it, on every instance, until removed again."
+            : "Configuration names no destination. Save one above, or set ark_oauth_server:Watch.";
+        var config = byId("au-config");
+        config.textContent = "";
+        if (d.configuration) {
+            var c = d.configuration;
+            kvRow(config, "Sending", c.enabled ? "on" : "off (Enabled is false)");
+            kvRow(config, "Address", c.endpoint, true);
+            kvRow(config, "Application", c.application || d.defaults.application + " (default)", true);
+            kvRow(config, "Environment", c.environment || d.defaults.environment + " (default)");
+            kvRow(config, "API key", c.key || "not set", true);
+            kvRow(config, "Protocol trace", c.include_protocol_trace ? "included" : "left out");
+        } else {
+            kvRow(config, "Address", null);
+        }
+        kvRow(config, "Spool folder", (d.configuration && d.configuration.spool_directory) ||
+            "default: watch-spool/{machine} in the data directory");
+        byId("au-revert-row").hidden = !(allowed && d.source === "console");
+
+        byId("au-locked").hidden = allowed;
+        byId("au-fieldset").disabled = !allowed;
+    }
+
+    function fillAuditForm() {
+        var d = auditData;
+        var effect = auditInEffect(d) || {};
+        byId("au-enabled").checked = d.source !== "none" && !!effect.enabled;
+        byId("au-endpoint").value = effect.endpoint || "";
+        byId("au-key").value = "";
+        byId("au-application").value = effect.application || "";
+        byId("au-application").placeholder = d.defaults.application;
+        byId("au-environment").value = effect.environment || "";
+        byId("au-environment").placeholder = d.defaults.environment;
+        byId("au-trace").checked = effect.include_protocol_trace !== false;
+
+        var note = byId("au-key-note");
+        note.textContent = "";
+        if (effect.key) {
+            note.appendChild(document.createTextNode("Leave blank to keep the key in use ("));
+            note.appendChild(node("code", null, effect.key));
+            note.appendChild(document.createTextNode("). An address on another server needs the key entered again."));
+        } else {
+            note.appendChild(document.createTextNode("A "));
+            note.appendChild(node("strong", null, "secret"));
+            note.appendChild(document.createTextNode(" key of the node (Admin → Applications there)."));
+        }
+        syncAuditForm();
+        auditResult(null);
+    }
+
+    function syncAuditForm() {
+        var enabled = byId("au-enabled").checked;
+        byId("au-fields").hidden = !enabled;
+        byId("au-test").hidden = !enabled;
+        byId("au-save").textContent = enabled ? "Save" : "Save: turn the audit trail off";
+        byId("au-http").hidden = !enabled || !/^http:\/\//i.test(byId("au-endpoint").value.trim());
+        byId("au-save-anyway").hidden = true;
+    }
+
+    function auditPayload(skipTest) {
+        return {
+            enabled: byId("au-enabled").checked,
+            endpoint: byId("au-endpoint").value.trim(),
+            api_key: byId("au-key").value.trim(),
+            application: byId("au-application").value.trim(),
+            environment: byId("au-environment").value.trim(),
+            include_protocol_trace: byId("au-trace").checked,
+            skip_test: !!skipTest
+        };
+    }
+
+    /** Shows a result under the form; null clears it. */
+    function auditResult(ok, message) {
+        var box = byId("au-result");
+        box.hidden = ok === null;
+        box.textContent = message || "";
+        box.dataset.ok = ok ? "true" : "false";
+    }
+
+    function auditRefused(err) {
+        var p = err.payload || {};
+        auditResult(false, err.message);
+        var input = p.field && byId(AUDIT_FIELDS[p.field]);
+        if (input) input.focus();
+        return p;
+    }
+
+    function auditBusy(busy) {
+        ["au-test", "au-save", "au-save-anyway", "au-revert"].forEach(function (id) {
+            var b = byId(id);
+            if (b) b.disabled = busy;
+        });
+    }
+
+    function saveAudit(skipTest) {
+        var body = auditPayload(skipTest);
+        var wasOn = auditData && auditData.status && auditData.status.enabled;
+        if (!body.enabled && wasOn &&
+            !window.confirm("Turn the audit trail off on every instance? The last event the audit server receives says who turned it off.")) return;
+        auditBusy(true);
+        auditResult(true, body.enabled && !skipTest ? "Testing, then saving…" : "Saving…");
+        postJson(API + "/watch/settings", body).then(function (res) {
+            auditData = res.data;
+            renderAudit();
+            fillAuditForm();
+            auditResult(true, res.msg);
+            toast("s", body.enabled ? "audit trail saved" : "audit trail turned off", 3000);
+        }).catch(function (err) {
+            var p = auditRefused(err);
+            byId("au-save-anyway").hidden = !(p.data && p.data.can_skip);
+        }).then(function () { auditBusy(false); });
+    }
+
+    on("au-enabled", "change", syncAuditForm);
+    on("au-endpoint", "input", syncAuditForm);
+    on("au-key-show", "click", function () {
+        var input = byId("au-key");
+        var show = input.type === "password";
+        input.type = show ? "text" : "password";
+        this.textContent = show ? "Hide" : "Show";
+        this.setAttribute("aria-pressed", show ? "true" : "false");
+    });
+    on("au-test", "click", function () {
+        auditBusy(true);
+        auditResult(true, "Testing…");
+        postJson(API + "/watch/test", auditPayload(false)).then(function (res) {
+            auditResult(!!(res.data && res.data.ok), res.msg);
+        }).catch(auditRefused).then(function () { auditBusy(false); });
+    });
+    on("au-form", "submit", function (e) {
+        e.preventDefault();
+        saveAudit(false);
+    });
+    on("au-save-anyway", "click", function () { saveAudit(true); });
+    on("au-revert", "click", function () {
+        if (!window.confirm("Remove the destination saved in the console? Every instance goes back to what configuration says.")) return;
+        auditBusy(true);
+        postJson(API + "/watch/settings/remove", {}).then(function (res) {
+            auditData = res.data;
+            renderAudit();
+            fillAuditForm();
+            auditResult(true, res.msg);
+            toast("s", "configuration applies again", 3000);
+        }).catch(auditRefused).then(function () { auditBusy(false); });
+    });
+    on("au-refresh", "click", function () {
+        loadAudit(false).catch(function (err) { toast("f", err.message, 6000); });
+    });
+
     // ----------------------------------------------------------------- start
 
     // Each page loads what it draws. The provisioning page needs the three lists its selects and
@@ -2343,6 +2620,8 @@
         ? loadDataSummary()
         : PAGE === "mcp"
         ? loadMcp()
+        : PAGE === "audit"
+        ? loadAudit(true)
         : Promise.all([loadTenants(), loadScopes(), loadClaims()])
             .then(loadClients)
             .then(loadUsers)

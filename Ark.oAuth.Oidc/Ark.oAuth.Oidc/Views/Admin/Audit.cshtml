@@ -1,0 +1,148 @@
+@*
+    The audit trail: where this server's record of who did what goes (an ARK-RAPID Watch node), how
+    that is going on this instance, and a form to change the destination while the server runs.
+
+    A destination saved here is kept in the database, applies on this instance at once and on every
+    other within the reference-cache window, and replaces ark_oauth_server:Watch until it is removed.
+    The change itself is recorded in the trail that closes and the one that opens. The page is a shell:
+    everything comes from the management API (/api/oauth/v1/watch/...), so a script gets the same.
+
+    Operator only (AdminController.Audit). Self-contained for the same reason the other console pages
+    are: a view rendered out of a NuGet package cannot assume the host has a layout or tag helpers.
+*@
+@{
+    Layout = null;
+    Ark.oAuth.Oidc.Controllers.AdminController.ConsolePolicy(Context.Response);
+    var tenant = ViewBag.Tenant as Ark.oAuth.ArkTenant;
+    var title = tenant?.display ?? tenant?.name ?? (ViewBag.TenantId as string);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin" />
+    <title>Audit trail — @title</title>
+    <link href="@ViewBag.ConsoleCss" rel="stylesheet" />
+    <link href="@ViewBag.ThemeCss" rel="stylesheet" />
+    @* Not deferred: applies the viewer's saved theme and text size before the first paint. *@
+    <script src="@ViewBag.ThemeJs"></script>
+</head>
+<body>
+@await Html.PartialAsync("_ConsoleHeader")
+
+<main class="ark-main"
+      id="ark-admin"
+      data-page="audit"
+      data-app-root="@ViewBag.AppRoot"
+      data-tenant-id="@ViewBag.TenantId">
+
+    @* Where events go now, where that comes from, and this instance's counters. *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Audit trail</h2>
+            <span class="ark-hint">where this server's record of sign-ins, tokens, changes and agent calls is sent</span>
+            <span class="ark-spacer"></span>
+            <button type="button" class="ark-btn-ghost ark-btn-sm" id="au-refresh">Refresh</button>
+        </div>
+        <div class="ark-panel-body">
+            <p class="ark-audit-headline" id="au-headline" aria-live="polite"><span class="ark-empty">Loading…</span></p>
+            <dl class="ark-kv" id="au-effective"></dl>
+            <div class="ark-audit-counters" id="au-counters" hidden></div>
+            <p class="ark-note" id="au-instance"></p>
+        </div>
+    </section>
+
+    @* The form. Disabled, with the reason, when configuration pins the trail. *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Change the destination</h2>
+            <span class="ark-hint">takes effect without a restart</span>
+        </div>
+        <div class="ark-panel-body">
+            <div class="ark-alert ark-alert-warn" id="au-locked" hidden>
+                The audit trail is pinned to configuration: <code>ark_oauth_server:Watch:AllowConsoleChanges</code> is
+                <code>false</code>. Change it where it is set (the environment, a settings file) to manage it here.
+            </div>
+            <form id="au-form" novalidate>
+                <fieldset class="ark-audit-fieldset" id="au-fieldset">
+                    <div class="ark-check">
+                        <input type="checkbox" id="au-enabled" />
+                        <label for="au-enabled">Send the audit trail to ARK-RAPID Watch</label>
+                    </div>
+                    <div id="au-fields">
+                        <div class="ark-grid-2">
+                            <div class="ark-field">
+                                <label for="au-endpoint">Audit server address <span class="ark-req">required</span></label>
+                                <input type="url" id="au-endpoint" placeholder="https://audit.example.com" spellcheck="false" autocomplete="off" />
+                                <div class="ark-note">The address of the ARK-RAPID Watch node, as this server reaches it.</div>
+                            </div>
+                            <div class="ark-field">
+                                <label for="au-key">API key</label>
+                                <div class="ark-audit-keyrow">
+                                    <input type="password" id="au-key" placeholder="arkw_sk_…" spellcheck="false" autocomplete="new-password" />
+                                    <button type="button" class="ark-btn-ghost ark-btn-sm" id="au-key-show" aria-controls="au-key" aria-pressed="false">Show</button>
+                                </div>
+                                <div class="ark-note" id="au-key-note">A <strong>secret</strong> key of the node (Admin → Applications there).</div>
+                            </div>
+                            <div class="ark-field">
+                                <label for="au-application">Application name</label>
+                                <input type="text" id="au-application" maxlength="100" placeholder="ark-idp" spellcheck="false" autocomplete="off" />
+                                <div class="ark-note">What the events are filed under. A key created for one application accepts only that name.</div>
+                            </div>
+                            <div class="ark-field">
+                                <label for="au-environment">Environment</label>
+                                <input type="text" id="au-environment" maxlength="60" spellcheck="false" autocomplete="off" />
+                            </div>
+                        </div>
+                        <div class="ark-check">
+                            <input type="checkbox" id="au-trace" />
+                            <label for="au-trace">Include the protocol trace <span class="ark-hint">(every authorization request, pushed request, device code and ordinary token; off keeps who-did-what only)</span></label>
+                        </div>
+                        <div class="ark-alert ark-alert-warn" id="au-http" hidden>
+                            This address is plain http. The API key and every audit event cross it unencrypted: use it only inside a private network.
+                        </div>
+                    </div>
+                    <div class="ark-provision-actions">
+                        <button type="button" class="ark-btn-ghost" id="au-test">Test connection</button>
+                        <button type="submit" id="au-save">Save</button>
+                        <button type="button" class="ark-btn-ghost" id="au-save-anyway" hidden>Save without a passing test</button>
+                    </div>
+                </fieldset>
+            </form>
+            <p class="ark-audit-result" id="au-result" role="status" aria-live="polite" hidden></p>
+            <p class="ark-note">
+                Saving tests the destination first. It applies on this instance at once and on every other instance
+                within <span id="au-window">30</span> seconds, with no restart. The change is recorded in the trail that
+                stops, then as the first event of the trail that starts, and in this server's own audit log. Events
+                still waiting to be sent when you switch go to the new server, under the application name they were
+                recorded with. The key is kept in this server's database, like its signing keys, and is never shown again.
+            </p>
+        </div>
+    </section>
+
+    @* What the host's configuration says, and the way back to it. *@
+    <section class="ark-panel">
+        <div class="ark-panel-head">
+            <h2>Configuration</h2>
+            <span class="ark-hint"><code>ark_oauth_server:Watch</code> from the settings file, appsettings or the environment</span>
+        </div>
+        <div class="ark-panel-body">
+            <p class="ark-note" id="au-precedence"></p>
+            <dl class="ark-kv" id="au-config"></dl>
+            <div class="ark-provision-actions" id="au-revert-row" hidden>
+                <button type="button" class="ark-btn-ghost" id="au-revert">Use the configuration instead</button>
+                <span class="ark-note" style="margin:0">Removes the destination saved in the console. The change is recorded the same way.</span>
+            </div>
+        </div>
+    </section>
+</main>
+
+@await Html.PartialAsync("_ConsoleFooter")
+
+<div class="ark-toasts" id="ark-toasts" aria-live="polite"></div>
+
+<script src="@ViewBag.ConsoleJs"></script>
+</body>
+</html>

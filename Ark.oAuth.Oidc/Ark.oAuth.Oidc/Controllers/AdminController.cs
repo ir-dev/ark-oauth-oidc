@@ -172,6 +172,27 @@ namespace Ark.oAuth.Oidc.Controllers
 
         private bool McpEnabled => global::Ark.oAuth.Oidc.Mcp.ArkMcpDirectory.Any(ServerConfig.Mcp);
 
+        /// <summary>
+        /// The audit trail: where this server's record of who did what is sent, how that is going,
+        /// and a form to change the destination while the server runs (see
+        /// <see cref="ArkAuditTrailController"/>, which the page drives).
+        ///
+        /// Operator only: it can turn the record of the operator's own actions off. Always there,
+        /// since the trail is part of every server; read-only when configuration pins it
+        /// (<c>Watch:AllowConsoleChanges = false</c>).
+        /// </summary>
+        [HttpGet("/{tenant_id}/admin/audit")]
+        public async Task<IActionResult> Audit([FromRoute] string tenant_id)
+        {
+            var tenant = await _da.GetTenant(tenant_id);
+            if (tenant == null) return NotFound($"unknown tenant '{tenant_id}'.");
+            if (!await IsOperatorAsync())
+                return StatusCode(403, "The audit trail settings are restricted to the administrator account.");
+
+            await BuildConsoleViewAsync(tenant, "audit");
+            return View();
+        }
+
         /// <summary>Whether the host registered the webhook module (<c>AddArkWebhooks()</c>).</summary>
         private bool WebhooksEnabled =>
             HttpContext.RequestServices.GetService(typeof(global::Ark.oAuth.Oidc.Webhooks.ArkWebhookRegistry)) != null;
@@ -244,6 +265,7 @@ namespace Ark.oAuth.Oidc.Controllers
             ViewBag.WebhooksEnabled = WebhooksEnabled;
             ViewBag.McpUrl = $"{appRoot}/{tenant.tenant_id}/admin/mcp";
             ViewBag.McpEnabled = McpEnabled;
+            ViewBag.AuditUrl = $"{appRoot}/{tenant.tenant_id}/admin/audit";
         }
 
         /// <summary>Whether the signed-in principal is the operator account, as of now — see <see cref="ArkOperator"/>.</summary>

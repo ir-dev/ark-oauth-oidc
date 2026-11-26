@@ -129,6 +129,14 @@ badge and the audit trail. A label only; null on a save keeps the stored value.
 | `Environment` | host environment name | |
 | `SpoolDirectory` | `{Setup:DataPath}/watch-spool/{machine}` | `none` = memory only. |
 | `IncludeProtocolTrace` | `true` | `false` drops the per-request lines (`authorization.grant`, `authorization.push`, `device.request`, `token.issue`, `session.notify`). |
+| `AllowConsoleChanges` | `true` | `false`: the console's Audit trail page is read-only, the `v1/watch/test`, `v1/watch/settings` and `…/remove` routes answer 403 `console_changes_off`, and a destination saved there is ignored (and not read). |
+
+A destination saved on the console's **Audit trail** page (`/{tenant}/admin/audit`, operator only) is
+kept in `server_settings` (row `watch`, `ArkServerSetting`; `Code/ArkWatchSettings.cs`) and replaces this
+section, except `SpoolDirectory`, until removed. The instance that saves applies it at once; others read
+the row in the background, at most once per `Oidc:ReferenceCacheSeconds` (minimum 5) while events are
+recorded, and once at start-up (skipped for a SQLite file that does not exist yet). Export, import and
+reset skip the table.
 
 Events are raised by every `DataAccess.Log` / `Record` / `LogError` call (mapped in `ArkWatchMap`,
 `Code/ArkWatch.cs`) and, in full, by the agent-to-agent paths (`Protocol/ArkAgentAudit.cs`). Record one
@@ -290,7 +298,8 @@ Configuration, all optional (`ark_oauth_server:Management`):
 |---|---|
 | Tenants | `v1/tenant/list`, `v1/tenant/upsert` |
 | Clients | `v1/client/list`, `v1/client/upsert`, `v1/client/delete`, `v1/client/secret/reset` |
-| Audit trail | `GET v1/watch/status` → `{ enabled, reason, endpoint, application, environment, spool, protocol_trace, logged, sent, spooled, replayed, rejected, dropped, send_failures, breaker, health }` (never the key) |
+| Audit trail | `GET v1/watch/status` → `{ enabled, reason, source, endpoint, application, environment, spool, protocol_trace, logged, sent, spooled, replayed, rejected, dropped, send_failures, breaker, health }` (never the key; `source` is `console`, `configuration` or `none`) |
+| Audit trail destination | `GET v1/watch/settings` → `{ allow_console_changes, source, console: { updated_at, updated_by, settings } \| null, configuration \| null, defaults, refresh_seconds, instance, status }`, each settings object `{ enabled, endpoint, application, environment, include_protocol_trace, key }` with `key` a hint (`arkw_sk_…9f2c`); `POST v1/watch/test` `{ endpoint, api_key?, application?, environment? }` → `{ data: { ok }, msg }`; `POST v1/watch/settings` `{ enabled, endpoint, api_key?, application?, environment?, include_protocol_trace?, skip_test? }` (tests first: 422 `test_failed` with `data.can_skip`; `enabled: false` keeps the destination and ignores the rest); `POST v1/watch/settings/remove` `{}` → configuration applies again. A blank `api_key` keeps the key in use only for the same scheme, host and port, else 400 `watch_key_required`. Validation errors are the wizard's codes with `field`. Every change is recorded (`audit_trail.update` / `.disable` / `.revert`) in the old trail, the new one and `audit_trace`. 403 `console_changes_off` when `Watch:AllowConsoleChanges` is false |
 | MCP endpoints | `GET v1/mcp/endpoints` → `{ levels: { host, tenant, client }, endpoints: [{ level, name, tenant_id, client_id, is_active, url, server_card, config, resource_metadata }] }`; `404` while MCP is off |
 | Claims | `v1/claim/list`, `v1/claim/upsert`, `v1/claim/delete` |
 | Scopes | `v1/scope/list`, `v1/scope/upsert`, `v1/scope/delete` |

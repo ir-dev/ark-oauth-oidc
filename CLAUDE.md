@@ -188,7 +188,16 @@ These apply in every language and are the source of most "it just says the passw
   filed as a generic event. A site that knows more passes its own `ArkWatchEvent`: the A2A paths do,
   through `Protocol/ArkAgentAudit.cs`. Keep these true: recording never throws or blocks; a token is
   named by its `jti`, never carried; and a refused A2A request is recorded with what was
-  established before the refusal (`AgentTokenTrace`). Test against a scratch node built from the
+  established before the refusal (`AgentTokenTrace`). The operator can also set the destination on
+  the console's Audit trail page (`/{tenant}/admin/audit`, `Api/AuditTrailController.cs`): that is
+  the `watch` row of `server_settings` (`Code/ArkWatchSettings.cs`), which replaces the configuration
+  until removed and reaches every instance without a restart. Keep these true too: the row is never
+  read on the request path (once at start-up, never creating a SQLite file, then in the background at
+  most once per `ReferenceCacheSeconds`, and only after this process bootstrapped the database), and
+  not at all with `Watch:AllowConsoleChanges=false`; a failed read keeps the last copy; a change is
+  recorded in the old trail before its client closes, then in the new one, as a fresh event each
+  time; a blank key is reused only for the same scheme, host and port; no response carries a key;
+  export, import and reset skip the table. Test against a scratch node built from the
   `Ark.Watch.Server` package, never a real one; on a laptop with a nearly full disk it answers 429
   until `ArkWatch__Wal__SoftDiskLimit` / `HardDiskLimit` are raised.
 * **Load test:** `scripts/loadtest` (seed + generator) against a scratch host and database, never a

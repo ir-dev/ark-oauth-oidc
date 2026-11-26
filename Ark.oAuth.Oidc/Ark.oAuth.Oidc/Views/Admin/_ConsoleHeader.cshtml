@@ -46,9 +46,9 @@
     </div>
 
     @*
-        Navigation. Provisioning, MCP, Webhooks and Data are drawn only for the operator account, because the
-        routes themselves refuse everybody else — a link that answers 403 teaches nothing except that the page
-        exists.
+        Navigation. Provisioning, MCP, Webhooks, Audit trail and Data are drawn only for the operator account,
+        because the routes themselves refuse everybody else — a link that answers 403 teaches nothing except that
+        the page exists.
     *@
     <nav class="ark-nav" aria-label="Console">
         <a class="ark-nav-link" href="@ViewBag.ConsoleUrl" aria-current="@(page == "console" ? "page" : null)">Manage</a>
@@ -64,6 +64,11 @@
             @if (ViewBag.WebhooksEnabled == true)
             {
                 <a class="ark-nav-link" href="@ViewBag.WebhooksUrl" aria-current="@(page == "webhooks" ? "page" : null)">Webhooks</a>
+            }
+            @* Always: the audit trail is part of every server, configured or not. *@
+            @if (ViewBag.AuditUrl is string auditUrl)
+            {
+                <a class="ark-nav-link" href="@auditUrl" aria-current="@(page == "audit" ? "page" : null)">Audit trail</a>
             }
             @if (ViewBag.DataToolsEnabled == true)
             {

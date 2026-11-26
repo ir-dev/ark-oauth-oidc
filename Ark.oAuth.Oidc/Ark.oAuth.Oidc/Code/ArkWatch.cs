@@ -70,6 +70,12 @@ namespace Ark.oAuth.Oidc
         public bool enabled { get; set; }
         /// <summary>Why nothing is sent, when nothing is.</summary>
         public string? reason { get; set; }
+        /// <summary>
+        /// Where the settings in effect come from: <c>console</c> (saved on the console's Audit
+        /// trail page, in the database), <c>configuration</c> (<c>ark_oauth_server:Watch</c>) or
+        /// <c>none</c>.
+        /// </summary>
+        public string? source { get; set; }
         public string? endpoint { get; set; }
         public string? application { get; set; }
         public string? environment { get; set; }
@@ -95,6 +101,11 @@ namespace Ark.oAuth.Oidc
     /// the setup wizard, a settings file or the environment — the client is built on the first
     /// event, and rebuilt when those settings change, with no restart.
     ///
+    /// The operator can also set the destination on the console's Audit trail page. That is kept
+    /// in the database (<see cref="ArkWatchConsoleSettings"/>), replaces the configuration's until
+    /// it is removed, and reaches every instance the same way: the next event after the change is
+    /// sent with the new settings.
+    ///
     /// <see cref="Log"/> is safe to call from anywhere on a request: it writes to an in-memory
     /// ring and returns, it never blocks on the network and it never throws. A node that is down
     /// costs a request nothing; the events wait in the spool and are replayed in order.
@@ -109,9 +120,15 @@ namespace Ark.oAuth.Oidc
         private readonly IServiceProvider _services;
         private readonly object _gate = new();
 
-        // The configuration object the current client was built from. ArkConfigSnapshot binds a new
-        // one on every reload, so a reference comparison is the whole cost of "has it changed".
+        // The configuration object and the console's saved destination the current client was built
+        // from. ArkConfigSnapshot binds a new object on every reload, and the console's copy is a new
+        // object only when its row changed, so two reference comparisons are the whole cost of "has
+        // it changed". _effective is what the two came to.
         private ArkWatchConfig? _boundTo;
+        private ArkWatchStored? _boundStored;
+        private ArkWatchConfig? _effective;
+        private ArkWatchConsoleSettings? _consoleSettings;
+        private bool _consoleSettingsResolved;
         private ArkWatchClient? _client;
         private string _signature = "";
         private string? _reason = "not configured";
@@ -215,9 +232,11 @@ namespace Ark.oAuth.Oidc
             try
             {
                 var client = Current();
-                var cfg = _boundTo;
+                var cfg = _effective;
                 status.enabled = client != null;
                 status.reason = client == null ? _reason : null;
+                status.source = _boundStored != null ? "console"
+                    : ArkWatchConsoleSettings.Names(_boundTo) ? "configuration" : "none";
                 status.protocol_trace = _includeTrace;
                 status.spool = _spool;
                 if (cfg != null && client != null)
@@ -249,17 +268,27 @@ namespace Ark.oAuth.Oidc
 
         // ---------------------------------------------------------------- the client
 
+        /// <summary>
+        /// The client events go to now, building or rebuilding it when the settings changed. For the
+        /// console's save, which compares the client before and after to know whether the trail moved.
+        /// </summary>
+        internal object? ActiveClient() => Current();
+
         private ArkWatchClient? Current()
         {
             if (_disposed) return null;
-            var cfg = Protocol.ArkConfigSnapshot.Server(_config)?.Watch;
-            if (ReferenceEquals(cfg, Volatile.Read(ref _boundTo))) return Volatile.Read(ref _client);
+            var configured = Protocol.ArkConfigSnapshot.Server(_config)?.Watch;
+            // Not even looked at when configuration pins the trail: no read, and an earlier save is ignored.
+            var stored = configured?.AllowConsoleChanges == false ? null : ConsoleSettings()?.Peek();
+            if (ReferenceEquals(configured, Volatile.Read(ref _boundTo)) && ReferenceEquals(stored, Volatile.Read(ref _boundStored)))
+                return Volatile.Read(ref _client);
 
             lock (_gate)
             {
                 if (_disposed) return null;
-                if (ReferenceEquals(cfg, _boundTo)) return _client;
+                if (ReferenceEquals(configured, _boundTo) && ReferenceEquals(stored, _boundStored)) return _client;
 
+                var cfg = Effective(configured, stored);
                 var signature = Signature(cfg);
                 // An empty signature is "nothing to send to". It is still worked out afresh, so
                 // the reason the console gives — not configured, turned off, no key — is the
@@ -275,13 +304,46 @@ namespace Ark.oAuth.Oidc
                     {
                         try { old.Dispose(); } catch { }
                     }
-                    _client = Build(cfg);
+                    _client = Build(cfg, stored != null);
                     _signature = signature;
                 }
                 _includeTrace = cfg?.IncludeProtocolTrace ?? true;
-                Volatile.Write(ref _boundTo, cfg);
+                _effective = cfg;
+                Volatile.Write(ref _boundStored, stored);
+                Volatile.Write(ref _boundTo, configured);
                 return _client;
             }
+        }
+
+        /// <summary>
+        /// The console's destination when one is saved, with this instance's spool folder from
+        /// configuration (each instance needs its own, and the console's setting is everybody's);
+        /// otherwise configuration as it is.
+        /// </summary>
+        private static ArkWatchConfig? Effective(ArkWatchConfig? configured, ArkWatchStored? stored)
+        {
+            if (stored == null) return configured;
+            var c = stored.Config;
+            return new ArkWatchConfig
+            {
+                Enabled = c.Enabled,
+                Endpoint = c.Endpoint,
+                ApiKey = c.ApiKey,
+                Application = c.Application,
+                Environment = c.Environment,
+                IncludeProtocolTrace = c.IncludeProtocolTrace,
+                SpoolDirectory = configured?.SpoolDirectory!
+            };
+        }
+
+        /// <summary>Resolved once and lazily: a host that registered the trail some other way simply has no console settings.</summary>
+        private ArkWatchConsoleSettings? ConsoleSettings()
+        {
+            if (Volatile.Read(ref _consoleSettingsResolved)) return _consoleSettings;
+            try { _consoleSettings = _services.GetService(typeof(ArkWatchConsoleSettings)) as ArkWatchConsoleSettings; }
+            catch { _consoleSettings = null; }
+            Volatile.Write(ref _consoleSettingsResolved, true);
+            return _consoleSettings;
         }
 
         private static string Signature(ArkWatchConfig? cfg) =>
@@ -290,18 +352,21 @@ namespace Ark.oAuth.Oidc
                 : string.Join("\n", cfg.Endpoint?.Trim(), cfg.ApiKey?.Trim(), cfg.Application?.Trim(),
                     cfg.Environment?.Trim(), cfg.SpoolDirectory?.Trim());
 
-        private ArkWatchClient? Build(ArkWatchConfig? cfg)
+        private ArkWatchClient? Build(ArkWatchConfig? cfg, bool fromConsole)
         {
             _spool = false;
             if (cfg == null || !cfg.Enabled)
             {
-                _reason = cfg == null ? "not configured" : "turned off (ark_oauth_server:Watch:Enabled is false)";
+                _reason = cfg == null ? "not configured"
+                    : fromConsole ? "turned off in the admin console (Audit trail)"
+                    : "turned off (ark_oauth_server:Watch:Enabled is false)";
                 return null;
             }
             if (!cfg.IsConfigured)
             {
                 var anything = !string.IsNullOrWhiteSpace(cfg.Endpoint) || !string.IsNullOrWhiteSpace(cfg.ApiKey);
                 _reason = !anything ? "not configured"
+                    : fromConsole ? "the destination saved in the admin console has no API key or no usable address; save it again there"
                     : string.IsNullOrWhiteSpace(cfg.ApiKey) ? "no API key (ark_oauth_server:Watch:ApiKey)"
                     : "no usable endpoint (ark_oauth_server:Watch:Endpoint must be an http(s) address)";
                 if (anything) _log.LogWarning("Ark IdP audit trail is not being sent: {Reason}.", _reason);
@@ -330,9 +395,10 @@ namespace Ark.oAuth.Oidc
                 });
                 _reason = null;
                 _log.LogInformation(
-                    "Ark IdP audit trail: sending to ARK-RAPID Watch at {Endpoint} as application {Application}{Spool}.",
+                    "Ark IdP audit trail: sending to ARK-RAPID Watch at {Endpoint} as application {Application}{Spool}{Source}.",
                     new Uri(endpoint).GetLeftPart(UriPartial.Path), Application(cfg),
-                    spool == null ? ", with no spool (events are held in memory while the node is away)" : $", spool in {spool}");
+                    spool == null ? ", with no spool (events are held in memory while the node is away)" : $", spool in {spool}",
+                    fromConsole ? ", as set in the admin console" : "");
                 return client;
             }
             catch (Exception ex)
@@ -527,14 +593,33 @@ namespace Ark.oAuth.Oidc
     /// </summary>
     internal sealed class ArkWatchLifetime : IHostedService
     {
+        /// <summary>How long the start waits for the destination saved in the console before it goes on without it.</summary>
+        private static readonly TimeSpan ConsoleSettingsWait = TimeSpan.FromSeconds(5);
+
         private readonly ArkWatchAudit _audit;
+        private readonly ArkWatchConsoleSettings _consoleSettings;
 
-        public ArkWatchLifetime(ArkWatchAudit audit) => _audit = audit;
-
-        public Task StartAsync(CancellationToken cancellationToken)
+        public ArkWatchLifetime(ArkWatchAudit audit, ArkWatchConsoleSettings consoleSettings)
         {
+            _audit = audit;
+            _consoleSettings = consoleSettings;
+        }
+
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {
+            // A destination saved in the console is read first, so the start is recorded there and
+            // what an earlier run spooled for it is replayed now. Bounded: a database that does not
+            // answer delays the start by a few seconds at most, and the read carries on behind it.
+            try
+            {
+                var load = _consoleSettings.LoadAsync(startup: true, CancellationToken.None);
+                await Task.WhenAny(load, Task.Delay(ConsoleSettingsWait, cancellationToken));
+            }
+            catch
+            {
+                // Never a reason for the host not to start.
+            }
             _audit.Log(null, Event("idp.start", $"identity provider started (Ark.oAuth.Oidc {ArkWatchAudit.PackageVersion})"));
-            return Task.CompletedTask;
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

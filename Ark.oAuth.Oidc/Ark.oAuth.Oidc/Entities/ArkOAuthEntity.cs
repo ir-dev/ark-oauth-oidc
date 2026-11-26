@@ -303,6 +303,29 @@ namespace Ark.oAuth
     }
 
     /// <summary>
+    /// A setting of the running server that an operator changed in the admin console, kept in the
+    /// server's own database.
+    ///
+    /// For settings that must change without a restart and on every instance at once. A settings
+    /// file reaches only the machine it is written on, and loses to an environment variable that
+    /// names the same setting; the database is the one store every instance already shares. Each
+    /// row is one setting group by <see cref="name"/>, its value a JSON object. The only one so far
+    /// is <c>watch</c>, the audit trail's destination (see <c>Ark.oAuth.Oidc.ArkWatchConsoleSettings</c>).
+    ///
+    /// Like the data-protection key ring, these belong to the deployment, not to its data: export,
+    /// import and factory reset leave them alone.
+    /// </summary>
+    [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+    public class ArkServerSetting
+    {
+        [Key]
+        public string name { get; set; } = default!;
+        public string? value { get; set; }
+        public DateTime updated_at { get; set; } = DateTime.UtcNow;
+        public string? updated_by { get; set; }
+    }
+
+    /// <summary>
     /// A scope the authorization server will issue, and the claims it unlocks at /userinfo.
     /// Seeded with the OIDC standard scopes (openid, profile, email, address, phone, offline_access).
     /// </summary>
