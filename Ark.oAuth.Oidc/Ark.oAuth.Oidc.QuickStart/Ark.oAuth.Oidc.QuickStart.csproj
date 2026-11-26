@@ -22,4 +22,9 @@
     <None Remove="ark-idp-data\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Local secrets and their template: never part of a published build. -->
+    <Content Update="appsettings.Development.json;appsettings.Development.sample.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
 </Project>

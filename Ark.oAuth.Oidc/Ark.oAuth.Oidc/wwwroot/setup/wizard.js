@@ -1129,7 +1129,22 @@
     }
 
     function showRedeemed(link) {
-        if (!link || !env.code_required) return;
+        if (!link) return;
+        if (!env.code_required) {
+            // This machine is spared the code (Development, localhost), so the link has nothing to fill
+            // in. Say what it did all the same: another machine, or an agent over MCP, still needs the code.
+            $('#codeCard').hidden = false;
+            $('#codeExplain').hidden = true;
+            $('#codeEntry').hidden = true;
+            if (link.code) {
+                $('#linkCode').textContent = link.code;
+                $('#linkCodeWhy').textContent = 'No code is needed from this machine, because the server runs in Development. From any other machine, or for an agent over MCP, enter this one.';
+                $('#linkCodeRow').hidden = false;
+            } else {
+                showResult($('#codeResult'), 'error', `${link.error || 'The setup link did not work.'} No code is needed from this machine, so you can carry on.`);
+            }
+            return;
+        }
         if (link.code && env.defaults) {
             codeOk = true;
             setVal('setup_code', link.code);

@@ -69,6 +69,12 @@ The link opens the wizard with the setup code already filled in. When setup is f
 working (404), the code file is deleted, and the log asks for the setting to be removed. Never put the
 key in a committed `appsettings.json`.
 
+To try the link on your own machine first, copy the QuickStart's
+`appsettings.Development.sample.json` to `appsettings.Development.json` (gitignored, never published),
+fill in `AccessKey`, and set `RequireToken` to `true` there: on localhost the wizard otherwise asks for
+no code at all. Setting `DataPath` to an empty folder there gives a fresh wizard without touching
+the setup you already have.
+
 **Without a key**, the code is written to the log once at start-up, and kept in
 `{DataPath}/setup-code.txt` until setup is finished:
 

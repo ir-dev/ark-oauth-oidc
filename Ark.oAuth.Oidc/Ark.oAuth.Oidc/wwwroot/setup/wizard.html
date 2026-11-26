@@ -45,14 +45,14 @@
 
                     <div class="card" id="codeCard" hidden>
                         <h2>Setup code</h2>
-                        <p>
+                        <p id="codeExplain">
                             Whoever finishes setup becomes the administrator, so we need to confirm you can see this server. Its
                             setup code is printed in the server log, and saved in <code id="codeFile">setup-code.txt</code> next to the settings.
                             <span id="linkHint" hidden>If you were sent a setup link, open that link instead: it fills the code in for you.</span>
                         </p>
                         <!-- One line: .result keeps white space (pre-wrap). -->
-                        <p class="result ok" id="linkCodeRow" hidden>Opened with your setup link. The setup code is <code id="linkCode"></code> <button type="button" class="link" data-copy="#linkCode">Copy</button>. You only need it if an agent sets this server up over MCP.</p>
-                        <div class="row">
+                        <p class="result ok" id="linkCodeRow" hidden>Opened with your setup link. The setup code is <code id="linkCode"></code> <button type="button" class="link" data-copy="#linkCode">Copy</button>. <span id="linkCodeWhy">You only need it if an agent sets this server up over MCP.</span></p>
+                        <div class="row" id="codeEntry">
                             <label class="field grow">
                                 <span>Setup code</span>
                                 <input name="setup_code" id="setupCode" placeholder="XXXX-XXXX-XXXX" autocomplete="one-time-code" spellcheck="false" />
