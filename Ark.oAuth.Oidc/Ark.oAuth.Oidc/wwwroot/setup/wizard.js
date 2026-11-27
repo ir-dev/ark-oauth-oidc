@@ -225,7 +225,7 @@
                 if (!u || /\s/.test(u)) p = invalid('admin_username', 'A username with no spaces.');
                 if (!existingTenants.length) {
                     const pw = field('admin_password').value;
-                    if (pw.length < 10) p = invalid('admin_password', 'At least 10 characters.');
+                    if (pw.length < 8) p = invalid('admin_password', 'At least 8 characters.');
                     else if (pw !== field('admin_password2').value) p = invalid('admin_password2', 'The two passwords differ.');
                 }
                 return p;
@@ -611,7 +611,7 @@
         const bar = $('#pwMeter');
         bar.style.width = `${Math.min(100, score)}%`;
         bar.style.background = score < 50 ? 'var(--ark-danger)' : score < 80 ? 'var(--ark-warn)' : 'var(--ark-success)';
-        $('#pwHint').textContent = pw.length < 10 ? 'At least 10 characters.' : score < 80 ? 'Acceptable. Longer is stronger.' : 'Strong.';
+        $('#pwHint').textContent = pw.length < 8 ? 'At least 8 characters.' : score < 80 ? 'Acceptable. Longer is stronger.' : 'Strong.';
     }
     field('admin_password').addEventListener('input', renderStrength);
 

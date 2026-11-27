@@ -1686,8 +1686,8 @@ namespace Ark.oAuth.Oidc
             var username = (admin.Username ?? "").Trim();
             if (username.Length == 0 || username.Any(char.IsWhiteSpace))
                 throw new SetupException("invalid_admin", "Administrator username: no spaces. An email address works.", "admin_username");
-            if (needsPassword && (admin.Password ?? "").Length < 10)
-                throw new SetupException("weak_password", "The administrator password needs at least 10 characters.", "admin_password");
+            if (needsPassword && (admin.Password ?? "").Length < 8)
+                throw new SetupException("weak_password", "The administrator password needs at least 8 characters.", "admin_password");
             return username;
         }
 

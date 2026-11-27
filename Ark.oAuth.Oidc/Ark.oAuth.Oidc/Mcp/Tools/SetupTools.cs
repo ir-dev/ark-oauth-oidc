@@ -85,7 +85,7 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                 {
                     new Field("username", "string", "Login name, no spaces. An email address works.", "Who is the first administrator? Which login name?", Required: true, MaxLength: 200),
                     new Field("name", "string", "Full name.", "What is their name?", Default: "Administrator", MaxLength: 200),
-                    new Field("password", "string", "Leave it out: the administrator then sets it through a one-time link. If given, at least 10 characters; kept in memory, never in the draft file.", "(Do not ask for this. Hand the administrator the one-time link instead.)", Sensitive: true, Held: true, MaxLength: 200)
+                    new Field("password", "string", "Leave it out: the administrator then sets it through a one-time link. If given, at least 8 characters; kept in memory, never in the draft file.", "(Do not ask for this. Hand the administrator the one-time link instead.)", Sensitive: true, Held: true, MaxLength: 200)
                 }),
             // Not optional: unless password_mode is email_based, default_password is owed (MissingWhen).
             new("users", "New people", "HR or the service desk",
