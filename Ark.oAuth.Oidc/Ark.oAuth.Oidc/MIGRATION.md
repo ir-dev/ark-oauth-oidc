@@ -198,6 +198,9 @@ CREATE INDEX IF NOT EXISTS "IX_sessions_browser_id" ON sessions (browser_id);
     the wizard, MCP or its host level. Set a server up with **one instance** running: the conversation is in
     that process and in `agent-state.json`, not shared.
   - Console: an **MCP** page for the operator, `/{tenant}/admin/mcp`, over `GET /api/oauth/v1/mcp/endpoints`.
+  - Dependency: `Ark.Watch.Client` **0.1.5** (was 0.1.3), with `Ark.Watch.Core` 0.1.5. The client's code is unchanged
+    since 0.1.1 (0.1.4 and 0.1.5 changed the Watch server only); `System.IO.Hashing` stays on 10.0.15. A host that
+    pins `Ark.Watch.Client` or `Ark.Watch.Core` itself raises the pin to 0.1.5.
   - Setup link: `ark_oauth_server:Setup:AccessKey` (16+ characters) adds `POST /ark-idp/setup/api/code` and makes
     `/ark-idp/setup#key=<key>` open the wizard with the setup code filled in. With a key set, the setup code is
     derived from it instead of being random, and `setup-code.txt` is rewritten to match. `GET /ark-idp/setup/api/state`

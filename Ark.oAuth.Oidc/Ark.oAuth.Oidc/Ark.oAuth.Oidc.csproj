@@ -125,6 +125,9 @@ configuration are as in 2.4.2.
   git-ignored. setup_complete and the wizard answer with its path as keys_file; the private key is
   never sent to an agent. An earlier one is renamed, not overwritten. Not written when attaching to
   an existing database. ark_oauth_server:Setup:SaveKeysFile=false turns it off.
+* Ark.Watch.Client 0.1.5 (was 0.1.3), with Ark.Watch.Core 0.1.5. Its releases since were for the
+  Watch server; the client's code is unchanged, so how the audit trail is sent does not change.
+  System.IO.Hashing stays on 10.0.15.
 
 2.4.2 — agent-to-agent (A2A) tokens. Inert until an operator lists a caller.
 
@@ -567,7 +570,7 @@ release notes of 2.4.1 on nuget.org: nuget.org takes 35,000 characters at most.
 			Ark.Watch.Client.AspNetCore: that one reads its settings once at start-up, and the
 			setup wizard has to be able to supply them to a process that is already running.
 		-->
-		<PackageReference Include="Ark.Watch.Client" Version="0.1.3" />
+		<PackageReference Include="Ark.Watch.Client" Version="0.1.5" />
 	</ItemGroup>
 
 	<!-- ==============================================================================
