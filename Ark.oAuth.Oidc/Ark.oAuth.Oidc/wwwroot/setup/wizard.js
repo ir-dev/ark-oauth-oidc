@@ -886,6 +886,10 @@
         // Attaching to an existing database created no key and no secret, so there is nothing to hand over.
         handover = r.attached_existing ? null : keyFile(r);
         $('#doneKeysCard').hidden = !handover;
+        // The server keeps a copy of the same file in its data directory, unless that is turned off or failed.
+        $('#doneKeysSaved').hidden = !r.keys_file;
+        $('#doneKeysOnce').hidden = !!r.keys_file;
+        if (r.keys_file) $('#doneKeysFile').textContent = r.keys_file;
         // Secrets the page no longer needs: the downloads read the copy in handover.
         key = null;
         ['admin_password', 'admin_password2', 'db_password', 'smtp_password', 'machine_secret', 'raw_connection', 'watch_api_key'].forEach(n => setVal(n, ''));

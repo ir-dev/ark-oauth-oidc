@@ -18,7 +18,9 @@ namespace Ark.oAuth.Oidc
     ///
     /// Everything here is a secret or is only meaningful once. None of it is written to the
     /// settings file: the administrator's password and the machine secret go into the database
-    /// as hashes, the signing key goes into <c>signing_keys</c>, and that is the only copy.
+    /// as hashes and the signing key goes into <c>signing_keys</c>. The keys file
+    /// (<see cref="ArkIdpSettings.KeysFileName"/>) keeps a copy of the key and the machine secret
+    /// beside the settings, unless <c>Setup:SaveKeysFile</c> is false; the password is nowhere.
     /// </summary>
     internal sealed class ArkSeedOverrides
     {
@@ -34,15 +36,21 @@ namespace Ark.oAuth.Oidc
     ///
     /// One directory — <c>ark-idp-data</c> under the content root unless
     /// <c>ark_oauth_server:Setup:DataPath</c> says otherwise — holding <c>settings.json</c>, the
-    /// uploaded logos and, until setup is finished, the setup code. The directory carries its own
-    /// <c>.gitignore</c>, because <c>dotnet run</c> puts it inside the project and it holds the
-    /// SMTP password.
+    /// keys file setup leaves, the uploaded logos and, until setup is finished, the setup code. The
+    /// directory carries its own <c>.gitignore</c>, because <c>dotnet run</c> puts it inside the
+    /// project and it holds the SMTP password and the private signing key.
     /// </summary>
     public static class ArkIdpSettings
     {
         public const string SettingsFileName = "settings.json";
         internal const string BrandingFolder = "branding";
         internal const string TokenFileName = "setup-code.txt";
+
+        /// <summary>
+        /// The keys file: what the wizard's last screen offers as <b>Download JSON</b>, under the same
+        /// name, written into the data directory by whichever route completed setup.
+        /// </summary>
+        public static string KeysFileName(string tenantId) => $"ark-idp-{tenantId}-keys.json";
 
         /// <summary>The wizard's directory, absolute.</summary>
         public static string DataDirectory(IConfiguration configuration, IHostEnvironment env)
@@ -1387,6 +1395,8 @@ namespace Ark.oAuth.Oidc
                 console = done.Console,
                 admin_username = plan.AdminUsername,
                 settings_file = done.SettingsFile,
+                // where the server kept its copy of the download, or null: attached, turned off, or not writable
+                keys_file = done.KeysFile,
                 machine_client_id = ArkManagementAuth.MachineClientId(plan.TenantId),
                 // an existing database is attached, not seeded, so nothing was set
                 machine_client_secret = plan.ExistingTenant ? null : plan.MachineSecret,
@@ -1395,14 +1405,19 @@ namespace Ark.oAuth.Oidc
                 audit_trail = plan.Watch == null ? null : new Uri(plan.Watch.Endpoint).GetLeftPart(UriPartial.Path),
                 audit_application = plan.Watch?.Application,
                 // what an agent connects to from here on
-                mcp_url = _config.GetValue("ark_oauth_server:Mcp:Enabled", true) && _config.GetValue("ark_oauth_server:Mcp:TenantLevel", true)
-                    ? Mcp.ArkMcpResources.Tenant(plan.AppRoot, plan.TenantId) : null
+                mcp_url = TenantMcpUrl(plan)
             }, Json);
         }
 
-        /// <summary>What an install did, for whoever asked for it to report.</summary>
+        /// <summary>The tenant's own MCP server, when this server offers one.</summary>
+        string? TenantMcpUrl(Plan plan) =>
+            _config.GetValue("ark_oauth_server:Mcp:Enabled", true) && _config.GetValue("ark_oauth_server:Mcp:TenantLevel", true)
+                ? Mcp.ArkMcpResources.Tenant(plan.AppRoot, plan.TenantId) : null;
+
+        /// <summary>What an install did, for whoever asked for it to report. <c>KeysFile</c> is null when none was written.</summary>
         internal sealed record Installed(
-            Plan Plan, string SettingsFile, Protocol.ArkOidcEndpoints Endpoints, string Console, string? AdminPasswordLink);
+            Plan Plan, string SettingsFile, Protocol.ArkOidcEndpoints Endpoints, string Console, string? AdminPasswordLink,
+            string? KeysFile);
 
         /// <summary>
         /// Checks everything, writes the settings, creates and seeds the database: the whole of
@@ -1487,6 +1502,9 @@ namespace Ark.oAuth.Oidc
                     throw new SetupException("database_failed", $"The database could not be set up: {Innermost(ex)}", "connection_string");
                 }
 
+                // Only now: a file written before the database took would describe a server that never was.
+                var keysFile = SaveKeysFile(plan, dataDir);
+
                 ForgetSetupCode();
                 // It holds whatever an agent had collected, some of it secret, and is of no more use.
                 // Closed as well as deleted: a setup call still under way would write it back.
@@ -1533,12 +1551,78 @@ namespace Ark.oAuth.Oidc
                 }
 
                 return new Installed(plan, settingsFile, new Protocol.ArkOidcEndpoints(plan.AppRoot, plan.TenantId),
-                    $"{context.Request.PathBase}/{plan.TenantId}/admin", passwordLink);
+                    $"{context.Request.PathBase}/{plan.TenantId}/admin", passwordLink, keysFile);
             }
             finally
             {
                 Interlocked.Increment(ref _installs);
                 InstallLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Writes the keys file into the data directory: the document the wizard's <b>Download JSON</b>
+        /// makes, in the same shape and under the same name, so that it outlives the browser tab, and
+        /// an install by an agent (which is never handed the private key) leaves one as well.
+        ///
+        /// Owner-only and git-ignored like <c>settings.json</c>. One left by an earlier setup is kept,
+        /// renamed, since the key in it may still be wanted. Null when there is nothing to hand over
+        /// (an existing database was attached, so nothing was created), when <c>Setup:SaveKeysFile</c>
+        /// is false, or when it could not be written: setup is complete by then and this is a copy,
+        /// so none of these fails it.
+        /// </summary>
+        string? SaveKeysFile(Plan plan, string dataDir)
+        {
+            if (plan.ExistingTenant || plan.PublicKey == null || plan.PrivateKey == null) return null;
+            if (!_config.GetValue("ark_oauth_server:Setup:SaveKeysFile", true)) return null;
+
+            var file = Path.Combine(dataDir, ArkIdpSettings.KeysFileName(plan.TenantId));
+            try
+            {
+                using var rsa = RSA.Create();
+                rsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(plan.PublicKey), out _);
+                var keys = new JsonObject
+                {
+                    ["_about"] = "Written by the Ark IdP setup into its data directory: the same as the wizard's Download JSON. " +
+                                 "The private key can sign tokens as this server and the machine secret administers it: keep this file " +
+                                 "as safe as the database. A key rotated or a secret regenerated since setup is not reflected here.",
+                    ["installed_at"] = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture),
+                    ["tenant_id"] = plan.TenantId,
+                    ["issuer"] = plan.Issuer,
+                    ["discovery"] = $"{plan.Issuer}/.well-known/openid-configuration",
+                    ["mcp_server"] = TenantMcpUrl(plan),
+                    ["admin_console"] = $"{plan.Issuer}/admin",
+                    ["administrator"] = plan.AdminUsername,
+                    ["signing_key"] = new JsonObject
+                    {
+                        // as seeded: setup always installs with the thumbprint kid
+                        ["kid"] = Protocol.ArkCrypto.ComputeKid(plan.PublicKey),
+                        ["algorithm"] = "RS256",
+                        ["key_size"] = rsa.KeySize,
+                        ["public_key_pem"] = Pem("PUBLIC KEY", plan.PublicKey),
+                        ["private_key_pem"] = Pem("PRIVATE KEY", plan.PrivateKey)
+                    },
+                    ["machine_client"] = new JsonObject
+                    {
+                        ["client_id"] = ArkManagementAuth.MachineClientId(plan.TenantId),
+                        ["client_secret"] = plan.MachineSecret
+                    }
+                };
+
+                if (File.Exists(file))
+                {
+                    var stamp = File.GetLastWriteTimeUtc(file).ToString("yyyyMMdd'T'HHmmss'Z'", System.Globalization.CultureInfo.InvariantCulture);
+                    File.Move(file, Path.Combine(dataDir, $"ark-idp-{plan.TenantId}-keys.{stamp}.json"));
+                }
+                ArkIdpSettings.WritePrivateFile(file,
+                    Encoding.UTF8.GetBytes(keys.ToJsonString(new JsonSerializerOptions { WriteIndented = true })));
+                _log.LogInformation("Ark IdP setup wrote the signing key and the machine credential to {File}. Keep it as safe as the database.", file);
+                return file;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException or FormatException)
+            {
+                _log.LogWarning(ex, "Ark IdP setup is complete, but the keys file could not be written to {File}. The wizard's download still has it.", file);
+                return null;
             }
         }
 

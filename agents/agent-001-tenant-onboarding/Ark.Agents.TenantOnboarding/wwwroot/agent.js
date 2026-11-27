@@ -737,7 +737,8 @@
             inner.appendChild(h("section", { class: "once" }, h("h2", { text: "The automation credential" }), h("p", { text: machine.note })));
 
         inner.appendChild(h("section", { class: "once" }, h("h2", { text: "Where everything is" }),
-            kv([["Issuer", d.issuer], ["Discovery", d.discovery], ["Admin console", d.console], ["Settings file", d.settings_file]])));
+            kv([["Issuer", d.issuer], ["Discovery", d.discovery], ["Admin console", d.console], ["Settings file", d.settings_file],
+                ["Keys file (signing key and credential)", d.keys_file]])));
         if (d.mcp && d.mcp.config)
             inner.appendChild(h("section", { class: "once" }, h("h2", { text: "For the next agent" }),
                 h("p", { text: "This tenant has its own MCP endpoint, which the automation credential opens. An agent can go on from here: register the first application, add people." }),

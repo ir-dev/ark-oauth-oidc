@@ -649,15 +649,16 @@
                         <h2>Machine client secret, shown once</h2>
                         <p><code id="doneMachineId"></code></p>
                         <p><code id="doneSecret" class="secret"></code> <button type="button" class="link" data-copy="#doneSecret">Copy</button></p>
-                        <small>Only its hash was stored. If it is lost, generate a new one in the console.</small>
+                        <small>The database keeps only its hash. If it is lost, generate a new one in the console.</small>
                     </div>
                     <div class="card" id="doneKeysCard" hidden>
                         <h2>Download the keys</h2>
                         <p>
                             The issuer, the signing key pair (kid, public and private PEM) and the machine client’s id and secret,
-                            in one file for whoever sets up applications and pipelines. It is made in this browser, from this page:
-                            once you leave, the secret cannot be shown again.
+                            in one file for whoever sets up applications and pipelines.
                         </p>
+                        <p id="doneKeysSaved" hidden>The same file was saved on the server, beside the settings: <code id="doneKeysFile"></code></p>
+                        <p id="doneKeysOnce">It is made in this browser, from this page: once you leave, the secret cannot be shown again.</p>
                         <div class="row">
                             <button type="button" class="btn" id="downloadKeysJson">Download JSON</button>
                             <button type="button" class="btn" id="downloadKeysXlsx">Download Excel (.xlsx)</button>

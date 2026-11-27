@@ -119,6 +119,12 @@ configuration are as in 2.4.2.
   email, setup now requires one: the wizard marks the field, and setup_status lists
   users.default_password as missing, so Ark Pilot asks for it behind its lock button. On a server
   already set up without it, set ark_oauth_server:DefaultPw and restart; the MCP overview warns.
+* **Setup leaves its keys file in the data directory.** However setup is completed (the wizard, Ark
+  Pilot or setup_complete over MCP), the server writes the wizard's Download JSON (issuer, signing
+  key pair, machine client id and secret) to {DataPath}/ark-idp-{tenant}-keys.json, owner-only and
+  git-ignored. setup_complete and the wizard answer with its path as keys_file; the private key is
+  never sent to an agent. An earlier one is renamed, not overwritten. Not written when attaching to
+  an existing database. ark_oauth_server:Setup:SaveKeysFile=false turns it off.
 
 2.4.2 — agent-to-agent (A2A) tokens. Inert until an operator lists a caller.
 

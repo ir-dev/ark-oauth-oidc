@@ -81,7 +81,9 @@ These apply in every language and are the source of most "it just says the passw
   `prompt=login`.
 * **A new IdP needs no configuration.** `builder.AddArkIdp()` + `app.UseArkIdp()`; unconfigured, it
   serves the setup wizard at `/ark-idp/setup` and writes `ark-idp-data/settings.json` (a config
-  source below user secrets / env). A host with `TenantId` + a connection string never sees it.
+  source below user secrets / env). Install, by any route (wizard, Ark Pilot, MCP), also writes
+  `ark-idp-{tenant}-keys.json` there: the done screen's Download JSON, private key and machine
+  secret included (`SaveKeysFile` in `ArkSetup.cs`; `Setup:SaveKeysFile=false` turns it off). A host with `TenantId` + a connection string never sees it.
   In a container, point `Setup:DataPath` at persistent storage before the first start (App Service:
   under `/home`), and read the setup code from the container log: nothing there is loopback.
   For someone without log access: `Setup:AccessKey` (16+ chars, never committed) and the link

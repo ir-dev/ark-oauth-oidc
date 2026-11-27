@@ -86,7 +86,11 @@ route), because they end up in `settings.json` there anyway. A password, importe
 is supplied anyway stays in memory and has to be given again after a restart.
 
 `setup_complete` answers with the issuer, the machine credential (once), the administrator's link (once) and
-the configuration of the tenant's own MCP server. From then on the setup code opens nothing.
+the configuration of the tenant's own MCP server. It also writes the wizard's keys file,
+`ark-idp-{tenant}-keys.json` (signing key pair and machine credential, mode 0600), into the data directory and
+answers with its path as `keys_file`; the private key itself is never in the answer. `keys_file` is null when an
+existing database was attached, with `Setup:SaveKeysFile=false`, or when the file could not be written (logged;
+setup is complete regardless). From then on the setup code opens nothing.
 
 The setup code is always required here, also from localhost, and a browser's `Origin` is refused: the
 wizard's exemption is for a developer at a browser, on this machine, in the Development environment.

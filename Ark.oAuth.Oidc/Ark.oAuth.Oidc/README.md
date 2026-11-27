@@ -660,6 +660,7 @@ package version.
 | File | Contents |
 |---|---|
 | `settings.json` | the `ark_oauth_server` section and `ConnectionStrings:ArkAuthConnection`, mode 0600 |
+| `ark-idp-{tenant}-keys.json` | written at install, whether by the wizard, Ark Pilot or an agent over MCP: the same file as the last screen's **Download JSON** (issuer, signing key pair, machine client id and secret), mode 0600. One from an earlier setup is renamed `ark-idp-{tenant}-keys.{time}.json`, not overwritten. Not written when attaching to an existing database, or with `Setup:SaveKeysFile=false` |
 | `branding/` | the uploaded logos, served at `/ark-idp/branding/…` (as files, so activation emails can show them) |
 | `ark_idp.db` | the SQLite database, when SQLite is chosen with the default path |
 | `.gitignore` | `*`: the directory ignores itself, because `dotnet run` puts it inside your project |
@@ -690,13 +691,21 @@ on the console's **Audit trail** page, with no restart.
 before user secrets, environment variables and the command line**, so any value it holds can still
 be overridden the usual way, for example `ark_oauth_server__EmailConfig__pw` from a key vault.
 
-**What it never writes.** The administrator's password and the machine client's secret go into the
-database as hashes; the signing key's private half goes into `signing_keys`. None of them is in
-`settings.json`. The machine secret is shown once, on the last screen, which also offers
-**Download JSON** and **Download Excel (.xlsx)**: the issuer, discovery and console addresses, the
-signing key pair (kid, public and private PEM) and the machine client's id and secret, in one file
-made in the browser. It is the only time the server hands them out, and the private key in it can
-sign tokens, so keep the file as safe as the database. Not offered when attaching to an existing
+**What it never writes to `settings.json`.** The administrator's password and the machine client's
+secret go into the database as hashes; the signing key's private half goes into `signing_keys`. None
+of them is in `settings.json`, and the administrator's password is in no file at all. The machine
+secret is shown once, on the last screen, which also offers **Download JSON** and **Download Excel
+(.xlsx)**: the issuer, discovery and console addresses, the signing key pair (kid, public and private
+PEM) and the machine client's id and secret, in one file made in the browser. It is the only time the
+server hands them out over the network.
+
+**The keys file.** The server also writes that same JSON into the data directory at install, as
+`ark-idp-{tenant}-keys.json`, whichever route completed setup: the wizard, Ark Pilot, or an agent over
+MCP (which is never sent the private key; `setup_complete` answers with the file's path). The private
+key in it can sign tokens as this server and the secret administers it, so keep the directory as safe
+as the database, and back it up with it. A key rotated or a secret regenerated later is not written
+back. `ark_oauth_server:Setup:SaveKeysFile=false` turns it off, for a host whose data directory is
+shared storage that should hold no key; nothing is offered either way when attaching to an existing
 database, which creates neither.
 
 **Who may run it.** Whoever finishes setup becomes the administrator, so an unconfigured server on
@@ -760,6 +769,7 @@ treats as the operator.
 | `RequireToken` | `false` | ask for the setup code in Development on localhost too; everywhere else it always is |
 | `DataPath` | `ark-idp-data` | in a container, a mounted volume, e.g. `ark_oauth_server__Setup__DataPath=/home/data/ark-idp`. The .NET 8+ images run as a non-root user that cannot write to `/app` |
 | `AccessKey` | — | opens the setup link `/ark-idp/setup#key=…` for someone without log access; at least 16 characters; the setup code is then derived from it. Platform settings or a secret store only |
+| `SaveKeysFile` | `true` | write `ark-idp-{tenant}-keys.json` (signing key pair, machine credential) into `DataPath` at install; `false` leaves the browser download as the only copy |
 
 ### Running the wizard on a hosted server
 
@@ -973,6 +983,8 @@ machine secret. With a server database (PostgreSQL or MySQL, not SQLite on the i
 3. From then on the server starts configured on any instance and never shows the wizard. `DataPath`
    no longer matters, except for uploaded logos: they are files in `{DataPath}/branding/`. Host them
    anywhere on `https` and set `ark_oauth_server__EmailConfig__host_logo` / `client_logo` to their URLs.
+   Copy `{DataPath}/ark-idp-{tenant}-keys.json` into a secret store as well before the instance goes:
+   the database has the key, but nowhere else has the machine secret in the clear.
 
 SQLite under `/home` (App Service) or on an Azure Files share (Container Apps) sits on a network
 share, where its file locking is not reliable: fine for a trial, but use PostgreSQL or MySQL for a

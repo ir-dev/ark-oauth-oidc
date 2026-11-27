@@ -28,7 +28,8 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
             "3. Test what can be tested: setup_test_database, setup_test_email, setup_test_audit.\n" +
             "4. setup_review lists the whole plan, what is assumed and what would go wrong. Show it to a person who may decide, and wait for their agreement.\n" +
             "5. setup_complete installs the reviewed plan. Its answer carries the machine credential and the address of the tenant's own MCP server, " +
-            "both shown once; from then on this endpoint no longer takes the setup code.\n" +
+            "both shown once (the server also keeps the signing key and the machine credential in its data directory, keys_file); " +
+            "from then on this endpoint no longer takes the setup code.\n" +
             "The public URL and the tenant id become part of every token's issuer: treat them as permanent. " +
             "Do not invent values. Leave the administrator's password out, so that they set it themselves through a one-time link.";
 
@@ -230,7 +231,8 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
             {
                 Name = "setup_complete", Title = "Install the reviewed plan",
                 Description = "Writes the settings, creates and seeds the database, and turns this server into an identity provider. Cannot be undone from here. " +
-                              "The answer carries the machine credential and the administrator's one-time link, each shown once: store them before doing anything else.",
+                              "The answer carries the machine credential and the administrator's one-time link, each shown once: store them before doing anything else. " +
+                              "The server writes the signing key and the machine credential to a keys file in its data directory (keys_file); the private key is never in the answer.",
                 Access = ArkMcpAccess.Manage, Role = ArkMcpRole.Setup, Destructive = true, ReturnsSecret = true,
                 Params = new ArkMcpParams()
                     .Text("review_id", "The review_id of the setup_review a person agreed to.", required: true, maxLength: 64)
@@ -671,6 +673,8 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                 discovery = done.Endpoints.Discovery,
                 console = $"{plan.AppRoot}/{plan.TenantId}/admin",
                 settings_file = done.SettingsFile,
+                // on the server: the wizard's Download JSON, signing key included. A path, never the content.
+                keys_file = done.KeysFile,
                 attached_existing_database = plan.ExistingTenant,
                 administrator = new
                 {
@@ -685,7 +689,9 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                     client_secret = plan.ExistingTenant ? null : plan.MachineSecret,
                     note = plan.ExistingTenant ? "An existing database was attached; its machine secret is unchanged."
                         : plan.MachineSecret == null ? "No secret was set. An administrator generates one in the console."
-                        : "Shown once; only its hash is stored. Keep it in a secret store: whoever holds it administers this server."
+                        : done.KeysFile == null
+                        ? "Shown once; only its hash is stored. Keep it in a secret store: whoever holds it administers this server."
+                        : $"Shown once here; the database keeps only its hash, and a copy is in {done.KeysFile} on the server. Keep it in a secret store: whoever holds it administers this server."
                 },
                 mcp = new
                 {
