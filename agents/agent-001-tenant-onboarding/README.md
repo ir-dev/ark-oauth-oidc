@@ -42,8 +42,10 @@ the first thing in that application's pipeline.
 ## What a setup looks like
 
 The wizard asks for some forty values over eleven steps. The agent needs four (the organization's name,
-the public address, a tenant id, the first administrator) and treats everything else as a default it
-will question only when what it hears makes the default wrong.
+the public address, a tenant id, the first administrator), plus the default password for new accounts
+unless new people get an activation email: the console creates every account on it and cannot add
+anybody without it, so the server lists it as missing and the agent asks for it behind the lock button.
+Everything else is a default it will question only when what it hears makes the default wrong.
 
 1. **One message instead of a form.** "We're Northwind Traders, production, it will live at
    id.northwind.example, I'm the first admin, we have a React app, Priya in the DBA team has the

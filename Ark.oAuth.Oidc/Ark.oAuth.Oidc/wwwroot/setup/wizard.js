@@ -236,8 +236,11 @@
                 const mode = val('password_mode');
                 if (!mode) p = invalid('password_mode', 'Choose one.');
                 if (mode === 'email_based' && !val('email_enabled')) p = invalid('password_mode', 'Activation emails need email turned on below.');
-                const dp = field('default_password').value;
-                if (dp && dp.length < 8) p = invalid('default_password', 'At least 8 characters, or leave it empty.');
+                // Outside email_based, the console creates every new account on it and refuses without it.
+                const dp = field('default_password').value.trim();
+                const placeholder = dp.startsWith('<<') && dp.endsWith('>>');
+                if ((!dp || placeholder) && mode !== 'email_based') p = invalid('default_password', 'Needed: accounts you add in the console start on it. Generate one, or choose activation email.');
+                else if (dp && !placeholder && dp.length < 8) p = invalid('default_password', 'At least 8 characters.');
                 if (val('email_enabled')) {
                     if (!val('smtp')) p = invalid('smtp', 'Enter the SMTP server.');
                     const port = num('smtp_port') ?? 587;

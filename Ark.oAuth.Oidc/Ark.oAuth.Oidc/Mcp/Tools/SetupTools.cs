@@ -86,11 +86,14 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                     new Field("name", "string", "Full name.", "What is their name?", Default: "Administrator", MaxLength: 200),
                     new Field("password", "string", "Leave it out: the administrator then sets it through a one-time link. If given, at least 10 characters; kept in memory, never in the draft file.", "(Do not ask for this. Hand the administrator the one-time link instead.)", Sensitive: true, Held: true, MaxLength: 200)
                 }),
+            // Not optional: unless password_mode is email_based, default_password is owed (MissingWhen).
             new("users", "New people", "HR or the service desk",
-                "How people added later get their first password.", true, new[]
+                "How people added later get their first password.", false, new[]
                 {
                     new Field("password_mode", "string", "admin_managed: administrators hand them out. email_based: an activation email (needs email). auto: whoever adds the person chooses.", "How should new people get their first password?", Default: "admin_managed", Values: new[] { "admin_managed", "email_based", "auto" }),
-                    new Field("default_password", "string", "Initial password for accounts added without one, at least 8 characters. Optional: tools add people with a one-time link instead.", "Should there be a common initial password?", Sensitive: true, MaxLength: 200)
+                    new Field("default_password", "string", "The password every account added in the admin console or through the provisioning API starts on; at least 8 characters. " +
+                        "Required unless password_mode is email_based.",
+                        "Which password should new accounts start on? Administrators hand it to each person they add.", Sensitive: true, MaxLength: 200)
                 }),
             new("email", "Outgoing email", "Messaging or IT operations",
                 "For activation and password-reset messages. Off, nothing is sent.", true, new[]
@@ -335,6 +338,10 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                     break;
                 case "signing_key" when Str(v, "mode") == "import":
                     if (!Has("private_key")) owed.Add("private_key");
+                    break;
+                // The console and the provisioning API create accounts on it (ArkSetup.ValidateUsers).
+                case "users" when !string.Equals(Str(v, "password_mode"), "email_based", StringComparison.OrdinalIgnoreCase):
+                    if (!Has("default_password")) owed.Add("default_password");
                     break;
                 case "email" when Bool(v, "enabled") == true:
                     owed.AddRange(new[] { "smtp", "from" }.Where(n => !Has(n)));

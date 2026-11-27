@@ -67,7 +67,9 @@ who supplied it.
 | `setup_review` | The whole plan, what is assumed, who supplied what, everything that would stop it, and a `review_id` |
 | `setup_complete` | Installs exactly the draft that was reviewed |
 
-Only `company_name`, `base_url`, `tenant_id` and the administrator's `username` are required. The checks
+Only `company_name`, `base_url`, `tenant_id` and the administrator's `username` are required, plus
+`users.default_password` unless `users.password_mode` is `email_based`: the console and the provisioning API
+create every new account on it and refuse to without it, so `setup_status` lists it as missing. The checks
 are the wizard's own. `setup_complete` needs the `review_id` of the draft as it stands and the tenant id
 repeated, so a value changed after a person agreed to the plan stops the install. What is checked and what is
 installed are taken from the draft in one look, so a value stored at that moment is not slipped in.

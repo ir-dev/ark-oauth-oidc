@@ -331,8 +331,9 @@ namespace Ark.oAuth.Oidc.Mcp.Tools
                 Find("error", "email_needed", "UserPasswordMode is email_based and no SMTP server is configured, so new people never get their activation email.");
             if (!email)
                 Find("info", "email_off", "this server sends no email; new people get their one-time link from whoever adds them.");
-            if (!hasDefault && config.EffectiveUserPasswordMode == ArkUserPasswordMode.AdminManaged)
-                Find("info", "no_default_password", "there is no default password, so accounts added in the console or through the provisioning API are refused until one is set. Accounts added over MCP get a one-time link instead.");
+            if (!hasDefault && config.EffectiveUserPasswordMode != ArkUserPasswordMode.EmailBased)
+                Find("warning", "no_default_password", "there is no default password, so accounts added in the console or through the provisioning API are refused. " +
+                    "Set ark_oauth_server:DefaultPw (user secrets, the environment or the settings file) and restart. Accounts added over MCP get a one-time link instead.");
             if (status is { enabled: true } && status.health != "ok")
                 Find("warning", "audit_trail", $"the external audit trail is {status.health}.", "audit_trail_status");
             if (faults > 0)

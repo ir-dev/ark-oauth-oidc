@@ -48,6 +48,7 @@ namespace Ark.Agents.TenantOnboarding.Hosting
             {
                 if (ws.Phase is not (AgentPhase.Starting or AgentPhase.Collecting)) return null;
                 var now = DateTime.UtcNow;
+                var essentials = ws.EssentialKeys();
                 return new AgentStatus
                 {
                     Name = options.AgentName,
@@ -55,8 +56,8 @@ namespace Ark.Agents.TenantOnboarding.Hosting
                     Phase = ws.Phase == AgentPhase.Collecting ? "collecting" : "starting",
                     Why = ws.Phase == AgentPhase.Starting ? ws.StartingWhy : null,
                     Started = ws.Conversations.Count > 0,
-                    EssentialsDone = Workspace.Essentials.Count(ws.Values.ContainsKey),
-                    EssentialsTotal = Workspace.Essentials.Length,
+                    EssentialsDone = essentials.Count(ws.Values.ContainsKey),
+                    EssentialsTotal = essentials.Length,
                     ReadyForReview = ws.ReadyForReview,
                     WaitingForLead = ws.Proposals.Count(x => x.State == "open" && ws.People.TryGetValue(x.ParticipantId, out var p) && p.IsLead),
                     WaitingForColleagues = ws.Invites.Where(i => i.Status(now, options.QuietAfterHours) is "sent" or "opened" or "quiet")

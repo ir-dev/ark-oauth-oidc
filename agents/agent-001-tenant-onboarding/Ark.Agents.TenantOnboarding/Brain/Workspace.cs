@@ -109,6 +109,20 @@ namespace Ark.Agents.TenantOnboarding.Brain
         /// <summary>The four values a setup cannot do without: everything else has a default.</summary>
         public static readonly string[] Essentials = { "organization.company_name", "server.base_url", "server.tenant_id", "administrator.username" };
 
+        /// <summary>
+        /// What the progress ring counts: <see cref="Essentials"/>, and the default password unless new
+        /// people get an activation email. The console creates every account on it, so the server
+        /// owes it before a review (setup_status lists it as missing) and the ring must not show
+        /// "4/4" while it is open.
+        /// </summary>
+        public string[] EssentialKeys()
+        {
+            lock (_lock)
+                return Values.TryGetValue("users.password_mode", out var mode) && string.Equals(mode?.ToString(), "email_based", StringComparison.OrdinalIgnoreCase)
+                    ? Essentials
+                    : Essentials.Append("users.default_password").ToArray();
+        }
+
         readonly object _lock = new();
         TaskCompletionSource _changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         string? _file;

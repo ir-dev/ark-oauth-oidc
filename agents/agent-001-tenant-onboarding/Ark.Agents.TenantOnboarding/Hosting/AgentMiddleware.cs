@@ -383,6 +383,7 @@ namespace Ark.Agents.TenantOnboarding.Hosting
                     });
                 }
 
+                var essentials = Ws.EssentialKeys();
                 var state = new JsonObject
                 {
                     ["version"] = Ws.Version,
@@ -397,7 +398,7 @@ namespace Ark.Agents.TenantOnboarding.Hosting
                     ["board"] = new JsonObject
                     {
                         ["ready"] = Ws.ReadyForReview,
-                        ["essentials"] = new JsonObject { ["done"] = Workspace.Essentials.Count(Ws.Values.ContainsKey), ["total"] = Workspace.Essentials.Length },
+                        ["essentials"] = new JsonObject { ["done"] = essentials.Count(Ws.Values.ContainsKey), ["total"] = essentials.Length },
                         ["company"] = Ws.ValueText("organization.company_name"),
                         ["sections"] = sections
                     },

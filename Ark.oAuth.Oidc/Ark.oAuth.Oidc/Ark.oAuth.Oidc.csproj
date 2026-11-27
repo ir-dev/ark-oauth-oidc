@@ -114,6 +114,11 @@ configuration are as in 2.4.2.
 * **Schema:** four nullable columns and two catalogue scopes, added on the first start.
 * **Fixed:** on a new database, a host with AddArkWebhooks() whose first request came some seconds
   after start-up never got its schema, and every request failed. No new dependency.
+* **Fixed:** setup (the wizard, the setup tools and Ark Pilot) could finish without a default password
+  for new users, and the console then refused to add anybody. Unless new people get an activation
+  email, setup now requires one: the wizard marks the field, and setup_status lists
+  users.default_password as missing, so Ark Pilot asks for it behind its lock button. On a server
+  already set up without it, set ark_oauth_server:DefaultPw and restart; the MCP overview warns.
 
 2.4.2 — agent-to-agent (A2A) tokens. Inert until an operator lists a caller.
 

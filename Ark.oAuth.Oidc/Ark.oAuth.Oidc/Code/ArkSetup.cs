@@ -1616,7 +1616,17 @@ namespace Ark.oAuth.Oidc
             if (emailEnabled) ValidateEmail(email!);
             if (mode == "email_based" && !emailEnabled)
                 throw new SetupException("email_required", "Activation emails need outgoing email. Configure SMTP, or let administrators set first passwords.", "password_mode");
-            if (!string.IsNullOrEmpty(users.DefaultPassword) && users.DefaultPassword.Length < 8)
+            // Outside email_based, the console and the provisioning API create every new account on
+            // the default password (RequireDefaultPw), and refuse to create one without it. Setup
+            // used to let it be left out, so a server could be installed on which the console
+            // could not add a single person.
+            var defaultPw = (users.DefaultPassword ?? "").Trim();
+            if (defaultPw.StartsWith("<<") && defaultPw.EndsWith(">>")) defaultPw = "";
+            if (defaultPw.Length == 0 && mode != "email_based")
+                throw new SetupException("default_password_required",
+                    "Set a default password for new users: accounts added in the console or through the provisioning API start on it, " +
+                    "and are refused without one. Or send activation emails instead.", "default_password");
+            if (defaultPw.Length is > 0 and < 8)
                 throw new SetupException("weak_default", "The default password for new users needs at least 8 characters.", "default_password");
         }
 
